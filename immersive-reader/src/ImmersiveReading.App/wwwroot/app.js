@@ -538,7 +538,7 @@ function populateInspector(detail) {
 
   const jitenQueryInput = document.getElementById('jiten-manual-query');
   if (jitenQueryInput) {
-    jitenQueryInput.value = s.seriesName || s.title || '';
+    jitenQueryInput.value = s.title || '';
   }
   const jitenBanner = document.getElementById('insp-jiten-status-banner');
   if (jitenBanner) {
@@ -864,9 +864,11 @@ async function lookupJitenMoeForCurrentBook(customQuery) {
   const detail = state.activeBookDetail;
   if (!detail) return;
   const s = detail.summary;
-  const query = (customQuery || s.seriesName || s.title || '').trim();
+  const inputQuery = document.getElementById('jiten-manual-query')?.value?.trim();
+  const titleField = document.getElementById('insp-title')?.value?.trim();
+  const query = (customQuery || inputQuery || titleField || s.title || s.seriesName || '').trim();
   if (!query) {
-    alert('Please enter a title or series name to look up on jiten.moe');
+    alert('Please enter a book title to look up on jiten.moe');
     return;
   }
 
