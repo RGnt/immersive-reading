@@ -1,0 +1,102 @@
+/* Injected Reader Stylesheet for Immersive Reading */
+
+/* Token Base Styling */
+.ir-tok {
+  display: inline;
+  position: relative;
+  border-radius: 2px;
+  transition: background-color 0.12s ease;
+  cursor: pointer;
+}
+
+.ir-tok:hover {
+  background-color: rgba(59, 130, 246, 0.22);
+  outline: 1px dashed rgba(59, 130, 246, 0.4);
+}
+
+.ir-tok-active {
+  background-color: rgba(59, 130, 246, 0.35) !important;
+  outline: 1.5px solid #3b82f6 !important;
+}
+
+/* Ruby Styling */
+ruby {
+  ruby-align: center;
+}
+
+rt {
+  font-size: 0.58em;
+  user-select: none;
+}
+
+/* Furigana Display Modes (Zero Re-Parse, Instant CSS Switching) */
+
+/* Mode: Off */
+html.ir-furigana-off rt {
+  visibility: hidden !important;
+}
+
+/* Mode: Hover */
+html.ir-furigana-hover rt {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+html.ir-furigana-hover .ir-tok:hover rt {
+  opacity: 1;
+}
+
+/* Mode: Author Only */
+html.ir-furigana-author ruby.ir-ruby-gen rt {
+  display: none !important;
+}
+
+/* Mode: Unknown and Learning Only */
+html.ir-furigana-unknown .ir-st-known ruby.ir-ruby-gen rt {
+  display: none !important;
+}
+
+/* Vocabulary Highlighting */
+html.ir-highlight-vocab .ir-tok.ir-st-learning {
+  text-decoration: underline dotted #f59e0b 1.5px;
+  text-underline-offset: 0.2em;
+}
+
+html.ir-highlight-vocab .ir-tok.ir-in-deck {
+  background-color: rgba(99, 102, 241, 0.12);
+}
+
+/* Vertical Typography Mode */
+html.ir-mode-vertical,
+html.ir-mode-vertical body {
+  writing-mode: vertical-rl !important;
+  -webkit-writing-mode: vertical-rl !important;
+  text-orientation: mixed;
+}
+
+html.ir-mode-vertical body {
+  margin: 20px 40px;
+  height: calc(100vh - 40px);
+  overflow-x: auto;
+}
+
+html.ir-mode-horizontal,
+html.ir-mode-horizontal body {
+  writing-mode: horizontal-tb !important;
+  -webkit-writing-mode: horizontal-tb !important;
+}
+
+html.ir-mode-horizontal body {
+  margin: 30px auto;
+  max-width: 800px;
+  line-height: 1.8;
+  padding: 0 20px;
+}
+
+/* Ensure cover and illustration images fit cleanly in viewport */
+img, svg {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+}
+

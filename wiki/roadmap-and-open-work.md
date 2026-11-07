@@ -1,0 +1,60 @@
+# Roadmap, Open Workstreams & Known Edge Cases
+
+This page tracks the implementation status of the [Reader-First Refactoring Plan](../enrichement-extractor/docs/reader-integration-refactoring-plan.md) (all 8 steps completed across Python and .NET 10), details the DOM mapping and lookup architecture, and documents known linguistic/source edge cases.
+
+---
+
+## 1. Refactoring Plan Status Matrix
+
+| Step in Refactoring Plan | Status | Implemented Modules & Notes |
+| :--- | :--- | :--- |
+| **Step 1: Fix reading compatibility & homographs** | **Completed** | [`immersive/matching.py`](../enrichement-extractor/immersive/matching.py) (`MatchPolicy`), [`immersive/ambiguity.py`](../enrichement-extractor/immersive/ambiguity.py), [`tests/test_matching_regressions.py`](../enrichement-extractor/tests/test_matching_regressions.py), [`tests/test_ambiguity.py`](../enrichement-extractor/tests/test_ambiguity.py). |
+| **Step 2: Extract shared study data from rendering** | **Completed** | [`immersive/study_data.py`](../enrichement-extractor/immersive/study_data.py), [`immersive/card_export.py`](../enrichement-extractor/immersive/card_export.py), HTML-only [`immersive/render.py`](../enrichement-extractor/immersive/render.py), PDF-only [`immersive/pdf_elements.py`](../enrichement-extractor/immersive/pdf_elements.py). |
+| **Step 3: Original XHTML DOM source mapping (`source_map.py` / `AngleSharpDomEnricher`)** | **Completed in .NET 10** | Implemented in [`immersive-reader/src/ImmersiveReading.Enrichment/AngleSharpDomEnricher.cs`](../immersive-reader/src/ImmersiveReading.Enrichment/AngleSharpDomEnricher.cs) and [`ChapterTokenMap.cs`](../immersive-reader/src/ImmersiveReading.Enrichment/ChapterTokenMap.cs) with `<span class="ir-tok" data-tid="...">` token wrapping across inline & `<ruby>` nodes, relative `ir-book://` asset/CSS URL rewriting, and polyglot XHTML5 serialization. |
+| **Step 4: Positional & text lookup API (`lookup.py` / `ImmersiveReading.Dictionaries`)** | **Completed in .NET 10** | Implemented in [`immersive-reader/src/ImmersiveReading.Dictionaries`](../immersive-reader/src/ImmersiveReading.Dictionaries) with sub-5ms indexed SQLite lookup (`DictionaryLookupEngine.cs`), Yomitan format-3 importer (`YomitanSqliteImporter.cs`), KanjiVG/Kanji alive (`KanjidicImporter.cs`), and breadth-first Japanese deinflector (`JapaneseDeinflector.cs`). |
+| **Step 5: Unified enrichment API, CLI & layered validation** | **Completed** | [`immersive/enrichment.py`](../enrichement-extractor/immersive/enrichment.py), [`immersive/orchestration.py`](../enrichement-extractor/immersive/orchestration.py), [`immersive/validation.py`](../enrichement-extractor/immersive/validation.py), [`immersive/verification.py`](../enrichement-extractor/immersive/verification.py), [`immersive/pdf_validation.py`](../enrichement-extractor/immersive/pdf_validation.py), [`immersive/provenance.py`](../enrichement-extractor/immersive/provenance.py). |
+| **Step 6: Atomic publication, cancellation & shared resources** | **Completed (Python + .NET 10)** | [`immersive/publication.py`](../enrichement-extractor/immersive/publication.py), [`immersive/resources.py`](../enrichement-extractor/immersive/resources.py), [`immersive/tokenization.py`](../enrichement-extractor/immersive/tokenization.py), [`immersive/jobs.py`](../enrichement-extractor/immersive/jobs.py), [`immersive/retention.py`](../enrichement-extractor/immersive/retention.py), plus C# snapshot lease & study-pack bridge in [`immersive-reader/src/ImmersiveReading.Library/PythonStudyPackBridge.cs`](../immersive-reader/src/ImmersiveReading.Library/PythonStudyPackBridge.cs) and [`FlashcardMiningService.cs`](../immersive-reader/src/ImmersiveReading.Library/FlashcardMiningService.cs). |
+| **Step 7: Profiling & reproducible content caching** | **Completed** | [`immersive/cache.py`](../enrichement-extractor/immersive/cache.py), [`immersive/profiling.py`](../enrichement-extractor/immersive/profiling.py), [`immersive/text_index.py`](../enrichement-extractor/immersive/text_index.py). |
+| **Step 8: Packaging, optional `[print]` extras & Yomitan support** | **Completed** | [`pyproject.toml`](../enrichement-extractor/pyproject.toml), [`immersive/capabilities.py`](../enrichement-extractor/immersive/capabilities.py), [`immersive/release.py`](../enrichement-extractor/immersive/release.py), [`immersive/yomitan.py`](../enrichement-extractor/immersive/yomitan.py), [`scripts/build_portable.py`](../enrichement-extractor/scripts/build_portable.py). |
+
+---
+
+## 2. Implementation Architecture for Steps 3 & 4 (Completed in .NET 10)
+
+When implementing **Step 3 (DOM Source Mapping)** or **Step 4 (Positional & Text Lookup API)**:
+
+### Step 3: Original XHTML DOM Source Mapping (`source_map.py`)
+- **Problem**: [`epub.read_epub()`](../enrichement-extractor/immersive/epub.py#L83-L113) strips whitespace (`norm()`) and removes `<rt>`/`<rp>` ruby readings when constructing `paragraph.text` and `chapter.text`. Consequently, a character offset in `chapter.text` cannot be applied directly to an un-normalized XHTML DOM text node in an EPUB renderer.
+- **Requirements** (from [reader-integration-refactoring-plan.md#L92-L104](../enrichement-extractor/docs/reader-integration-refactoring-plan.md#L92-L104)):
+  1. Explicitly label the coordinate system on every API parameter and field:
+     - Normalized Unicode code points (`start` / `end`)
+     - Normalized UTF-16 code units (`start_utf16` / `end_utf16`)
+     - Original DOM text-node UTF-16 code units
+  2. While parsing in `epub.py`, record reproducible body-rooted DOM node paths (or element ID + text node index) and offset mappings through whitespace stripping, inline elements (`<span>`, `<em>`, `<ruby>`, `<rb>`), and `<rt>`/`<rp>` decomposition.
+  3. Tapping inside excluded `<rt>`/`<rp>` ruby text or stripped whitespace must return an explicit unmapped/ruby-reading result rather than silently mapping to an adjacent base character.
+  4. Verify with fixtures containing whitespace, nested inline elements, `<ruby>`, supplementary plane Unicode characters (`ord > 0xFFFF`, 2 UTF-16 units), and paragraph boundaries.
+
+### Step 4: Renderer-Free Positional & Text Lookup (`lookup.py`)
+- **Problem**: `lookup.json` currently maps dictionary spellings and readings to `vocabulary_ids`, and `chapter.tokens[].vocabulary_ids` only lists exact single-token matches (missing multi-token compounds and conjugated phrases in `vocabulary[].occurrences`).
+- **Requirements** (from [reader-integration-refactoring-plan.md#L106-L116](../enrichement-extractor/docs/reader-integration-refactoring-plan.md#L106-L116)):
+  1. Build a per-chapter interval index over `vocabulary[].occurrences`, `kanji[].occurrences`, and `grammar[].occurrences` so tapping a character position resolves in $O(\log N + K)$ without scanning the entire dictionary.
+  2. Provide two lookup entry points:
+     - **Positional lookup** (given `chapter_id` and normalized code-point or UTF-16 offset): returns overlapping vocabulary phrases, tokens, kanji, and grammar candidates, ordered deterministically (longer/exact spans and stronger `reading_match` evidence first, preserving ties).
+     - **Text lookup** (by spelling, kana reading, token lemma, and configured `aliases`).
+  3. Keep first-appearance filtering completely out of lookup: a word occurring in Chapter 5 must resolve when tapped in Chapter 5 even though its study card was introduced in Chapter 1.
+
+---
+
+## 3. Known Linguistic & Book-Specific Edge Cases
+
+1. **Supplied Book Exceptions (`こぐまのクーク`)**:
+   - **Image-only chapters**: Navigation contains 10 text chapters and 2 illustrated appendices (`empty_chapter_ids`). OCR is intentionally not implemented; HTML/PDF study sheets explicitly state that the section contains no extractable text.
+   - **Book Ruby vs. CSV Reading (`半身`)**: Read `はんみ` in the EPUB's `<ruby>` rather than `はんしん` in the Jiten CSV. `MatchPolicy` and `context.py` prioritize the EPUB reading and log a `source_reading_note` in `quality.context_source_notes` (`"Book ruby はんみ; CSV has はんしん. Book reading retained."`).
+   - **Missing Compound in CSV (`はり金`)**: Supplemented declaratively via `study.config.json` `print_context` with attribution to National Diet Library authority `00562979`.
+2. **Sudachi Empty Punctuation Tokens**:
+   - Sudachi can occasionally emit zero-width analysis tokens (`surface == ""`, `start == end`). [`validation._span()`](../enrichement-extractor/immersive/validation.py#L56-L65) permits `start == end` **only** when `allow_empty=(token["surface"] == "")`, and `validate_reader()` reports `empty_analysis_tokens` as a nonfatal diagnostic warning.
+3. **Numeric Counters & Latin Characters**:
+   - Phonetic changes in counters (e.g., `一本` read `いっぽん` while `本` has dictionary reading `ほん`, or `十回` read `じゅっかい` vs `じっかい`) and ASCII/fullwidth Latin initialisms (`ＮＰＣ` read `エヌピーシー`) cannot be verified by simple token-reading concatenation. [`MatchPolicy.accept()`](../enrichement-extractor/immersive/matching.py#L95-L101) retains them with `status: "reading_unverified"` and `reason: "counter_pronunciation"` or `"numeral_or_latin_pronunciation"` rather than discarding valid matches or falsely claiming exact reading verification.
+4. **Distributable Portable ZIP Status**:
+   - `dist/ImmersivePipeline-windows-x64.zip` is not automatically rebuilt on every code commit. After modifying `immersive/`, run `.venv\Scripts\python.exe scripts/build_portable.py` when ready to produce an updated redistributable ZIP.
+

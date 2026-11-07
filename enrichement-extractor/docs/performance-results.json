@@ -1,0 +1,128 @@
+{
+  "recorded_on": "2026-11-01",
+  "environment": {
+    "python": "3.12.11 (main, Sep  2 2025, 14:18:04) [MSC v.1944 64 bit (AMD64)]",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "packages": {
+      "sudachipy": "0.7.0",
+      "sudachidict_core": "20261015",
+      "jsonschema": "4.26.0"
+    }
+  },
+  "reader_measurements": [
+    {
+      "book_id": "book-4e0541b184c4ace9",
+      "chapters": 12,
+      "characters": 18439,
+      "vocabulary": 1467,
+      "matched": 1300,
+      "ambiguity_groups": 629,
+      "bypass_seconds": 3.7539119999855757,
+      "cache_miss_seconds": 4.440549399994779,
+      "cache_hit_seconds": 0.3167309000273235,
+      "warm_speedup": 11.85205485054264,
+      "process_peak_rss_bytes": 343400448,
+      "cache_stats": {
+        "reader.miss": 1,
+        "resource.miss": 3,
+        "resource.write": 3,
+        "reader.write": 1,
+        "reader.hit": 1
+      }
+    },
+    {
+      "book_id": "book-93a87170fe31025d",
+      "chapters": 28,
+      "characters": 92699,
+      "vocabulary": 3645,
+      "matched": 3544,
+      "ambiguity_groups": 5264,
+      "bypass_seconds": 18.58665040001506,
+      "cache_miss_seconds": 20.76672790001612,
+      "cache_hit_seconds": 1.0890570000046864,
+      "warm_speedup": 17.066737920912384,
+      "process_peak_rss_bytes": 593510400,
+      "cache_stats": {
+        "reader.miss": 1,
+        "resource.miss": 3,
+        "resource.write": 3,
+        "reader.write": 1,
+        "reader.hit": 1
+      }
+    }
+  ],
+  "authored_export_measurements": {
+    "run": 1,
+    "book_id": "book-aab25cd56ec3d54c",
+    "chapters": 2,
+    "characters": 10,
+    "vocabulary": 3,
+    "cache_status": "miss",
+    "matched": 3,
+    "ambiguities": 2,
+    "enrichment_seconds": {
+      "cache_lookup": 0.14939679997041821,
+      "analysis": 0.6592475000070408,
+      "validation": 0.00319429999217391,
+      "cache_write": 0.0023990999907255173
+    },
+    "stages": [
+      {
+        "stage": "enrichment",
+        "seconds": 0.8187689000042155,
+        "process_peak_rss_bytes": 282161152,
+        "process_rss_bytes": 270663680
+      },
+      {
+        "stage": "stroke_order",
+        "seconds": 0.03822849999414757,
+        "process_peak_rss_bytes": 282161152,
+        "process_rss_bytes": 272412672
+      },
+      {
+        "stage": "study_preparation",
+        "seconds": 0.0008625999907962978,
+        "process_peak_rss_bytes": 282161152,
+        "process_rss_bytes": 272429056
+      },
+      {
+        "stage": "html",
+        "seconds": 0.010540799994487315,
+        "process_peak_rss_bytes": 282161152,
+        "process_rss_bytes": 272449536
+      },
+      {
+        "stage": "pdf",
+        "seconds": 2.6831237000296824,
+        "process_peak_rss_bytes": 502312960,
+        "process_rss_bytes": 475316224
+      },
+      {
+        "stage": "export_verification",
+        "seconds": 0.18985409999731928,
+        "process_peak_rss_bytes": 502312960,
+        "process_rss_bytes": 298688512
+      },
+      {
+        "stage": "cards",
+        "seconds": 6.289995508268476e-05,
+        "process_peak_rss_bytes": 502312960,
+        "process_rss_bytes": 298688512
+      }
+    ]
+  },
+  "notes": [
+    "Single observations on one workstation; OS file cache may already be warm. Cache miss means application-cache miss.",
+    "Peak RSS is a process-lifetime high-water mark, not isolated stage allocation; book runs share a benchmark process.",
+    "No-cache and cached data use the same validation policy; warm validated reader entries reuse prior validation under identical code/schema/input fingerprints.",
+    "Original book files and published exports were not modified. Temporary export artifacts used authored text.",
+    "Tap lookup latency is outside this workstream; the reader lookup API is maintained separately."
+  ],
+  "authored_export_outputs": {
+    "pdf_files": 7,
+    "pdf_pages": 37,
+    "html": true,
+    "cards": true,
+    "zip": true
+  }
+}

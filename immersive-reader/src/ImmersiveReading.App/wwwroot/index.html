@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Immersive Reading — EPUB Library Manager</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- LEFT SIDEBAR: Virtual Folders, Manual Tags & Custom Fields -->
+    <aside class="sidebar">
+      <div class="brand-header">
+        <div class="brand-logo">書</div>
+        <div>
+          <h1 class="brand-title">Immersive Reading</h1>
+          <div class="brand-subtitle">24k+ EPUB Library Manager</div>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="section-header">
+          <span>CATALOG VIEWS</span>
+        </div>
+        <button class="nav-item active" id="nav-all-books" onclick="selectRootView('all')">
+          <span>📚 All Books</span>
+          <span class="badge" id="count-all-books">0</span>
+        </button>
+        <button class="nav-item" id="nav-uncategorized" onclick="selectRootView('uncategorized')">
+          <span>📥 Uncategorized</span>
+        </button>
+      </div>
+
+      <div class="sidebar-section flex-grow">
+        <div class="section-header">
+          <span>FOLDERS &amp; SERIES</span>
+          <button class="btn-icon" title="New Collection / Category / Series Folder" onclick="openFolderModal(null)">＋</button>
+        </div>
+        <div class="folder-options-bar">
+          <label class="checkbox-label">
+            <input type="checkbox" id="chk-include-descendants" checked onchange="refreshBooks(0)" />
+            <span>Include subfolders</span>
+          </label>
+        </div>
+        <div id="folder-tree-container" class="folder-tree"></div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="section-header">
+          <span>MANUAL TAGS</span>
+          <div class="tag-header-actions">
+            <select id="tag-match-mode" class="mini-select" onchange="refreshBooks(0)" title="Tag filter mode">
+              <option value="AND">Match ALL (AND)</option>
+              <option value="OR">Match ANY (OR)</option>
+            </select>
+            <button class="btn-icon" title="Create New Tag" onclick="openTagModal()">＋</button>
+          </div>
+        </div>
+        <div id="tag-list-container" class="tag-chips-sidebar"></div>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="section-header">
+          <span>CUSTOM FIELDS</span>
+          <button class="btn-icon" title="Define Custom Field (e.g. jiten.moe link)" onclick="openCustomFieldDefModal()">＋</button>
+        </div>
+        <div id="custom-field-defs-list" class="custom-defs-sidebar"></div>
+      </div>
+    </aside>
+
+    <!-- CENTER WORKSPACE: Toolbar, Bulk Actions, Table/Grid & Pagination -->
+    <main class="main-content">
+      <header class="topbar">
+        <div class="search-box-wrap">
+          <input
+            type="search"
+            id="search-input"
+            class="search-input"
+            placeholder="Search 24k+ books by Title, Series, Author, ISBN, Imprint, or jiten.moe URL..."
+            oninput="debouncedSearch()"
+          />
+        </div>
+
+        <div class="toolbar-controls">
+          <select id="sort-select" class="control-select" onchange="refreshBooks(0)">
+            <option value="series_or_title">Sort: Series &amp; Volume #</option>
+            <option value="custom">Sort: Custom Manual Order</option>
+            <option value="title">Sort: Title (Kana/Sort)</option>
+            <option value="author">Sort: Author</option>
+            <option value="added">Sort: Date Added</option>
+            <option value="isbn">Sort: ISBN</option>
+          </select>
+
+          <div class="view-toggle">
+            <button id="btn-view-table" class="btn-toggle active" onclick="setViewMode('table')" title="High-Density Table View">☰ Table</button>
+            <button id="btn-view-grid" class="btn-toggle" onclick="setViewMode('grid')" title="Cover Grid View">⊞ Grid</button>
+          </div>
+
+          <button class="btn btn-secondary" onclick="openDictionariesModal()">📚 Dictionaries</button>
+          <button class="btn btn-secondary" onclick="openImportSingleModal()">＋ Import EPUB</button>
+          <button class="btn btn-primary" onclick="openScanDirectoryModal()">⚡ Scan Folder (24k+)</button>
+        </div>
+      </header>
+
+      <!-- Breadcrumb & Query Telemetry Bar -->
+      <div class="telemetry-bar">
+        <div class="breadcrumb-area">
+          <span id="current-view-title" class="view-title-label">All Books</span>
+          <button id="btn-edit-current-folder" class="btn-tiny hidden" onclick="editSelectedFolder()">⚙ Edit Folder / Series Fields</button>
+        </div>
+        <div class="telemetry-stats">
+          <span id="query-telemetry">0 books • 0.0 ms</span>
+        </div>
+      </div>
+
+      <!-- Bulk Selection Action Bar -->
+      <div id="bulk-action-bar" class="bulk-bar hidden">
+        <div>
+          <strong id="bulk-selected-count">0</strong> books selected
+          <button class="btn-link" onclick="selectAllOnPage(true)">Select Page</button>
+          <button class="btn-link" onclick="clearSelection()">Clear</button>
+        </div>
+        <div class="bulk-actions-right">
+          <button class="btn btn-primary btn-sm" onclick="openBulkEditModal()">✎ Bulk Edit Metadata / Series / Folder / Tags</button>
+        </div>
+      </div>
+
+      <!-- Scan Progress Banner -->
+      <div id="scan-progress-banner" class="scan-banner hidden">
+        <div class="scan-banner-text" id="scan-progress-text">Scanning directory...</div>
+        <div class="progress-track">
+          <div class="progress-fill" id="scan-progress-fill" style="width: 0%"></div>
+        </div>
+      </div>
+
+      <!-- Book List Viewport (Table or Grid) -->
+      <div id="books-viewport" class="books-viewport">
+        <!-- Populated dynamically by app.js -->
+      </div>
+
+      <!-- Server-Side Pagination Footer -->
+      <footer class="pagination-bar">
+        <div class="page-size-group">
+          <span>Rows per page:</span>
+          <select id="page-size-select" class="mini-select" onchange="changePageSize()">
+            <option value="50">50</option>
+            <option value="100" selected>100</option>
+            <option value="250">250</option>
+            <option value="500">500</option>
+          </select>
+        </div>
+        <div class="page-nav-group">
+          <button class="btn btn-sm" id="btn-prev-page" onclick="prevPage()">◀ Prev</button>
+          <span id="page-indicator">Page 1 of 1</span>
+          <button class="btn btn-sm" id="btn-next-page" onclick="nextPage()">Next ▶</button>
+        </div>
+      </footer>
+    </main>
+
+    <!-- RIGHT INSPECTOR DRAWER: Editable Metadata, OPF Diff, Custom Fields & Chapters -->
+    <aside class="inspector" id="inspector-panel">
+      <div id="inspector-empty" class="inspector-empty">
+        <p>Select a book to inspect or edit its bibliographic metadata, ISBN, series volume, tags, and custom fields (such as <code>jiten.moe</code> links).</p>
+      </div>
+
+      <div id="inspector-content" class="inspector-content hidden">
+        <div class="inspector-header">
+          <div class="inspector-cover-box" id="insp-cover-box"></div>
+          <div class="inspector-head-meta">
+            <div class="book-id-pill" id="insp-book-id">book-...</div>
+            <div id="insp-edited-badge" class="edited-pill hidden">Edited (OPF Preserved)</div>
+            <button type="button" class="btn btn-primary btn-sm" style="margin-top:6px;width:100%" onclick="openCurrentBookInReader()">📖 Read Book</button>
+            <div class="inspector-quick-links" id="insp-quick-links"></div>
+          </div>
+        </div>
+
+        <form id="inspector-form" onsubmit="saveInspectorBook(event)">
+          <div class="form-section-title">Bibliographic Metadata</div>
+
+          <label class="form-label">Title
+            <input type="text" id="insp-title" class="form-input" required />
+          </label>
+
+          <label class="form-label">Sort Title (Kana / Reading Sort)
+            <input type="text" id="insp-sort-title" class="form-input" />
+          </label>
+
+          <div class="form-row-2">
+            <label class="form-label">Series Name
+              <input type="text" id="insp-series-name" class="form-input" placeholder="e.g. 本好きの下剋上" />
+            </label>
+            <label class="form-label">Volume #
+              <input type="number" step="0.1" id="insp-series-index" class="form-input" placeholder="1.0" />
+            </label>
+          </div>
+
+          <div class="form-row-2">
+            <label class="form-label">Author(s)
+              <input type="text" id="insp-authors" class="form-input" />
+            </label>
+            <label class="form-label">Author Sort (Kana)
+              <input type="text" id="insp-author-sort" class="form-input" />
+            </label>
+          </div>
+
+          <div class="form-row-2">
+            <label class="form-label">ISBN-13 / ISBN-10
+              <input type="text" id="insp-isbn" class="form-input" placeholder="978..." />
+            </label>
+            <label class="form-label">Published Date
+              <input type="text" id="insp-pub-date" class="form-input" placeholder="YYYY-MM-DD" />
+            </label>
+          </div>
+
+          <div class="form-row-2">
+            <label class="form-label">Publisher
+              <input type="text" id="insp-publisher" class="form-input" />
+            </label>
+            <label class="form-label">Imprint / Label
+              <input type="text" id="insp-imprint" class="form-input" placeholder="e.g. 電撃文庫" />
+            </label>
+          </div>
+
+          <div class="form-row-3">
+            <label class="form-label">Language
+              <input type="text" id="insp-language" class="form-input" value="ja" />
+            </label>
+            <label class="form-label">Writing Mode
+              <select id="insp-writing-mode" class="form-input">
+                <option value="auto">Auto</option>
+                <option value="vertical-rl">Vertical (vertical-rl)</option>
+                <option value="horizontal-tb">Horizontal</option>
+              </select>
+            </label>
+            <label class="form-label">Manual Sort #
+              <input type="number" id="insp-custom-sort" class="form-input" value="0" />
+            </label>
+          </div>
+
+          <label class="form-label">Virtual Folder / Series Location
+            <select id="insp-folder-id" class="form-input"></select>
+          </label>
+
+          <label class="form-label">Synopsis / Description
+            <textarea id="insp-description" class="form-textarea" rows="3"></textarea>
+          </label>
+
+          <div class="form-section-title">Manual Tags</div>
+          <div id="insp-tags-selector" class="tag-Checkboxes"></div>
+
+          <div class="form-section-title">Custom Fields (Book &amp; Inherited from Folder/Series)</div>
+          <div id="insp-custom-fields" class="custom-fields-editor"></div>
+
+          <div class="inspector-actions">
+            <button type="submit" class="btn btn-primary">💾 Save Changes</button>
+            <button type="button" class="btn btn-secondary" onclick="resetCurrentBookToOpf()" title="Restore raw EPUB OPF metadata">↺ Reset to OPF</button>
+            <button type="button" class="btn btn-danger" onclick="deleteCurrentBook()">🗑</button>
+          </div>
+        </form>
+
+        <details class="inspector-details">
+          <summary>Original EPUB OPF Metadata &amp; File Info</summary>
+          <div id="insp-opf-raw" class="opf-raw-box"></div>
+        </details>
+
+        <details class="inspector-details" open>
+          <summary>Chapters (<span id="insp-chapter-count">0</span>)</summary>
+          <div id="insp-chapters-list" class="chapters-mini-list"></div>
+        </details>
+
+        <details class="inspector-details" open>
+          <summary>Study Pack, PDFs &amp; 20-Word Sets (<span id="insp-studypack-status">Checking...</span>)</summary>
+          <div id="insp-studypack-box" class="opf-raw-box" style="display:flex;flex-direction:column;gap:8px">
+            <div id="insp-studypack-pdfs"></div>
+            <div id="insp-studypack-sets"></div>
+            <div id="insp-studypack-mined"></div>
+            <div style="display:flex;gap:6px;margin-top:4px">
+              <button type="button" class="btn btn-sm btn-secondary" onclick="buildCurrentBookStudyPack(false)">⚡ Build Full Study Pack</button>
+              <button type="button" class="btn btn-sm btn-secondary" onclick="buildCurrentBookStudyPack(true)">⚡ Enrich Reader JSON</button>
+            </div>
+            <div id="insp-studypack-build-log" style="font-size:11px;color:var(--text-muted)"></div>
+          </div>
+        </details>
+      </div>
+    </aside>
+  </div>
+
+  <!-- FULLSCREEN EPUB READER VIEW (Phase 2) -->
+  <div id="reader-fullscreen" class="reader-fullscreen hidden">
+    <header class="reader-topbar">
+      <div class="reader-left-controls">
+        <button class="btn btn-secondary btn-sm" onclick="closeReaderView()">◀ Back to Library</button>
+        <span id="reader-book-title" class="reader-title-label">Book Title</span>
+      </div>
+
+      <div class="reader-center-controls">
+        <button class="btn btn-sm btn-secondary" onclick="navigateChapter(-1)" title="Previous Chapter">◀</button>
+        <select id="reader-chapter-dropdown" class="control-select" onchange="onChapterDropdownChange(this.value)"></select>
+        <button class="btn btn-sm btn-secondary" onclick="navigateChapter(1)" title="Next Chapter">▶</button>
+      </div>
+
+      <div class="reader-right-controls">
+        <select id="reader-furigana-select" class="mini-select" onchange="onFuriganaModeChange(this.value)">
+          <option value="AllKanji">Furigana: All Kanji</option>
+          <option value="AuthorOnly">Furigana: Author Only</option>
+          <option value="UnknownAndLearningOnly">Furigana: Unknown Only</option>
+          <option value="Hover">Furigana: On Hover</option>
+          <option value="Off">Furigana: Off</option>
+        </select>
+
+        <button id="btn-reader-writing-mode" class="btn btn-sm btn-secondary" onclick="toggleReaderWritingMode()">Writing Mode: Vertical 縦書き</button>
+        <button class="btn btn-sm btn-secondary" onclick="openDictionariesModal()">📚 Dictionaries</button>
+        <button class="btn btn-sm btn-primary" onclick="toggleAiCompanionDrawer()">🧠 AI Tutor &amp; n+1 Chat</button>
+      </div>
+    </header>
+
+    <div class="reader-body-wrap">
+      <iframe id="reader-frame" class="reader-iframe" src="about:blank"></iframe>
+
+      <!-- PHASE 5: AI COMPREHENSION & n+1 PERSONA CHAT DRAWER -->
+      <aside id="ai-companion-drawer" class="inspector hidden" style="width:400px;border-left:1px solid var(--border-color);background:#0f172a;display:flex;flex-direction:column;z-index:40">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border-color)">
+          <div style="display:flex;gap:6px">
+            <button id="ai-tab-quiz" class="btn btn-sm btn-primary" onclick="switchAiCompanionTab('quiz')">📝 Comprehension Quiz</button>
+            <button id="ai-tab-chat" class="btn btn-sm btn-secondary" onclick="switchAiCompanionTab('chat')">💬 n+1 Persona Chat</button>
+          </div>
+          <button class="btn btn-sm btn-secondary" onclick="toggleAiCompanionDrawer()">✕</button>
+        </div>
+
+        <!-- TAB 1: Progressive Reading Comprehension Quiz -->
+        <div id="ai-pane-quiz" style="padding:12px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span style="font-size:12px;color:var(--text-muted)">Stage: <strong id="ai-quiz-stage-badge" style="color:#38bdf8">MultipleChoice</strong></span>
+            <select id="ai-quiz-mode-override" class="mini-select">
+              <option value="">Auto (Adaptive Mastery)</option>
+              <option value="MultipleChoice">Stage 1: Multiple-Choice</option>
+              <option value="GuidedShortAnswer">Stage 2: Guided Short Answer</option>
+              <option value="FreeForm">Stage 3: Free-Form</option>
+            </select>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="generateAiComprehensionQuestion()">✨ Check Comprehension (Just-Read Passage)</button>
+          <div id="ai-quiz-question-box" style="display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:12px;color:var(--text-muted)">Click "Check Comprehension" to generate a spoiler-free question strictly from the passage up to your current viewport position. Every word in the question and model answer is clickable for dictionary lookup!</div>
+          </div>
+          <div id="ai-quiz-feedback-box"></div>
+        </div>
+
+        <!-- TAB 2: Spoiler-Safe n+1 Vocabulary-Constrained Persona Chat -->
+        <div id="ai-pane-chat" class="hidden" style="padding:12px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;gap:6px;align-items:center">
+            <select id="ai-persona-select" class="form-input" style="flex:1" onchange="onSelectPersonaChange()"></select>
+            <button class="btn btn-sm btn-secondary" onclick="toggleNewPersonaForm()">＋ Persona</button>
+          </div>
+
+          <div id="ai-new-persona-form" class="hidden" style="background:rgba(30,41,59,0.7);padding:8px;border-radius:6px;display:flex;flex-direction:column;gap:6px">
+            <input type="text" id="ai-prs-name" class="form-input" placeholder="Character Name (e.g. クーク)" />
+            <input type="text" id="ai-prs-style" class="form-input" placeholder="Speech style / pronouns (e.g. ぼく、〜だよ)" />
+            <input type="text" id="ai-prs-sample" class="form-input" placeholder="Highlighted sample quote from book..." />
+            <button type="button" class="btn btn-sm btn-primary" onclick="createNewBookPersona()">Create Book Persona</button>
+          </div>
+
+          <div id="ai-chat-messages" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px;background:rgba(15,23,42,0.6);padding:8px;border-radius:6px;min-height:260px"></div>
+
+          <form onsubmit="submitAiPersonaChatMessage(event)" style="display:flex;gap:6px">
+            <input type="text" id="ai-chat-input" class="form-input" style="flex:1" placeholder="Message persona in Japanese..." required />
+            <button type="submit" class="btn btn-primary btn-sm">Send</button>
+          </form>
+        </div>
+      </aside>
+
+      <!-- DICTIONARY POPOVER (PHASE 3) -->
+      <div id="dict-popover" class="dict-popover hidden">
+        <div class="dict-popover-header">
+          <div class="dict-popover-tabs">
+            <button id="dict-tab-words" class="dict-tab active" onclick="switchDictTab('words')">Words</button>
+            <button id="dict-tab-kanji" class="dict-tab" onclick="switchDictTab('kanji')">Kanji</button>
+          </div>
+          <button class="dict-popover-close" onclick="closeDictPopover()" title="Close Popover (Esc)">✕</button>
+        </div>
+
+        <div id="dict-words-pane" class="dict-tab-pane"></div>
+        <div id="dict-kanji-pane" class="dict-tab-pane hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Create / Edit Virtual Folder or Series -->
+  <div id="modal-folder" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h3 id="modal-folder-title">New Virtual Folder / Series</h3>
+      <form onsubmit="submitFolderModal(event)">
+        <input type="hidden" id="fld-id" />
+        <label class="form-label">Name (e.g. "Japanese", "Seinen", or Series Name)
+          <input type="text" id="fld-name" class="form-input" required />
+        </label>
+        <div class="form-row-2">
+          <label class="form-label">Parent Folder
+            <select id="fld-parent-id" class="form-input"></select>
+          </label>
+          <label class="form-label">Folder Type
+            <select id="fld-kind" class="form-input">
+              <option value="collection">Collection (e.g. Japanese)</option>
+              <option value="category">Category (e.g. Shounen / Seinen)</option>
+              <option value="series">Book Series</option>
+              <option value="folder">General Folder</option>
+            </select>
+          </label>
+        </div>
+        <div class="form-row-2">
+          <label class="form-label">Sibling Sort Order
+            <input type="number" id="fld-sort-order" class="form-input" value="0" />
+          </label>
+          <label class="form-label">Default Book Sort
+            <select id="fld-default-sort" class="form-input">
+              <option value="series_or_title">Series &amp; Volume #</option>
+              <option value="custom">Custom Order</option>
+              <option value="title">Title</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="form-section-title">Folder / Series Level Custom Fields (Inherited by Child Books!)</div>
+        <div id="fld-custom-fields-container" class="custom-fields-editor"></div>
+
+        <div class="modal-footer">
+          <button type="button" id="btn-delete-folder" class="btn btn-danger hidden" onclick="deleteFolderFromModal()">Delete Folder</button>
+          <div style="flex:1"></div>
+          <button type="button" class="btn btn-secondary" onclick="closeModals()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Folder</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Batch Directory Scanner (24k+ Books) -->
+  <div id="modal-scan" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h3>⚡ Batch Scan Ebook Directory (24,000+ Scale)</h3>
+      <p class="modal-hint">Streams only OPF metadata &amp; covers from ZIP central directories in parallel and commits in batched SQLite WAL transactions without modifying any <code>.epub</code> files.</p>
+      <form onsubmit="submitScanModal(event)">
+        <label class="form-label">Root Directory Path on Disk
+          <input type="text" id="scan-root-dir" class="form-input" placeholder="e.g. K:\immersive-reading\enrichement-extractor\books" required />
+        </label>
+        <label class="form-label">Assign Scanned Books to Virtual Folder
+          <select id="scan-target-folder" class="form-input"></select>
+        </label>
+        <label class="checkbox-label" style="margin-top:8px">
+          <input type="checkbox" id="scan-recursive" checked />
+          <span>Scan subdirectories recursively</span>
+        </label>
+        <label class="checkbox-label" style="margin-top:6px">
+          <input type="checkbox" id="scan-auto-folders" />
+          <span>Mirror multi-book disk subdirectories as virtual child folders</span>
+        </label>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModals()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Start Parallel Scan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Single EPUB Import -->
+  <div id="modal-import" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h3>＋ Import Single EPUB File</h3>
+      <form onsubmit="submitImportSingleModal(event)">
+        <label class="form-label">EPUB File Path on Disk
+          <input type="text" id="imp-epub-path" class="form-input" placeholder="C:\path\to\book.epub" required />
+        </label>
+        <label class="form-label">Virtual Folder
+          <select id="imp-folder-id" class="form-input"></select>
+        </label>
+        <div class="form-row-2">
+          <label class="form-label">Series Name (Optional)
+            <input type="text" id="imp-series-name" class="form-input" />
+          </label>
+          <label class="form-label">Volume # (Optional)
+            <input type="number" step="0.1" id="imp-series-index" class="form-input" />
+          </label>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModals()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Import Book</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Bulk Edit Selected Books -->
+  <div id="modal-bulk" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h3>✎ Bulk Edit (<span id="bulk-modal-count">0</span> Books)</h3>
+      <p class="modal-hint">Only fields you fill in below will be applied to the selected books.</p>
+      <form onsubmit="submitBulkEditModal(event)">
+        <label class="form-label">Move to Virtual Folder
+          <select id="bulk-folder-id" class="form-input"></select>
+        </label>
+        <div class="form-row-2">
+          <label class="form-label">Set Series Name
+            <input type="text" id="bulk-series-name" class="form-input" placeholder="Leave blank to keep existing" />
+          </label>
+          <label class="form-label">Auto-Number Volumes Starting At
+            <input type="number" step="0.1" id="bulk-auto-vol-start" class="form-input" placeholder="e.g. 1 (leave blank to skip)" />
+          </label>
+        </div>
+        <div class="form-row-2">
+          <label class="form-label">Set Author(s)
+            <input type="text" id="bulk-authors" class="form-input" placeholder="Leave blank to keep existing" />
+          </label>
+          <label class="form-label">Set Publisher / Imprint
+            <input type="text" id="bulk-publisher" class="form-input" placeholder="Leave blank to keep existing" />
+          </label>
+        </div>
+        <label class="form-label">Set jiten.moe Media / Deck Link
+          <input type="text" id="bulk-jiten-url" class="form-input" placeholder="https://jiten.moe/..." />
+        </label>
+        <div class="form-section-title">Add Manual Tags to Selected Books</div>
+        <div id="bulk-add-tags" class="tag-Checkboxes"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModals()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Apply Bulk Update</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Create Manual Tag -->
+  <div id="modal-tag" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h3>＋ Create Manual Tag</h3>
+      <form onsubmit="submitTagModal(event)">
+        <label class="form-label">Tag Name
+          <input type="text" id="tag-name-input" class="form-input" placeholder="e.g. Seinen, Mystery, N2-Target" required />
+        </label>
+        <label class="form-label">Badge Color
+          <input type="color" id="tag-color-input" class="form-input" value="#3b82f6" style="height:38px" />
+        </label>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModals()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Tag</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Define Custom Field -->
+  <div id="modal-custom-field" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h3>＋ Define Custom Library Field</h3>
+      <form onsubmit="submitCustomFieldDefModal(event)">
+        <label class="form-label">Field Key (slug)
+          <input type="text" id="cfd-key" class="form-input" placeholder="e.g. bookwalker_url, anilist_id, jlpt_level" required />
+        </label>
+        <label class="form-label">Display Name
+          <input type="text" id="cfd-name" class="form-input" placeholder="e.g. BookWalker Store Link" required />
+        </label>
+        <div class="form-row-2">
+          <label class="form-label">Data Type
+            <select id="cfd-type" class="form-input">
+              <option value="url">URL Link (Clickable)</option>
+              <option value="text">Text</option>
+              <option value="number">Number / Difficulty</option>
+              <option value="file_path">Local File Path (e.g. CSV)</option>
+            </select>
+          </label>
+          <label class="form-label">Scope
+            <select id="cfd-scope" class="form-input">
+              <option value="any">Any Level (Folders/Series &amp; Books)</option>
+              <option value="folder">Folders / Series Only</option>
+              <option value="book">Books Only</option>
+            </select>
+          </label>
+        </div>
+        <label class="checkbox-label" style="margin-top:8px">
+          <input type="checkbox" id="cfd-inherit" checked />
+          <span>Inherit values from parent Collection / Category / Series folders down to child volumes</span>
+        </label>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModals()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Field Definition</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Dictionaries Manager (Phase 3) -->
+  <div id="modal-dictionaries" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <h3>📚 Installed Offline Dictionaries</h3>
+      <p class="modal-hint">Dictionaries power instant on-the-fly word, deinflection, pitch accent, frequency, and kanji lookups in the reader.</p>
+      <div id="dictionaries-list-box" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;padding:8px;background:rgba(15,23,42,0.5);border:1px solid var(--border-color);border-radius:6px;font-size:12px"></div>
+      <form onsubmit="submitImportYomitanModal(event)" style="margin-top:8px">
+        <div class="form-section-title">Import Yomitan Dictionary (.zip)</div>
+        <div class="form-row-2">
+          <label class="form-label">Yomitan ZIP Path on Disk
+            <input type="text" id="dict-zip-path" class="form-input" placeholder="C:\path\to\jitendex-yomitan.zip" required />
+          </label>
+          <label class="form-label">Priority Order (Lower = Higher Priority)
+            <input type="number" id="dict-priority" class="form-input" value="10" />
+          </label>
+        </div>
+        <div id="dict-import-status" style="font-size:11.5px;color:#38bdf8;margin-top:4px"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeModals()">Close</button>
+          <button type="submit" class="btn btn-primary">Import Yomitan ZIP</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

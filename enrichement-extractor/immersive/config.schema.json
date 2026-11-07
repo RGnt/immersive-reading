@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "end_before_href": {"type": "string", "minLength": 1},
+    "include_titles": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "exclude_titles": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "aliases": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true}},
+    "context_glosses": {"type": "object", "additionalProperties": {"type": "string", "minLength": 1}},
+    "print_context": {"type": "object", "additionalProperties": {"type": "object", "additionalProperties": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "word": {"type": "string", "minLength": 1},
+        "surface": {"type": "string", "minLength": 1},
+        "gloss": {"type": "string", "minLength": 1},
+        "definitions": {"type": "string", "minLength": 1},
+        "source": {"type": "object", "minProperties": 1}
+      },
+      "dependentRequired": {"definitions": ["source"], "source": ["definitions"]}
+    }}}
+  }
+}

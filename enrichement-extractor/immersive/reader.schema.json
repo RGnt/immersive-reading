@@ -1,0 +1,1076 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:immersive-reading:reader:1.0.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "title",
+    "source_files",
+    "chapters",
+    "vocabulary",
+    "kanji",
+    "grammar",
+    "quality",
+    "translation_policy",
+    "attribution",
+    "offset_convention"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^book-[a-f0-9]{16}$"
+    },
+    "title": {
+      "type": "string"
+    },
+    "source_files": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "file",
+          "sha256"
+        ],
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "input_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "original_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "exported_sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provenance_status": {
+            "enum": [
+              "observed_input",
+              "pipeline_export",
+              "external_input"
+            ]
+          }
+        }
+      }
+    },
+    "offset_convention": {
+      "type": "object",
+      "required": [
+        "unit",
+        "end",
+        "text"
+      ]
+    },
+    "learning_sets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "number",
+          "size",
+          "words"
+        ],
+        "properties": {
+          "number": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "size": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "words": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "required": [
+                "card_id",
+                "word",
+                "reading",
+                "chapter_id",
+                "study_number"
+              ],
+              "properties": {
+                "study_number": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "chapters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/chapter"
+      }
+    },
+    "vocabulary": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "word",
+          "reading",
+          "definitions",
+          "sources",
+          "deck_examples",
+          "occurrences",
+          "status",
+          "first_chapter_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "word": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reading": {
+            "type": "string"
+          },
+          "definitions": {
+            "type": "string"
+          },
+          "context_gloss": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "first_chapter_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "enum": [
+              "matched",
+              "unmatched_review"
+            ]
+          },
+          "occurrences": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/occurrence"
+                },
+                {
+                  "required": [
+                    "surface",
+                    "method",
+                    "start_utf16",
+                    "end_utf16"
+                  ]
+                },
+                {
+                  "properties": {
+                    "candidate_vocabulary_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "uniqueItems": true
+                    },
+                    "candidate_status": {
+                      "enum": [
+                        "single_candidate",
+                        "multiple_entries",
+                        "ambiguous_reading"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          },
+          "selected_examples": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "text",
+                "source"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "source": {
+                  "enum": [
+                    "csv",
+                    "epub_first_occurrence",
+                    "unavailable"
+                  ]
+                },
+                "ruby": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/display_ruby"
+                  }
+                }
+              }
+            }
+          },
+          "dictionary_entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/dictionary_record"
+            }
+          },
+          "dictionary_metadata": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/dictionary_record"
+            }
+          },
+          "definition_candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/definition_candidate"
+            }
+          },
+          "sense_selection": {
+            "$ref": "#/$defs/sense_selection"
+          }
+        }
+      }
+    },
+    "kanji": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "character",
+          "first_chapter_id",
+          "dictionary",
+          "occurrences",
+          "vocabulary_ids"
+        ],
+        "properties": {
+          "character": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1
+          },
+          "dictionary": {
+            "type": "object",
+            "required": [
+              "primary_meanings",
+              "meaning_source"
+            ],
+            "properties": {
+              "primary_meanings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "meaning_source": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "enum": [
+                      "Kanji alive",
+                      "KANJIDIC2 / EDRDG"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "stroke_order": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/stroke_order"
+              }
+            ]
+          },
+          "occurrences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/occurrence"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "dictionary_entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/dictionary_record"
+            }
+          },
+          "dictionary_metadata": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/dictionary_record"
+            }
+          }
+        }
+      }
+    },
+    "grammar": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "meaning",
+          "note",
+          "first_chapter_id",
+          "status",
+          "occurrences"
+        ],
+        "properties": {
+          "status": {
+            "const": "rule_based_candidate"
+          },
+          "occurrences": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/occurrence"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "meaning": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "required": [
+        "vocabulary_total",
+        "vocabulary_matched",
+        "unmatched_vocabulary_ids",
+        "missing_kanji_dictionary_ids",
+        "empty_chapter_ids"
+      ],
+      "properties": {
+        "vocabulary_total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "vocabulary_matched": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unmatched_vocabulary_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "missing_kanji_dictionary_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "empty_chapter_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "translation_policy": {
+      "type": "string"
+    },
+    "attribution": {
+      "type": "array"
+    },
+    "build_inputs": {
+      "type": "object",
+      "properties": {
+        "resources": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/resource_file"
+          }
+        },
+        "print_resources": {
+          "type": "object",
+          "required": [
+            "charts",
+            "kanjivg"
+          ],
+          "properties": {
+            "charts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/resource_file"
+              }
+            },
+            "font": {
+              "$ref": "#/$defs/resource_file"
+            },
+            "kanjivg": {
+              "$ref": "#/$defs/resource_file"
+            },
+            "kanjivg_metadata": {
+              "$ref": "#/$defs/resource_file"
+            }
+          }
+        }
+      }
+    },
+    "dictionary_sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "file",
+          "sha256",
+          "index",
+          "notices",
+          "bank_counts",
+          "tags"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^yomitan-[a-f0-9]{64}$"
+          },
+          "file": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "index": {
+            "type": "object",
+            "required": [
+              "title",
+              "revision"
+            ],
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1
+              },
+              "revision": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          },
+          "notices": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "bank_counts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "tags": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "ambiguities": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "#/$defs/span"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "chapter_id",
+              "status",
+              "candidate_vocabulary_ids",
+              "selected_vocabulary_id"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "chapter_id": {
+                "type": "string"
+              },
+              "status": {
+                "enum": [
+                  "ambiguous_reading",
+                  "multiple_entries"
+                ]
+              },
+              "candidate_vocabulary_ids": {
+                "type": "array",
+                "minItems": 2,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string"
+                }
+              },
+              "selected_vocabulary_id": {
+                "type": "null"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "stroke_order": {
+      "type": "object",
+      "required": [
+        "source",
+        "source_file",
+        "asset",
+        "view_box",
+        "strokes",
+        "license",
+        "author"
+      ],
+      "properties": {
+        "source": {
+          "const": "KanjiVG"
+        },
+        "license": {
+          "const": "CC BY-SA 3.0"
+        },
+        "asset": {
+          "type": "string",
+          "pattern": "^assets/kanjivg/[0-9a-f]+\\.svg$"
+        },
+        "view_box": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "number"
+          }
+        },
+        "strokes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "number",
+              "id",
+              "d"
+            ],
+            "properties": {
+              "number": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "d": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "span": {
+      "type": "object",
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "start_utf16": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_utf16": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "occurrence": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/span"
+        },
+        {
+          "required": [
+            "chapter_id",
+            "sentence_id"
+          ],
+          "properties": {
+            "chapter_id": {
+              "type": "string"
+            },
+            "sentence_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "surface": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "chapter": {
+      "type": "object",
+      "required": [
+        "id",
+        "number",
+        "title",
+        "href",
+        "fragment",
+        "text",
+        "paragraphs",
+        "sentences",
+        "tokens",
+        "vocabulary_ids",
+        "kanji_ids",
+        "new_grammar_ids"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^chapter-[0-9]+$"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "paragraphs": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/span"
+              },
+              {
+                "required": [
+                  "text",
+                  "href",
+                  "paragraph_index",
+                  "ruby"
+                ],
+                "properties": {
+                  "ruby": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/ruby"
+                    }
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "href": {
+                    "type": "string"
+                  },
+                  "paragraph_index": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "sentences": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/span"
+              },
+              {
+                "required": [
+                  "id",
+                  "chapter_id",
+                  "text",
+                  "sources"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "chapter_id": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "display_ruby": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/display_ruby"
+                    }
+                  },
+                  "sources": {
+                    "type": "array",
+                    "items": {
+                      "allOf": [
+                        {
+                          "$ref": "#/$defs/span"
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "href",
+                            "paragraph_index"
+                          ],
+                          "properties": {
+                            "href": {
+                              "type": "string"
+                            },
+                            "paragraph_index": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "tokens": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/span"
+              },
+              {
+                "required": [
+                  "surface",
+                  "lemma",
+                  "normalized",
+                  "reading",
+                  "pos",
+                  "oov",
+                  "start_utf16",
+                  "end_utf16",
+                  "vocabulary_ids"
+                ],
+                "properties": {
+                  "surface": {
+                    "type": "string"
+                  },
+                  "lemma": {
+                    "type": "string"
+                  },
+                  "normalized": {
+                    "type": "string"
+                  },
+                  "reading": {
+                    "type": "string"
+                  },
+                  "pos": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 6,
+                    "maxItems": 6
+                  },
+                  "oov": {
+                    "type": "boolean"
+                  },
+                  "vocabulary_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "vocabulary_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "kanji_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "new_grammar_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "ruby": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/span"
+        },
+        {
+          "type": "object",
+          "required": [
+            "surface",
+            "reading"
+          ],
+          "properties": {
+            "surface": {
+              "type": "string"
+            },
+            "reading": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source": {
+              "enum": [
+                "epub",
+                "sudachi"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "display_ruby": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/ruby"
+        },
+        {
+          "required": [
+            "source"
+          ]
+        }
+      ]
+    },
+    "dictionary_record": {
+      "type": "object",
+      "required": [
+        "dictionary_id",
+        "dictionary_title",
+        "revision",
+        "bank",
+        "row"
+      ],
+      "properties": {
+        "dictionary_id": {
+          "type": "string"
+        },
+        "dictionary_title": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "bank": {
+          "type": "string",
+          "pattern": "^(term|kanji|term_meta|kanji_meta)_bank_[1-9][0-9]*\\.json$"
+        },
+        "row": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "glossary": {
+          "type": "array"
+        },
+        "glossary_text": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "expression": {
+          "type": "string"
+        },
+        "reading": {
+          "type": "string"
+        },
+        "character": {
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "freq",
+            "pitch",
+            "ipa"
+          ]
+        },
+        "meanings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "resource_file": {
+      "type": "object",
+      "required": [
+        "file",
+        "sha256",
+        "size"
+      ],
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "definition_candidate": {
+      "type": "object",
+      "required": [
+        "id",
+        "text",
+        "source",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "const": "source_definition_block"
+        },
+        "source": {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "csv",
+                "yomitan"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "sense_selection": {
+      "type": "object",
+      "required": [
+        "status",
+        "selected_candidate_ids",
+        "reviewed_text",
+        "source"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "unresolved",
+            "unavailable",
+            "reviewed_override"
+          ]
+        },
+        "selected_candidate_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "reviewed_text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}
