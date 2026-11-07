@@ -206,6 +206,18 @@ function renderSidebarFolders() {
     const row = document.createElement('div');
     row.className = 'tree-row' + (state.selectedFolderId === f.folderId && !state.uncategorizedOnly ? ' active' : '');
     row.style.paddingLeft = `${8 + f.depth * 14}px`;
+    row.setAttribute('data-folder-id', f.folderId);
+    row.setAttribute('draggable', 'true');
+
+    // Drag & Drop
+    row.ondragstart = (e) => onFolderDragStart(e, f.folderId);
+    row.ondragend = (e) => onFolderDragEnd(e);
+    row.ondragover = (e) => onFolderDragOver(e, f.folderId);
+    row.ondragleave = (e) => onFolderDragLeave(e, f.folderId);
+    row.ondrop = (e) => onFolderDrop(e, f.folderId);
+
+    // Context menu
+    row.oncontextmenu = (e) => showFolderContextMenu(e, f.folderId, f.name);
 
     const icon = f.folderKind === 'collection' ? '🌐'
       : f.folderKind === 'category' ? '📂'
@@ -392,15 +404,23 @@ function renderTableView(viewport, items) {
     const pubImprint = [b.publisher, b.imprint].filter(Boolean).join(' · ');
 
     html += `
-      <tr class="${isSelected || isActive ? 'selected-row' : ''}" onclick="inspectBook('${b.bookId}')" ondblclick="openBookInReader('${b.bookId}')" title="Click to inspect • Double-click to open in Reader">
+      <tr class="${isSelected || isActive ? 'selected-row' : ''}" draggable="true" data-book-id="${b.bookId}"
+          ondragstart="onBookDragStart(event, '${b.bookId}')" ondragend="onBookDragEnd(event)"
+          oncontextmenu="showBookContextMenu(event, '${b.bookId}')"
+          onclick="handleBookRowClick(event, '${b.bookId}')"
+          ondblclick="openBookInReader('${b.bookId}')"
+          title="Click to inspect • Shift+Click range • Drag onto folders or Trash • Right-click for options">
         <td onclick="event.stopPropagation()">
-          <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="toggleBookSelection('${b.bookId}', this.checked)" />
+          <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="handleBookCheckboxChange(event, '${b.bookId}', this.checked)" />
         </td>
         <td onclick="event.stopPropagation()">
           <button type="button" class="btn btn-primary btn-sm" style="padding:3px 8px;font-size:11px" onclick="openBookInReader('${b.bookId}')">📖 Read</button>
         </td>
         <td>
-          <div style="font-weight:600">${escapeHtml(b.title)}</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="reorder-handle" title="Drag onto collection or Trash">⋮⋮</span>
+            <div style="font-weight:600">${escapeHtml(b.title)}</div>
+          </div>
           ${b.isMetadataEdited ? '<span style="font-size:10px;color:#fcd34d">✎ Edited</span>' : ''}
         </td>
         <td>${escapeHtml(b.seriesName || '')}${volBadge}</td>
@@ -422,6 +442,7 @@ function renderGridView(viewport, items) {
   let html = `<div class="books-grid">`;
   for (const b of items) {
     const isSelected = state.selectedBookIds.has(b.bookId);
+    const isActive = state.activeBookDetail && state.activeBookDetail.summary.bookId === b.bookId;
     const coverFile = b.coverCachePath ? b.coverCachePath.split(/[\\/]/).pop() : null;
     const coverHtml = coverFile
       ? `<img src="ir-app://covers/${encodeURIComponent(coverFile)}" alt="" loading="lazy" />`
@@ -429,8 +450,18 @@ function renderGridView(viewport, items) {
     const volBadge = b.seriesIndex != null ? `<span class="vol-pill">#${b.seriesIndex}</span>` : '';
 
     html += `
-      <div class="book-card ${isSelected ? 'selected-row' : ''}" onclick="inspectBook('${b.bookId}')" ondblclick="openBookInReader('${b.bookId}')" title="Click to inspect • Double-click to open in Reader">
-        <div class="card-cover">${coverHtml}</div>
+      <div class="book-card ${isSelected || isActive ? 'selected-row' : ''}" draggable="true" data-book-id="${b.bookId}"
+           ondragstart="onBookDragStart(event, '${b.bookId}')" ondragend="onBookDragEnd(event)"
+           oncontextmenu="showBookContextMenu(event, '${b.bookId}')"
+           onclick="handleBookRowClick(event, '${b.bookId}')"
+           ondblclick="openBookInReader('${b.bookId}')"
+           title="Click to inspect • Drag onto folders or Trash • Right-click for options">
+        <div class="card-cover">
+          <label class="card-check-wrap" onclick="event.stopPropagation()">
+            <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="handleBookCheckboxChange(event, '${b.bookId}', this.checked)" />
+          </label>
+          ${coverHtml}
+        </div>
         <div class="card-body">
           <div class="card-title" title="${escapeHtml(b.title)}">${escapeHtml(b.title)}</div>
           <div class="card-sub">${escapeHtml(b.seriesName || b.authors || '—')}${volBadge}</div>
@@ -762,12 +793,72 @@ async function deleteCurrentBook() {
 }
 
 // =========================================================================
-// Bulk Selection & Bulk Metadata Editor
+// Multi-Selection, Drag & Drop, Collection Pruning & Context Menu
 // =========================================================================
+
+let lastSelectedBookId = null;
+let currentDragPayload = null;
+
+function handleBookRowClick(e, bookId) {
+  // If Shift is held, range-select
+  if (e.shiftKey && lastSelectedBookId) {
+    selectBookRange(lastSelectedBookId, bookId);
+    inspectBook(bookId);
+    return;
+  }
+
+  // If Ctrl/Cmd is held, toggle individual selection
+  if (e.ctrlKey || e.metaKey) {
+    if (state.selectedBookIds.has(bookId)) {
+      state.selectedBookIds.delete(bookId);
+    } else {
+      state.selectedBookIds.add(bookId);
+      lastSelectedBookId = bookId;
+    }
+    renderBooksViewport();
+    inspectBook(bookId);
+    return;
+  }
+
+  // Regular single click: inspect book
+  lastSelectedBookId = bookId;
+  inspectBook(bookId);
+}
+
+function handleBookCheckboxChange(e, bookId, checked) {
+  if (e.shiftKey && lastSelectedBookId) {
+    selectBookRange(lastSelectedBookId, bookId);
+    return;
+  }
+
+  if (checked) {
+    state.selectedBookIds.add(bookId);
+    lastSelectedBookId = bookId;
+  } else {
+    state.selectedBookIds.delete(bookId);
+  }
+  renderBooksViewport();
+}
+
+function selectBookRange(startId, endId) {
+  const items = state.currentPage.items;
+  const startIdx = items.findIndex(b => b.bookId === startId);
+  const endIdx = items.findIndex(b => b.bookId === endId);
+  if (startIdx === -1 || endIdx === -1) return;
+
+  const min = Math.min(startIdx, endIdx);
+  const max = Math.max(startIdx, endIdx);
+  for (let i = min; i <= max; i++) {
+    state.selectedBookIds.add(items[i].bookId);
+  }
+  lastSelectedBookId = endId;
+  renderBooksViewport();
+}
 
 function toggleBookSelection(bookId, checked) {
   if (checked) {
     state.selectedBookIds.add(bookId);
+    lastSelectedBookId = bookId;
   } else {
     state.selectedBookIds.delete(bookId);
   }
@@ -792,7 +883,415 @@ function updateBulkBar() {
   const count = state.selectedBookIds.size;
   document.getElementById('bulk-selected-count').textContent = count;
   bar.classList.toggle('hidden', count === 0);
+
+  if (count > 0) {
+    // Populate quick move dropdown
+    const folderSelect = document.getElementById('bulk-quick-folder');
+    if (folderSelect) {
+      let optHtml = `<option value="">📁 Move to Collection...</option>`;
+      optHtml += `<option value="__uncategorized__">📥 -- Uncategorized --</option>`;
+      for (const f of state.flatFolders) {
+        optHtml += `<option value="${f.folderId}">${escapeHtml(f.breadcrumb)}</option>`;
+      }
+      folderSelect.innerHTML = optHtml;
+    }
+
+    // Populate quick tag dropdown
+    const tagSelect = document.getElementById('bulk-quick-tag');
+    if (tagSelect) {
+      let tagHtml = `<option value="">🏷️ Add Tag...</option>`;
+      for (const t of state.tags) {
+        tagHtml += `<option value="${t.tagId}">＋ ${escapeHtml(t.name)}</option>`;
+      }
+      tagSelect.innerHTML = tagHtml;
+    }
+  }
 }
+
+async function onQuickBulkMove(folderId) {
+  if (!folderId || state.selectedBookIds.size === 0) return;
+  const isUncat = folderId === '__uncategorized__';
+  try {
+    await rpcCall('library.bulkUpdateBooks', {
+      bookIds: Array.from(state.selectedBookIds),
+      folderId: isUncat ? null : folderId,
+      clearFolderId: isUncat
+    });
+    clearSelection();
+    const sel = document.getElementById('bulk-quick-folder');
+    if (sel) sel.value = '';
+    await reloadSidebarAndBooks();
+  } catch (err) {
+    alert(`Failed to move books: ${err.message}`);
+  }
+}
+
+async function onQuickBulkAddTag(tagId) {
+  if (!tagId || state.selectedBookIds.size === 0) return;
+  try {
+    await rpcCall('library.bulkUpdateBooks', {
+      bookIds: Array.from(state.selectedBookIds),
+      addTagIds: [tagId]
+    });
+    clearSelection();
+    const sel = document.getElementById('bulk-quick-tag');
+    if (sel) sel.value = '';
+    await reloadSidebarAndBooks();
+  } catch (err) {
+    alert(`Failed to add tag: ${err.message}`);
+  }
+}
+
+async function bulkDeleteSelectedBooks() {
+  const count = state.selectedBookIds.size;
+  if (count === 0) return;
+  if (!confirm(`Are you sure you want to remove ${count} book(s) from the library catalog?\n(Original EPUB files on disk will NOT be deleted)`)) {
+    return;
+  }
+  try {
+    await rpcCall('library.bulkDeleteBooks', { bookIds: Array.from(state.selectedBookIds) });
+    clearSelection();
+    await reloadSidebarAndBooks();
+  } catch (err) {
+    alert(`Failed to delete books: ${err.message}`);
+  }
+}
+
+async function pruneEmptyFolders() {
+  if (!confirm('Scan and prune all empty collections with zero books and zero sub-collections?')) {
+    return;
+  }
+  try {
+    const res = await rpcCall('library.pruneEmptyFolders', {});
+    if (res && res.prunedCount > 0) {
+      alert(`Pruned ${res.prunedCount} empty collection(s):\n• ` + res.prunedFolderNames.join('\n• '));
+      await reloadSidebarAndBooks();
+    } else {
+      alert('No empty collections found to prune. All collections contain books or active sub-folders.');
+    }
+  } catch (err) {
+    alert(`Failed to prune collections: ${err.message}`);
+  }
+}
+
+// Drag & Drop Controller
+function onBookDragStart(e, bookId) {
+  if (!state.selectedBookIds.has(bookId)) {
+    if (!e.ctrlKey && !e.metaKey) {
+      state.selectedBookIds.clear();
+    }
+    state.selectedBookIds.add(bookId);
+    lastSelectedBookId = bookId;
+    renderBooksViewport();
+  }
+
+  const bookIds = Array.from(state.selectedBookIds);
+  currentDragPayload = { type: 'books', bookIds };
+  e.dataTransfer.setData('text/plain', JSON.stringify(currentDragPayload));
+  e.dataTransfer.effectAllowed = 'move';
+
+  document.querySelectorAll('tr.selected-row, .book-card.selected-row').forEach(el => {
+    el.classList.add('book-dragging');
+  });
+}
+
+function onBookDragEnd(e) {
+  document.querySelectorAll('.book-dragging').forEach(el => el.classList.remove('book-dragging'));
+  document.querySelectorAll('.tree-drop-target').forEach(el => el.classList.remove('tree-drop-target'));
+  const trash = document.getElementById('trash-drop-zone');
+  if (trash) trash.classList.remove('drag-trash-active');
+  currentDragPayload = null;
+}
+
+function onFolderDragStart(e, folderId) {
+  e.stopPropagation();
+  currentDragPayload = { type: 'folder', folderId };
+  e.dataTransfer.setData('text/plain', JSON.stringify(currentDragPayload));
+  e.dataTransfer.effectAllowed = 'move';
+  e.currentTarget.classList.add('folder-dragging');
+}
+
+function onFolderDragEnd(e) {
+  document.querySelectorAll('.folder-dragging').forEach(el => el.classList.remove('folder-dragging'));
+  document.querySelectorAll('.tree-drop-target').forEach(el => el.classList.remove('tree-drop-target'));
+  const trash = document.getElementById('trash-drop-zone');
+  if (trash) trash.classList.remove('drag-trash-active');
+  currentDragPayload = null;
+}
+
+function onFolderDragOver(e, targetFolderId) {
+  e.preventDefault();
+  e.stopPropagation();
+  if (currentDragPayload && currentDragPayload.type === 'folder' && currentDragPayload.folderId === targetFolderId) {
+    return;
+  }
+  e.dataTransfer.dropEffect = 'move';
+  const targetEl = document.querySelector(`.tree-row[data-folder-id="${targetFolderId}"]`);
+  if (targetEl) targetEl.classList.add('tree-drop-target');
+}
+
+function onFolderDragLeave(e, targetFolderId) {
+  e.stopPropagation();
+  const targetEl = document.querySelector(`.tree-row[data-folder-id="${targetFolderId}"]`);
+  if (targetEl) targetEl.classList.remove('tree-drop-target');
+}
+
+async function onFolderDrop(e, targetFolderId) {
+  e.preventDefault();
+  e.stopPropagation();
+  const targetEl = document.querySelector(`.tree-row[data-folder-id="${targetFolderId}"]`);
+  if (targetEl) targetEl.classList.remove('tree-drop-target');
+
+  if (!currentDragPayload) return;
+
+  if (currentDragPayload.type === 'books') {
+    const bookIds = currentDragPayload.bookIds;
+    if (bookIds.length === 0) return;
+    try {
+      await rpcCall('library.bulkUpdateBooks', { bookIds, folderId: targetFolderId });
+      clearSelection();
+      await reloadSidebarAndBooks();
+    } catch (err) {
+      alert(`Failed to move books: ${err.message}`);
+    }
+  } else if (currentDragPayload.type === 'folder') {
+    const sourceFolderId = currentDragPayload.folderId;
+    if (sourceFolderId === targetFolderId) return;
+    try {
+      await rpcCall('library.moveFolder', { folderId: sourceFolderId, newParentFolderId: targetFolderId });
+      await reloadSidebarAndBooks();
+    } catch (err) {
+      alert(`Failed to move folder: ${err.message}`);
+    }
+  }
+}
+
+function onRootFolderDragOver(e) {
+  if (currentDragPayload && currentDragPayload.type === 'folder') {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    document.getElementById('nav-all-books').classList.add('tree-drop-target');
+  }
+}
+
+function onRootFolderDragLeave(e) {
+  document.getElementById('nav-all-books').classList.remove('tree-drop-target');
+}
+
+async function onRootFolderDrop(e) {
+  e.preventDefault();
+  document.getElementById('nav-all-books').classList.remove('tree-drop-target');
+  if (currentDragPayload && currentDragPayload.type === 'folder') {
+    try {
+      await rpcCall('library.moveFolder', { folderId: currentDragPayload.folderId, newParentFolderId: null });
+      await reloadSidebarAndBooks();
+    } catch (err) {
+      alert(`Failed to move folder to root: ${err.message}`);
+    }
+  }
+}
+
+function onUncategorizedDragOver(e) {
+  if (currentDragPayload && currentDragPayload.type === 'books') {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    document.getElementById('nav-uncategorized').classList.add('tree-drop-target');
+  }
+}
+
+function onUncategorizedDragLeave(e) {
+  document.getElementById('nav-uncategorized').classList.remove('tree-drop-target');
+}
+
+async function onUncategorizedDrop(e) {
+  e.preventDefault();
+  document.getElementById('nav-uncategorized').classList.remove('tree-drop-target');
+  if (currentDragPayload && currentDragPayload.type === 'books') {
+    try {
+      await rpcCall('library.bulkUpdateBooks', {
+        bookIds: currentDragPayload.bookIds,
+        clearFolderId: true
+      });
+      clearSelection();
+      await reloadSidebarAndBooks();
+    } catch (err) {
+      alert(`Failed to unassign books from folders: ${err.message}`);
+    }
+  }
+}
+
+function onTrashDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const trash = document.getElementById('trash-drop-zone');
+  if (trash) trash.classList.add('drag-trash-active');
+}
+
+function onTrashDragLeave(e) {
+  const trash = document.getElementById('trash-drop-zone');
+  if (trash) trash.classList.remove('drag-trash-active');
+}
+
+async function onTrashDrop(e) {
+  e.preventDefault();
+  const trash = document.getElementById('trash-drop-zone');
+  if (trash) trash.classList.remove('drag-trash-active');
+
+  if (!currentDragPayload) return;
+
+  if (currentDragPayload.type === 'books') {
+    const count = currentDragPayload.bookIds.length;
+    if (confirm(`Remove ${count} selected book(s) from the library catalog?\n(Original EPUB files on disk will NOT be deleted)`)) {
+      try {
+        await rpcCall('library.bulkDeleteBooks', { bookIds: currentDragPayload.bookIds });
+        clearSelection();
+        await reloadSidebarAndBooks();
+      } catch (err) {
+        alert(`Failed to remove books: ${err.message}`);
+      }
+    }
+  } else if (currentDragPayload.type === 'folder') {
+    const fId = currentDragPayload.folderId;
+    const f = state.flatFolders.find(x => x.folderId === fId);
+    const fName = f ? f.name : 'this collection';
+    if (confirm(`Delete collection '${fName}'?\nAny books inside will be preserved and reassigned to parent collection.`)) {
+      try {
+        await rpcCall('library.deleteFolder', { folderId: fId });
+        await reloadSidebarAndBooks();
+      } catch (err) {
+        alert(`Failed to delete folder: ${err.message}`);
+      }
+    }
+  }
+}
+
+// Custom Context Menu Controller
+function showBookContextMenu(e, bookId) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  if (!state.selectedBookIds.has(bookId)) {
+    if (!e.ctrlKey && !e.metaKey) {
+      state.selectedBookIds.clear();
+    }
+    state.selectedBookIds.add(bookId);
+    lastSelectedBookId = bookId;
+    renderBooksViewport();
+  }
+
+  const count = state.selectedBookIds.size;
+  const menu = document.getElementById('custom-context-menu');
+  const itemsContainer = document.getElementById('context-menu-items');
+
+  let itemsHtml = `
+    <div class="context-menu-item" onclick="openBookInReader('${bookId}'); hideContextMenu()">
+      <span>📖</span>
+      <span>Read Now</span>
+    </div>
+    <div class="context-menu-item" onclick="openBulkEditModal(); hideContextMenu()">
+      <span>✎</span>
+      <span>Edit Metadata (${count})</span>
+    </div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-submenu-header">Move to Collection</div>
+    <div class="context-menu-item" onclick="onQuickBulkMove('__uncategorized__'); hideContextMenu()">
+      <span>📥</span>
+      <span>-- Uncategorized --</span>
+    </div>
+  `;
+
+  for (const f of state.flatFolders.slice(0, 10)) {
+    const icon = f.folderKind === 'collection' ? '🌐' : f.folderKind === 'series' ? '📚' : '📁';
+    itemsHtml += `
+      <div class="context-menu-item" onclick="onQuickBulkMove('${f.folderId}'); hideContextMenu()">
+        <span>${icon}</span>
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px">${escapeHtml(f.name)}</span>
+      </div>
+    `;
+  }
+
+  itemsHtml += `
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item danger" onclick="bulkDeleteSelectedBooks(); hideContextMenu()">
+      <span>🗑️</span>
+      <span>Remove from Library (${count})</span>
+    </div>
+  `;
+
+  itemsContainer.innerHTML = itemsHtml;
+  positionContextMenu(e, menu);
+}
+
+function showFolderContextMenu(e, folderId, folderName) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const menu = document.getElementById('custom-context-menu');
+  const itemsContainer = document.getElementById('context-menu-items');
+
+  itemsContainer.innerHTML = `
+    <div class="context-menu-item" onclick="openFolderModal('${folderId}'); hideContextMenu()">
+      <span>⚙</span>
+      <span>Edit Collection Details</span>
+    </div>
+    <div class="context-menu-item" onclick="openFolderModal(null, '${folderId}'); hideContextMenu()">
+      <span>＋</span>
+      <span>Add Sub-Collection</span>
+    </div>
+    <div class="context-menu-separator"></div>
+    <div class="context-menu-item" onclick="pruneEmptyFolders(); hideContextMenu()">
+      <span>🧹</span>
+      <span>Prune Empty Sub-Collections</span>
+    </div>
+    <div class="context-menu-item danger" onclick="deleteFolderById('${folderId}', '${escapeHtml(folderName)}'); hideContextMenu()">
+      <span>🗑️</span>
+      <span>Delete Collection</span>
+    </div>
+  `;
+
+  positionContextMenu(e, menu);
+}
+
+function positionContextMenu(e, menu) {
+  menu.classList.remove('hidden');
+  const menuWidth = 220;
+  const menuHeight = 260;
+  let x = e.clientX;
+  let y = e.clientY;
+
+  if (x + menuWidth > window.innerWidth) x = window.innerWidth - menuWidth - 8;
+  if (y + menuHeight > window.innerHeight) y = window.innerHeight - menuHeight - 8;
+
+  menu.style.left = `${Math.max(8, x)}px`;
+  menu.style.top = `${Math.max(8, y)}px`;
+}
+
+function hideContextMenu() {
+  const menu = document.getElementById('custom-context-menu');
+  if (menu) menu.classList.add('hidden');
+}
+
+async function deleteFolderById(folderId, folderName) {
+  if (!confirm(`Delete collection '${folderName}'?\nBooks will be preserved and reassigned to parent collection.`)) {
+    return;
+  }
+  try {
+    await rpcCall('library.deleteFolder', { folderId });
+    if (state.selectedFolderId === folderId) {
+      state.selectedFolderId = null;
+    }
+    await reloadSidebarAndBooks();
+  } catch (err) {
+    alert(`Failed to delete collection: ${err.message}`);
+  }
+}
+
+window.addEventListener('click', () => hideContextMenu());
+window.addEventListener('contextmenu', (e) => {
+  if (!e.target.closest('.books-table tr, .book-card, .tree-row')) {
+    hideContextMenu();
+  }
+});
 
 function openBulkEditModal() {
   document.getElementById('bulk-modal-count').textContent = state.selectedBookIds.size;
@@ -1506,11 +2005,33 @@ window.addEventListener('keydown', function (e) {
     return;
   }
 
-  // Escape key: close settings or dictionary popover
+  // Ctrl+A / Cmd+A: Select all books on page if not typing in input
+  const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A') && !isInput) {
+    e.preventDefault();
+    selectAllOnPage(true);
+    return;
+  }
+
+  // Delete key: Remove selected books from library
+  if (e.key === 'Delete' && !isInput && state.selectedBookIds.size > 0) {
+    e.preventDefault();
+    bulkDeleteSelectedBooks();
+    return;
+  }
+
+  // Escape key: close context menu, settings modal, or clear selection
   if (e.key === 'Escape') {
+    hideContextMenu();
+
     const settingsModal = document.getElementById('modal-settings');
     if (settingsModal && !settingsModal.classList.contains('hidden')) {
       closeSettingsModal();
+      return;
+    }
+
+    if (state.selectedBookIds.size > 0) {
+      clearSelection();
       return;
     }
   }

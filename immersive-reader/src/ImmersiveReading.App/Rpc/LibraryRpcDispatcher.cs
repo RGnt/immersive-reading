@@ -198,6 +198,35 @@ public sealed class LibraryRpcDispatcher
                 return new { ok = true };
             }
 
+            case "library.bulkDeleteBooks":
+            {
+                var bookIds = GetStringList(p, "bookIds");
+                int deleted = _library.BulkDeleteBooks(bookIds);
+                return new { ok = true, deletedCount = deleted };
+            }
+
+            case "library.pruneEmptyFolders":
+            {
+                var pruned = _library.PruneEmptyFolders();
+                return new { ok = true, prunedCount = pruned.Count, prunedFolderNames = pruned, tree = _library.GetFolderTree() };
+            }
+
+            case "library.moveFolder":
+            {
+                string folderId = GetRequiredString(p, "folderId");
+                string? newParentId = GetOptionalString(p, "newParentFolderId");
+                int? newSortOrder = p.TryGetProperty("newSortOrder", out var so) && so.TryGetInt32(out int sVal) ? sVal : null;
+                bool moved = _library.MoveFolder(folderId, newParentId, newSortOrder);
+                return new { ok = moved, tree = _library.GetFolderTree() };
+            }
+
+            case "library.reorderBooks":
+            {
+                var bookIds = GetStringList(p, "bookIdsInOrder");
+                _library.ReorderBooks(bookIds);
+                return new { ok = true };
+            }
+
             case "library.getFolderTree":
                 return _library.GetFolderTree();
 
@@ -940,6 +969,26 @@ public sealed class LibraryRpcDispatcher
             return el.GetString();
         }
         return null;
+    }
+
+    private static List<string> GetStringList(JsonElement p, string propName)
+    {
+        if (p.ValueKind == JsonValueKind.Object &&
+            p.TryGetProperty(propName, out var el) &&
+            el.ValueKind == JsonValueKind.Array)
+        {
+            var list = new List<string>();
+            foreach (var item in el.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    string? s = item.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) list.Add(s);
+                }
+            }
+            return list;
+        }
+        return [];
     }
 
     private static double? GetOptionalDouble(JsonElement p, string propName)

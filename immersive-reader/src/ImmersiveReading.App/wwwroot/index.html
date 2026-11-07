@@ -22,11 +22,11 @@
         <div class="section-header">
           <span>CATALOG VIEWS</span>
         </div>
-        <button class="nav-item active" id="nav-all-books" onclick="selectRootView('all')">
+        <button class="nav-item active" id="nav-all-books" onclick="selectRootView('all')" ondragover="onRootFolderDragOver(event)" ondragleave="onRootFolderDragLeave(event)" ondrop="onRootFolderDrop(event)" title="Click to view all books • Drop folder here to move to top level">
           <span>📚 All Books</span>
           <span class="badge" id="count-all-books">0</span>
         </button>
-        <button class="nav-item" id="nav-uncategorized" onclick="selectRootView('uncategorized')">
+        <button class="nav-item" id="nav-uncategorized" onclick="selectRootView('uncategorized')" ondragover="onUncategorizedDragOver(event)" ondragleave="onUncategorizedDragLeave(event)" ondrop="onUncategorizedDrop(event)" title="Click to view uncategorized • Drop books here to remove from folders">
           <span>📥 Uncategorized</span>
         </button>
       </div>
@@ -34,7 +34,10 @@
       <div class="sidebar-section flex-grow">
         <div class="section-header">
           <span>FOLDERS &amp; SERIES</span>
-          <button class="btn-icon" title="New Collection / Category / Series Folder" onclick="openFolderModal(null)">＋</button>
+          <div style="display:flex;gap:4px">
+            <button class="btn-icon" title="Prune All Empty Folders / Collections" onclick="pruneEmptyFolders()">🧹</button>
+            <button class="btn-icon" title="New Collection / Category / Series Folder" onclick="openFolderModal(null)">＋</button>
+          </div>
         </div>
         <div class="folder-options-bar">
           <label class="checkbox-label">
@@ -43,6 +46,12 @@
           </label>
         </div>
         <div id="folder-tree-container" class="folder-tree"></div>
+
+        <!-- Trash Drop Zone for Drag & Drop Deletion -->
+        <div id="trash-drop-zone" class="trash-drop-zone" ondragover="onTrashDragOver(event)" ondragleave="onTrashDragLeave(event)" ondrop="onTrashDrop(event)" title="Drag selected books or collections here to remove them from the library">
+          <span class="trash-icon">🗑️</span>
+          <span class="trash-text">Drop books or collections here to delete</span>
+        </div>
       </div>
 
       <div class="sidebar-section">
@@ -116,13 +125,20 @@
 
       <!-- Bulk Selection Action Bar -->
       <div id="bulk-action-bar" class="bulk-bar hidden">
-        <div>
-          <strong id="bulk-selected-count">0</strong> books selected
+        <div style="display:flex;align-items:center;gap:10px">
+          <div><strong id="bulk-selected-count">0</strong> books selected</div>
           <button class="btn-link" onclick="selectAllOnPage(true)">Select Page</button>
           <button class="btn-link" onclick="clearSelection()">Clear</button>
         </div>
-        <div class="bulk-actions-right">
-          <button class="btn btn-primary btn-sm" onclick="openBulkEditModal()">✎ Bulk Edit Metadata / Series / Folder / Tags</button>
+        <div class="bulk-actions-right" style="display:flex;align-items:center;gap:8px">
+          <select id="bulk-quick-folder" class="mini-select" onchange="onQuickBulkMove(this.value)">
+            <option value="">📁 Move to Collection...</option>
+          </select>
+          <select id="bulk-quick-tag" class="mini-select" onchange="onQuickBulkAddTag(this.value)">
+            <option value="">🏷️ Add Tag...</option>
+          </select>
+          <button class="btn btn-secondary btn-sm" onclick="openBulkEditModal()">✎ Bulk Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="bulkDeleteSelectedBooks()">🗑️ Delete Selected</button>
         </div>
       </div>
 
@@ -869,6 +885,11 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Reusable Custom Context Menu -->
+  <div id="custom-context-menu" class="custom-context-menu hidden">
+    <div id="context-menu-items" class="context-menu-list"></div>
   </div>
 
   <script src="app.js"></script>

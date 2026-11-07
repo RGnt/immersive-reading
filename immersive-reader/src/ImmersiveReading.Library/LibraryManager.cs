@@ -1607,6 +1607,144 @@ public sealed class LibraryManager
         tx.Commit();
     }
 
+    public int BulkDeleteBooks(IReadOnlyList<string> bookIds)
+    {
+        if (bookIds is null || bookIds.Count == 0) return 0;
+        using var conn = _db.OpenConnection();
+        using var tx = conn.BeginTransaction();
+
+        int count = 0;
+        foreach (string bookId in bookIds)
+        {
+            using (var delFts = conn.CreateCommand())
+            {
+                delFts.Transaction = tx;
+                delFts.CommandText = "DELETE FROM books_fts WHERE book_id = $id;";
+                delFts.Parameters.AddWithValue("$id", bookId);
+                delFts.ExecuteNonQuery();
+            }
+
+            using (var delCf = conn.CreateCommand())
+            {
+                delCf.Transaction = tx;
+                delCf.CommandText = "DELETE FROM custom_field_values WHERE entity_type = 'book' AND entity_id = $id;";
+                delCf.Parameters.AddWithValue("$id", bookId);
+                delCf.ExecuteNonQuery();
+            }
+
+            using (var delB = conn.CreateCommand())
+            {
+                delB.Transaction = tx;
+                delB.CommandText = "DELETE FROM books WHERE book_id = $id;";
+                delB.Parameters.AddWithValue("$id", bookId);
+                count += delB.ExecuteNonQuery();
+            }
+        }
+
+        tx.Commit();
+        return count;
+    }
+
+    public IReadOnlyList<string> PruneEmptyFolders()
+    {
+        using var conn = _db.OpenConnection();
+        var prunedNames = new List<string>();
+
+        while (true)
+        {
+            var leafEmpty = new List<(string Id, string Name)>();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = """
+                    SELECT f.folder_id, f.name
+                    FROM library_folders f
+                    WHERE (SELECT COUNT(*) FROM books b WHERE b.folder_id = f.folder_id) = 0
+                      AND (SELECT COUNT(*) FROM library_folders c WHERE c.parent_folder_id = f.folder_id) = 0;
+                    """;
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read())
+                {
+                    leafEmpty.Add((reader.GetString(0), reader.GetString(1)));
+                }
+            }
+
+            if (leafEmpty.Count == 0) break;
+
+            using var tx = conn.BeginTransaction();
+            foreach (var (fId, name) in leafEmpty)
+            {
+                using var delCmd = conn.CreateCommand();
+                delCmd.Transaction = tx;
+                delCmd.CommandText = "DELETE FROM library_folders WHERE folder_id = $id;";
+                delCmd.Parameters.AddWithValue("$id", fId);
+                delCmd.ExecuteNonQuery();
+                prunedNames.Add(name);
+            }
+            tx.Commit();
+        }
+
+        return prunedNames;
+    }
+
+    public bool MoveFolder(string folderId, string? newParentFolderId, int? newSortOrder = null)
+    {
+        if (string.IsNullOrWhiteSpace(folderId)) return false;
+        if (folderId == newParentFolderId) return false;
+
+        using var conn = _db.OpenConnection();
+        if (!string.IsNullOrWhiteSpace(newParentFolderId))
+        {
+            string? curr = newParentFolderId;
+            while (!string.IsNullOrWhiteSpace(curr))
+            {
+                if (curr == folderId) return false; // Cycle detected
+                using var pCmd = conn.CreateCommand();
+                pCmd.CommandText = "SELECT parent_folder_id FROM library_folders WHERE folder_id = $id;";
+                pCmd.Parameters.AddWithValue("$id", curr);
+                curr = pCmd.ExecuteScalar() as string;
+            }
+        }
+
+        using var tx = conn.BeginTransaction();
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = """
+                UPDATE library_folders
+                SET parent_folder_id = $parent,
+                    sort_order = COALESCE($order, sort_order)
+                WHERE folder_id = $id;
+                """;
+            cmd.Parameters.AddWithValue("$parent", (object?)newParentFolderId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$order", (object?)newSortOrder ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("$id", folderId);
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
+        return true;
+    }
+
+    public void ReorderBooks(IReadOnlyList<string> orderedBookIds)
+    {
+        if (orderedBookIds is null || orderedBookIds.Count == 0) return;
+        using var conn = _db.OpenConnection();
+        using var tx = conn.BeginTransaction();
+        string now = DateTime.UtcNow.ToString("O");
+
+        for (int i = 0; i < orderedBookIds.Count; i++)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "UPDATE books SET custom_sort_order = $order, updated_at_utc = $now WHERE book_id = $id;";
+            cmd.Parameters.AddWithValue("$order", i + 1);
+            cmd.Parameters.AddWithValue("$now", now);
+            cmd.Parameters.AddWithValue("$id", orderedBookIds[i]);
+            cmd.ExecuteNonQuery();
+        }
+
+        tx.Commit();
+    }
+
     // =========================================================================
     // Internal Helpers: Custom Field Inheritance, FTS5 Sync & Folder Trees
     // =========================================================================
