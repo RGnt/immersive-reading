@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Builds and packages a self-contained, portable Windows x64 release of Immersive Reading.
 
@@ -137,3 +137,4 @@ Write-Host "  BUILD & PACKAGING COMPLETE!" -ForegroundColor Green
 Write-Host "  Folder: $DistDir" -ForegroundColor Green
 Write-Host "  Zip:    $ZipFile ($sizeMb MB)" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
+

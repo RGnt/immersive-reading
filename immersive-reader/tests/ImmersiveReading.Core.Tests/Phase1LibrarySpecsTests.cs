@@ -332,6 +332,62 @@ public sealed class Phase1LibrarySpecsTests : IDisposable
         Assert.Equal("電撃文庫", listed.Items[0].Imprint);
     }
 
+    [Fact]
+    public async Task Feature01_EpubParsing_ToCDrivenChapters_And_EarlyPagesIntroductionClassification()
+    {
+        string booksRoot = Path.Combine(FindWorkspaceRoot(), "enrichement-extractor", "books");
+        string kumaEpub = Path.Combine(booksRoot, @"くま クマ 熊 ベアー (PASH! ブックス) - くまなの\くま クマ 熊 ベアー (PASH! ブックス) - くまなの.epub");
+        string kuukuEpub = Path.Combine(booksRoot, @"[かさい まり] こぐまのクーク物語　はじめての海とキャンプ\[かさい まり] こぐまのクーク物語　はじめての海とキャンプ.epub");
+
+        if (File.Exists(kumaEpub))
+        {
+            var imported = await _manager.ImportBookAsync(kumaEpub);
+            var chapters = imported.Chapters;
+
+            // Early parts before Chapter 1 must be marked as front matter (is_excluded = true)
+            var frontMatter = chapters.TakeWhile(c => c.IsExcluded).ToList();
+            Assert.True(frontMatter.Count >= 4, $"Expected at least 4 front matter pages, got {frontMatter.Count}");
+            Assert.Contains(frontMatter, c => c.Title.Contains("Cover") || c.Title.Contains("表紙"));
+            Assert.Contains(frontMatter, c => c.Title.Contains("Contents") || c.Title.Contains("目次") || c.Title.Contains("Ｃｏｎｔｅｎｔｓ"));
+
+            // First actual story chapter must be Chapter 1 ("１ クマさん装備ゲットだぜ！"), not Chapter 6!
+            var firstStoryChapter = chapters.FirstOrDefault(c => !c.IsExcluded);
+            Assert.NotNull(firstStoryChapter);
+            Assert.Equal("chapter-01", firstStoryChapter.ChapterId);
+            Assert.Contains("１ クマさん装備ゲットだぜ！", firstStoryChapter.Title);
+            Assert.Equal("text/part0004.html", firstStoryChapter.SpineHref);
+
+            // Second actual story chapter must be Chapter 2 ("２ クマさん、少女と出会う")
+            var secondStoryChapter = chapters.FirstOrDefault(c => c.ChapterId == "chapter-02");
+            Assert.NotNull(secondStoryChapter);
+            Assert.Contains("２ クマさん、少女と出会う", secondStoryChapter.Title);
+            Assert.Equal("text/part0005.html", secondStoryChapter.SpineHref);
+
+            // Third actual story chapter must be Chapter 3 ("３ クマさん、ウルフを買い取りしてもらう")
+            var thirdStoryChapter = chapters.FirstOrDefault(c => c.ChapterId == "chapter-03");
+            Assert.NotNull(thirdStoryChapter);
+            Assert.Contains("３ クマさん、ウルフを買い取りしてもらう", thirdStoryChapter.Title);
+            Assert.Equal("text/part0008.html", thirdStoryChapter.SpineHref);
+        }
+
+        if (File.Exists(kuukuEpub))
+        {
+            var imported = await _manager.ImportBookAsync(kuukuEpub);
+            var chapters = imported.Chapters;
+
+            // Early parts before Chapter 1 must be marked as front matter
+            var frontMatter = chapters.TakeWhile(c => c.IsExcluded).ToList();
+            Assert.True(frontMatter.Count >= 5, $"Expected at least 5 front matter items, got {frontMatter.Count}");
+
+            // First story chapter must be Chapter 1 ("海に行くよ"), not Chapter 8 or 9!
+            var firstStoryChapter = chapters.FirstOrDefault(c => !c.IsExcluded);
+            Assert.NotNull(firstStoryChapter);
+            Assert.Equal("chapter-01", firstStoryChapter.ChapterId);
+            Assert.Contains("海に行くよ", firstStoryChapter.Title);
+            Assert.EndsWith("Text/part0007.xhtml", firstStoryChapter.SpineHref, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
     private string CreateMinimalEpub(string fileNameOrPath, string dcTitle)
     {
         return CreateSyntheticEpub(

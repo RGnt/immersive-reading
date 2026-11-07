@@ -35,10 +35,18 @@ public sealed record ExtractedEpubPackage(
 
 public static class EpubMetadataExtractor
 {
-    private static readonly HashSet<string> FrontBackMatterTitles = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> FrontMatterTitles = new(StringComparer.OrdinalIgnoreCase)
     {
-        "もくじ", "目次", "奥付", "表紙", "扉", "裏表紙", "著作権", "クレジット",
-        "contents", "table of contents", "toc", "cover", "copyright", "colophon", "title page", "acknowledgments"
+        "表紙", "扉", "とびら", "口絵", "カラー口絵", "カラーイラスト", "ピンナップ", "イラスト",
+        "目次", "もくじ", "凡例", "はじめに", "まえがき", "前書き", "注意", "利用上の注意", "ご利用上の注意", "規約", "利用規約",
+        "cover", "titlepage", "title page", "illustrations", "color insert", "contents",
+        "table of contents", "toc", "preface", "introduction", "foreword", "caution", "notice"
+    };
+
+    private static readonly HashSet<string> BackMatterTitles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "奥付", "おくづけ", "あとがき", "後書き", "解説", "著者紹介", "著作権", "クレジット", "広告", "裏表紙",
+        "colophon", "copyright", "about the author", "profile", "advertisement", "afterword", "acknowledgments"
     };
 
     public static async Task<ExtractedEpubPackage> ExtractFromFileAsync(
@@ -181,48 +189,14 @@ public static class EpubMetadataExtractor
         // 5. Extract Cover Image
         var (coverBytes, coverExt) = ExtractCoverImage(archive, opfDoc, manifest);
 
-        // 6. Build Chapter list (and optional deep character count)
-        var tocMap = ParseNavigationTitles(archive, opfDoc, manifest);
-        var chapters = new List<BookChapterRecord>(spineHrefs.Count);
-        int cumulativeChars = 0;
-
-        for (int i = 0; i < spineHrefs.Count; i++)
-        {
-            string spineHref = spineHrefs[i];
-            string chapterTitle = tocMap.TryGetValue(spineHref, out string? navTitle) && !string.IsNullOrWhiteSpace(navTitle)
-                ? navTitle
-                : $"Chapter {i + 1}";
-
-            bool isExcluded = IsFrontOrBackMatter(chapterTitle, spineHref);
-            int charCount = 0;
-
-            if (computeDeepChapterStats)
-            {
-                var chEntry = GetEntryNormalized(archive, spineHref);
-                if (chEntry is not null)
-                {
-                    charCount = CountNormalizedChapterCharacters(chEntry);
-                }
-            }
-
-            chapters.Add(new BookChapterRecord(
-                BookId: bookId,
-                ChapterIndex: i,
-                ChapterId: $"chapter-{i + 1:D2}",
-                Title: chapterTitle,
-                SpineHref: spineHref,
-                FragmentId: "",
-                EndSpineHref: null,
-                EndFragmentId: null,
-                CharCount: charCount,
-                CumulativeChars: cumulativeChars,
-                IsExcluded: isExcluded));
-
-            if (!isExcluded)
-            {
-                cumulativeChars += charCount;
-            }
-        }
+        // 6. Build Chapter list using Table of Contents and front-matter classification
+        var (chapters, totalChars) = BuildChapterList(
+            archive,
+            opfDoc,
+            manifest,
+            spineHrefs,
+            bookId,
+            computeDeepChapterStats);
 
         var opfSnapshot = rawOpf with
         {
@@ -251,7 +225,7 @@ public static class EpubMetadataExtractor
             CoverImageBytes: coverBytes,
             CoverExtension: coverExt,
             Chapters: chapters,
-            TotalCharCount: cumulativeChars,
+            TotalCharCount: totalChars,
             StatsComputed: computeDeepChapterStats);
     }
 
@@ -766,14 +740,181 @@ public static class EpubMetadataExtractor
         return (ms.ToArray(), ext);
     }
 
-    private static Dictionary<string, string> ParseNavigationTitles(
+    public sealed record EpubNavPoint(
+        string Title,
+        string SpineHref,
+        string FragmentId,
+        int Order
+    );
+
+    private static (List<BookChapterRecord> Chapters, int TotalChars) BuildChapterList(
+        ZipArchive archive,
+        IDocument opfDoc,
+        Dictionary<string, (string Href, string MediaType, string Properties)> manifest,
+        List<string> spineHrefs,
+        string bookId,
+        bool computeDeepChapterStats)
+    {
+        var navPoints = ParseTableOfContents(archive, opfDoc, manifest);
+
+        // Map spineHref -> list of ToC entries
+        var navBySpine = new Dictionary<string, List<EpubNavPoint>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var np in navPoints)
+        {
+            if (!navBySpine.TryGetValue(np.SpineHref, out var list))
+            {
+                list = [];
+                navBySpine[np.SpineHref] = list;
+            }
+            list.Add(np);
+        }
+
+        // Find the first story ToC entry
+        EpubNavPoint? firstStoryNav = navPoints.FirstOrDefault(np => !IsFrontMatterTitle(np.Title));
+        int firstStorySpineIdx = -1;
+        if (firstStoryNav is not null)
+        {
+            firstStorySpineIdx = spineHrefs.FindIndex(s =>
+                string.Equals(s, firstStoryNav.SpineHref, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Fallback if no ToC or firstStoryNav not in spine: scan early spine items for text
+        if (firstStorySpineIdx < 0)
+        {
+            firstStorySpineIdx = FindFirstStorySpineIndex(archive, spineHrefs);
+        }
+
+        var chapters = new List<BookChapterRecord>();
+        int cumulativeChars = 0;
+        int storyChapterNumber = 0;
+        int frontMatterIndex = 0;
+        int backMatterIndex = 0;
+        string lastStoryTitle = "";
+        int continuationPart = 1;
+        bool hasEnteredBackMatter = false;
+
+        for (int i = 0; i < spineHrefs.Count; i++)
+        {
+            string spineHref = spineHrefs[i];
+            bool hasNav = navBySpine.TryGetValue(spineHref, out var nps) && nps.Count > 0;
+            string? navTitle = hasNav ? nps![0].Title : null;
+            string fragId = hasNav ? nps![0].FragmentId : "";
+
+            int charCount = 0;
+            if (computeDeepChapterStats)
+            {
+                var chEntry = GetEntryNormalized(archive, spineHref);
+                if (chEntry is not null)
+                {
+                    charCount = CountNormalizedChapterCharacters(chEntry);
+                }
+            }
+
+            // Case A: Before the first story chapter -> FRONT MATTER / INTRODUCTION
+            if (i < firstStorySpineIdx)
+            {
+                frontMatterIndex++;
+                string title = !string.IsNullOrWhiteSpace(navTitle)
+                    ? navTitle
+                    : IdentifyFrontMatterTitle(archive, spineHref, i);
+
+                chapters.Add(new BookChapterRecord(
+                    BookId: bookId,
+                    ChapterIndex: chapters.Count,
+                    ChapterId: $"front-{frontMatterIndex:D2}",
+                    Title: title,
+                    SpineHref: spineHref,
+                    FragmentId: fragId,
+                    CharCount: charCount,
+                    CumulativeChars: cumulativeChars,
+                    IsExcluded: true
+                ));
+                continue;
+            }
+
+            // Case B: In or after the story chapters
+            bool isBackMatter = hasEnteredBackMatter || (hasNav && IsBackMatterTitle(navTitle!));
+
+            if (isBackMatter)
+            {
+                hasEnteredBackMatter = true;
+                backMatterIndex++;
+                string title = !string.IsNullOrWhiteSpace(navTitle) ? navTitle : $"Back Matter {backMatterIndex}";
+
+                chapters.Add(new BookChapterRecord(
+                    BookId: bookId,
+                    ChapterIndex: chapters.Count,
+                    ChapterId: $"back-{backMatterIndex:D2}",
+                    Title: title,
+                    SpineHref: spineHref,
+                    FragmentId: fragId,
+                    CharCount: charCount,
+                    CumulativeChars: cumulativeChars,
+                    IsExcluded: true
+                ));
+            }
+            else
+            {
+                // Story Chapter
+                if (hasNav)
+                {
+                    storyChapterNumber++;
+                    lastStoryTitle = navTitle!;
+                    continuationPart = 1;
+
+                    chapters.Add(new BookChapterRecord(
+                        BookId: bookId,
+                        ChapterIndex: chapters.Count,
+                        ChapterId: $"chapter-{storyChapterNumber:D2}",
+                        Title: navTitle!,
+                        SpineHref: spineHref,
+                        FragmentId: fragId,
+                        CharCount: charCount,
+                        CumulativeChars: cumulativeChars,
+                        IsExcluded: false
+                    ));
+                    cumulativeChars += charCount;
+                }
+                else
+                {
+                    // Continuation or in-chapter illustration between ToC entries
+                    continuationPart++;
+                    bool isIllustration = IsIllustrationSpineItem(archive, spineHref);
+                    string title = !string.IsNullOrWhiteSpace(lastStoryTitle)
+                        ? (isIllustration ? $"{lastStoryTitle} (Illustration)" : $"{lastStoryTitle} (Part {continuationPart})")
+                        : (isIllustration ? $"Illustration {continuationPart}" : $"Chapter {Math.Max(1, storyChapterNumber)} (Part {continuationPart})");
+
+                    string chId = storyChapterNumber > 0
+                        ? $"chapter-{storyChapterNumber:D2}-p{continuationPart}"
+                        : $"chapter-01-p{continuationPart}";
+
+                    chapters.Add(new BookChapterRecord(
+                        BookId: bookId,
+                        ChapterIndex: chapters.Count,
+                        ChapterId: chId,
+                        Title: title,
+                        SpineHref: spineHref,
+                        FragmentId: "",
+                        CharCount: charCount,
+                        CumulativeChars: cumulativeChars,
+                        IsExcluded: false
+                    ));
+                    cumulativeChars += charCount;
+                }
+            }
+        }
+
+        return (chapters, cumulativeChars);
+    }
+
+    private static List<EpubNavPoint> ParseTableOfContents(
         ZipArchive archive,
         IDocument opfDoc,
         Dictionary<string, (string Href, string MediaType, string Properties)> manifest)
     {
-        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var list = new List<EpubNavPoint>();
 
-        // 1. Try EPUB 3 Nav Document (properties contains "nav")
+        // 1. Try EPUB 3 Nav Document (item with property="nav")
         foreach (var item in manifest.Values)
         {
             if (item.Properties.Split(' ', StringSplitOptions.RemoveEmptyEntries)
@@ -784,21 +925,63 @@ public static class EpubMetadataExtractor
                 {
                     string navDir = GetPosixDirectory(item.Href);
                     var navDoc = ParseXmlOrHtml(ReadEntryString(navEntry));
-                    foreach (var a in navDoc.QuerySelectorAll("nav a[href], a[href]"))
+
+                    // Prefer <nav epub:type="toc">, <nav role="doc-toc">, or <nav id="toc">
+                    IElement? tocNav = null;
+                    foreach (var navEl in navDoc.QuerySelectorAll("nav"))
                     {
-                        string? rawHref = a.GetAttribute("href");
-                        string label = a.TextContent.Trim();
-                        if (string.IsNullOrWhiteSpace(rawHref) || string.IsNullOrWhiteSpace(label)) continue;
-                        string cleanHref = rawHref.Split('#')[0];
-                        if (string.IsNullOrWhiteSpace(cleanHref)) continue;
-                        string resolved = ResolvePosixPath(navDir, Uri.UnescapeDataString(cleanHref));
-                        map.TryAdd(resolved, label);
+                        string epubType = navEl.GetAttribute("epub:type") ?? "";
+                        string role = navEl.GetAttribute("role") ?? "";
+                        string id = navEl.GetAttribute("id") ?? "";
+                        string cls = navEl.GetAttribute("class") ?? "";
+
+                        if (epubType.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("toc", StringComparer.OrdinalIgnoreCase) ||
+                            string.Equals(role, "doc-toc", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(id, "toc", StringComparison.OrdinalIgnoreCase) ||
+                            cls.Contains("toc", StringComparison.OrdinalIgnoreCase))
+                        {
+                            tocNav = navEl;
+                            break;
+                        }
+                    }
+
+                    if (tocNav is null)
+                    {
+                        foreach (var navEl in navDoc.QuerySelectorAll("nav"))
+                        {
+                            string epubType = navEl.GetAttribute("epub:type") ?? "";
+                            if (!epubType.Contains("landmarks", StringComparison.OrdinalIgnoreCase) &&
+                                !epubType.Contains("page-list", StringComparison.OrdinalIgnoreCase))
+                            {
+                                tocNav = navEl;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (tocNav is not null)
+                    {
+                        int order = 1;
+                        foreach (var a in tocNav.QuerySelectorAll("a[href]"))
+                        {
+                            string? rawHref = a.GetAttribute("href");
+                            string label = a.TextContent.Trim();
+                            if (string.IsNullOrWhiteSpace(rawHref) || string.IsNullOrWhiteSpace(label)) continue;
+
+                            int hashIdx = rawHref.IndexOf('#');
+                            string pathPart = hashIdx >= 0 ? rawHref[..hashIdx] : rawHref;
+                            string fragPart = hashIdx >= 0 ? rawHref[(hashIdx + 1)..] : "";
+                            if (string.IsNullOrWhiteSpace(pathPart)) continue;
+
+                            string resolved = ResolvePosixPath(navDir, Uri.UnescapeDataString(pathPart));
+                            list.Add(new EpubNavPoint(label, resolved, fragPart, order++));
+                        }
                     }
                 }
             }
         }
 
-        if (map.Count > 0) return map;
+        if (list.Count > 0) return list;
 
         // 2. Fallback to EPUB 2 NCX
         foreach (var item in manifest.Values)
@@ -811,35 +994,200 @@ public static class EpubMetadataExtractor
                 {
                     string ncxDir = GetPosixDirectory(item.Href);
                     var ncxDoc = ParseXmlOrHtml(ReadEntryString(ncxEntry));
+                    int order = 1;
+
                     foreach (var np in ncxDoc.All)
                     {
                         if (!string.Equals(np.LocalName, "navPoint", StringComparison.OrdinalIgnoreCase)) continue;
+
                         string? label = null;
                         string? src = null;
-                        foreach (var child in np.QuerySelectorAll("*"))
+
+                        foreach (var child in np.Children)
                         {
-                            if (label is null && string.Equals(child.LocalName, "text", StringComparison.OrdinalIgnoreCase))
+                            if (string.Equals(child.LocalName, "navLabel", StringComparison.OrdinalIgnoreCase))
                             {
                                 label = child.TextContent.Trim();
                             }
-                            else if (src is null && string.Equals(child.LocalName, "content", StringComparison.OrdinalIgnoreCase))
+                            else if (string.Equals(child.LocalName, "content", StringComparison.OrdinalIgnoreCase))
                             {
                                 src = child.GetAttribute("src")?.Trim();
                             }
                         }
 
+                        if (string.IsNullOrWhiteSpace(label) || string.IsNullOrWhiteSpace(src))
+                        {
+                            var txtEl = np.QuerySelector("navLabel > text, text");
+                            label ??= txtEl?.TextContent.Trim();
+                            var cntEl = np.QuerySelector("content");
+                            src ??= cntEl?.GetAttribute("src")?.Trim();
+                        }
+
                         if (!string.IsNullOrWhiteSpace(label) && !string.IsNullOrWhiteSpace(src))
                         {
-                            string cleanHref = src.Split('#')[0];
-                            string resolved = ResolvePosixPath(ncxDir, Uri.UnescapeDataString(cleanHref));
-                            map.TryAdd(resolved, label);
+                            int hashIdx = src.IndexOf('#');
+                            string pathPart = hashIdx >= 0 ? src[..hashIdx] : src;
+                            string fragPart = hashIdx >= 0 ? src[(hashIdx + 1)..] : "";
+                            string resolved = ResolvePosixPath(ncxDir, Uri.UnescapeDataString(pathPart));
+                            list.Add(new EpubNavPoint(label, resolved, fragPart, order++));
                         }
                     }
                 }
             }
         }
 
-        return map;
+        return list;
+    }
+
+    private static string NormalizeTitleKeyword(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        string nfkc = text.Normalize(NormalizationForm.FormKC).Trim();
+        return System.Text.RegularExpressions.Regex.Replace(nfkc, @"[\s\u3000\-_・:：〈〉<>（）\(\)\[\]「」『』]+", "").ToLowerInvariant();
+    }
+
+    private static bool IsFrontMatterTitle(string title)
+    {
+        string norm = NormalizeTitleKeyword(title);
+        if (string.IsNullOrEmpty(norm)) return true;
+        if (FrontMatterTitles.Contains(norm)) return true;
+        foreach (var kw in FrontMatterTitles)
+        {
+            if (norm.StartsWith(kw, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    private static bool IsBackMatterTitle(string title)
+    {
+        string norm = NormalizeTitleKeyword(title);
+        if (string.IsNullOrEmpty(norm)) return false;
+        if (BackMatterTitles.Contains(norm)) return true;
+        foreach (var kw in BackMatterTitles)
+        {
+            if (norm.StartsWith(kw, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
+    }
+
+    private static string IdentifyFrontMatterTitle(ZipArchive archive, string spineHref, int spineIndex)
+    {
+        string fn = Path.GetFileNameWithoutExtension(spineHref).ToLowerInvariant();
+        if (fn.Contains("cover")) return "表紙 (Cover)";
+        if (fn.Contains("toc") || fn.Contains("nav") || fn.Contains("contents") || fn.Contains("moku")) return "目次 (Contents)";
+        if (fn.Contains("caution") || fn.Contains("notice")) return "注意 (Notice)";
+        if (fn.Contains("color") || fn.Contains("insert") || fn.Contains("illust") || fn.Contains("kuchie")) return "口絵 (Illustrations)";
+
+        var entry = GetEntryNormalized(archive, spineHref);
+        if (entry is not null)
+        {
+            try
+            {
+                var doc = ParseXmlOrHtml(ReadEntryString(entry));
+
+                int charCount = 0;
+                var body = doc.Body ?? doc.DocumentElement;
+                if (body is not null)
+                {
+                    CountTextNodeCharsRecursive(body, ref charCount);
+                }
+
+                bool hasImg = doc.QuerySelector("img, image, svg") is not null;
+                if (hasImg && charCount <= 50)
+                {
+                    if (spineIndex == 0 || fn.Contains("titlepage") || fn.Contains("cover"))
+                    {
+                        return "表紙 (Cover)";
+                    }
+                    return "口絵 (Illustrations)";
+                }
+
+                var h1 = body?.QuerySelector("h1, h2, h3");
+                if (h1 is not null)
+                {
+                    string hText = h1.TextContent.Trim();
+                    if (!string.IsNullOrWhiteSpace(hText) && hText.Length <= 40)
+                    {
+                        return hText;
+                    }
+                }
+            }
+            catch
+            {
+                // Ignore
+            }
+        }
+
+        if (fn.Contains("title")) return "扉 (Title Page)";
+        return spineIndex == 0 ? "表紙 (Cover)" : $"Introduction (Page {spineIndex + 1})";
+    }
+
+    private static bool IsIllustrationSpineItem(ZipArchive archive, string spineHref)
+    {
+        string fn = Path.GetFileNameWithoutExtension(spineHref).ToLowerInvariant();
+        if (fn.Contains("color") || fn.Contains("insert") || fn.Contains("illust") || fn.Contains("image"))
+        {
+            return true;
+        }
+
+        var entry = GetEntryNormalized(archive, spineHref);
+        if (entry is null) return false;
+
+        try
+        {
+            var doc = ParseXmlOrHtml(ReadEntryString(entry));
+            bool hasImg = doc.QuerySelector("img, image, svg") is not null;
+            if (!hasImg) return false;
+
+            int charCount = 0;
+            var body = doc.Body ?? doc.DocumentElement;
+            if (body is not null)
+            {
+                CountTextNodeCharsRecursive(body, ref charCount);
+            }
+            return charCount <= 50;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static int FindFirstStorySpineIndex(ZipArchive archive, List<string> spineHrefs)
+    {
+        for (int i = 0; i < spineHrefs.Count; i++)
+        {
+            string href = spineHrefs[i];
+            string fn = Path.GetFileNameWithoutExtension(href).ToLowerInvariant();
+            if (fn.Contains("cover") || fn.Contains("toc") || fn.Contains("nav") || fn.Contains("caution") || fn.Contains("titlepage"))
+            {
+                continue;
+            }
+
+            var entry = GetEntryNormalized(archive, href);
+            if (entry is null) continue;
+
+            try
+            {
+                var doc = ParseXmlOrHtml(ReadEntryString(entry));
+                int charCount = 0;
+                var body = doc.Body ?? doc.DocumentElement;
+                if (body is not null)
+                {
+                    CountTextNodeCharsRecursive(body, ref charCount);
+                }
+
+                if (charCount > 80)
+                {
+                    return i;
+                }
+            }
+            catch
+            {
+                // Ignore
+            }
+        }
+        return 0;
     }
 
     private static int CountNormalizedChapterCharacters(ZipArchiveEntry entry)
@@ -889,9 +1237,7 @@ public static class EpubMetadataExtractor
 
     private static bool IsFrontOrBackMatter(string title, string href)
     {
-        string trimmed = title.Trim();
-        if (FrontBackMatterTitles.Contains(trimmed)) return true;
-
+        if (IsFrontMatterTitle(title) || IsBackMatterTitle(title)) return true;
         string fileName = Path.GetFileNameWithoutExtension(href).ToLowerInvariant();
         return fileName is "cover" or "toc" or "nav" or "colophon" or "copyright" or "caution";
     }

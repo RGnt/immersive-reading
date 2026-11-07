@@ -641,9 +641,30 @@ function populateInspector(detail) {
   // Chapters (clickable to open directly to that chapter in the Reader)
   const chapters = detail.chapters || [];
   document.getElementById('insp-chapter-count').textContent = chapters.length;
-  document.getElementById('insp-chapters-list').innerHTML = chapters.map(c =>
-    `<div style="cursor:pointer;padding:3px 4px;border-radius:4px" onmouseover="this.style.background='rgba(59,130,246,0.15)'" onmouseout="this.style.background='transparent'" onclick="openBookInReader('${s.bookId}', '${escapeHtml(c.spineHref)}')" title="Open chapter in Reader">📖 ${c.chapterIndex + 1}. ${escapeHtml(c.title)} <span style="opacity:0.5">(${escapeHtml(c.spineHref)})</span></div>`
-  ).join('');
+
+  let storyNum = 0;
+  document.getElementById('insp-chapters-list').innerHTML = chapters.map(c => {
+    let badge = '';
+    let label = c.title;
+    if (c.isExcluded) {
+      const isBack = storyNum > 0;
+      badge = `<span style="font-size:10px;padding:1px 5px;border-radius:3px;background:rgba(100,116,139,0.25);color:var(--text-muted);margin-right:6px">${isBack ? 'Back Matter' : 'Front Matter'}</span>`;
+    } else {
+      storyNum++;
+      const hasNumbering = /^([0-9０-９]+|第[0-9０-９一二三四五六七八九十百]+[章話節回]|chapter\s*[0-9]+|プロローグ|prologue|序章)/i.test(c.title.trim());
+      if (!hasNumbering) {
+        label = `${storyNum}. ${c.title}`;
+      }
+    }
+
+    const charsLabel = c.charCount > 0 ? `${c.charCount.toLocaleString()} chars · ` : '';
+    return `<div style="cursor:pointer;padding:4px 6px;border-radius:4px;display:flex;align-items:center;gap:4px" onmouseover="this.style.background='rgba(59,130,246,0.15)'" onmouseout="this.style.background='transparent'" onclick="openBookInReader('${s.bookId}', '${escapeHtml(c.spineHref)}')" title="Open chapter in Reader">
+      <span>📖</span>
+      ${badge}
+      <span style="font-weight:${c.isExcluded ? 'normal' : '500'}">${escapeHtml(label)}</span>
+      <span style="opacity:0.4;font-size:11px;margin-left:auto">${charsLabel}${escapeHtml(c.spineHref)}</span>
+    </div>`;
+  }).join('');
 
   // Phase 4: Load Study Pack PDFs, 20-Word Vocabulary Sets & Mined Flashcards
   loadInspectorStudyPack(s.bookId);
@@ -1832,15 +1853,61 @@ function closeReaderView() {
 function populateReaderChaptersDropdown(chapters) {
   const select = document.getElementById('reader-chapter-dropdown');
   select.innerHTML = '';
+
+  const frontMatter = [];
+  const mainChapters = [];
+  const backMatter = [];
+
+  let storyIndex = 0;
   chapters.forEach((c, idx) => {
+    if (c.isExcluded) {
+      if (storyIndex > 0) {
+        backMatter.push({ chapter: c, idx });
+      } else {
+        frontMatter.push({ chapter: c, idx });
+      }
+    } else {
+      storyIndex++;
+      mainChapters.push({ chapter: c, idx, storyIndex });
+    }
+  });
+
+  const appendOpt = (parentEl, c, label) => {
     const opt = document.createElement('option');
     opt.value = c.spineHref;
-    opt.textContent = `${c.chapterIndex + 1}. ${c.title}`;
-    if (c.spineHref === readerState.currentSpineHref || idx === readerState.currentChapterIndex) {
+    opt.textContent = label;
+    if (c.spineHref === readerState.currentSpineHref || c.chapterIndex === readerState.currentChapterIndex) {
       opt.selected = true;
     }
-    select.appendChild(opt);
+    parentEl.appendChild(opt);
+  };
+
+  if (frontMatter.length > 0) {
+    const grp = document.createElement('optgroup');
+    grp.label = 'Front Matter / 序文';
+    frontMatter.forEach(({ chapter }) => {
+      appendOpt(grp, chapter, chapter.title);
+    });
+    select.appendChild(grp);
+  }
+
+  const mainGrp = document.createElement('optgroup');
+  mainGrp.label = 'Chapters / 本編';
+  mainChapters.forEach(({ chapter, storyIndex }) => {
+    const hasNumbering = /^([0-9０-９]+|第[0-9０-９一二三四五六七八九十百]+[章話節回]|chapter\s*[0-9]+|プロローグ|prologue|序章)/i.test(chapter.title.trim());
+    const label = hasNumbering ? chapter.title : `${storyIndex}. ${chapter.title}`;
+    appendOpt(mainGrp, chapter, label);
   });
+  select.appendChild(mainGrp);
+
+  if (backMatter.length > 0) {
+    const grp = document.createElement('optgroup');
+    grp.label = 'Back Matter / 後付';
+    backMatter.forEach(({ chapter }) => {
+      appendOpt(grp, chapter, chapter.title);
+    });
+    select.appendChild(grp);
+  }
 }
 
 async function loadChapterInReader(spineHref, preloadedHtml) {
@@ -1911,7 +1978,7 @@ function navigateChapter(delta) {
     readerState.currentSpineHref = chapters[nextIdx].spineHref;
     document.getElementById('reader-chapter-dropdown').value = readerState.currentSpineHref;
     loadChapterInReader(readerState.currentSpineHref);
-    showReaderToast(`Chapter ${nextIdx + 1}/${chapters.length}: ${chapters[nextIdx].title}`);
+    showReaderToast(`📖 ${chapters[nextIdx].title}`);
   } else if (nextIdx < 0) {
     showReaderToast('Already at the first chapter');
   } else {
