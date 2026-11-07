@@ -308,3 +308,4 @@ Place your dictionary `.zip` files into the `data/yomitan/` folder (or specify a
 - **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** — Architecture deep dive, runtime flows, and developer recipes.
 - **[LLM-WIKI.md](LLM-WIKI.md)** — Master single-file architectural reference and non-negotiable invariants.
 - **[specs/](specs/)** — Technical specifications and Gherkin feature suites.
+
