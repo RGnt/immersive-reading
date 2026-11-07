@@ -2271,8 +2271,8 @@ function collectConfigFromForm() {
 async function saveSettingsModal() {
   const newConfig = collectConfigFromForm();
   try {
-    const updated = await rpcCall('config.update', { config: newConfig });
-    currentAppConfig = updated || newConfig;
+    const res = await rpcCall('config.update', { config: newConfig });
+    currentAppConfig = (res && res.updatedConfig) ? res.updatedConfig : (res || newConfig);
     applyConfigToDom(currentAppConfig);
     closeSettingsModal();
   } catch (err) {
@@ -2290,8 +2290,8 @@ async function resetSettingsCategory() {
   };
   const cat = categoryMap[activeSettingsTab] || activeSettingsTab;
   try {
-    const updated = await rpcCall('config.resetDefaults', { category: cat });
-    currentAppConfig = updated;
+    const res = await rpcCall('config.resetDefaults', { category: cat });
+    currentAppConfig = (res && res.updatedConfig) ? res.updatedConfig : (res || currentAppConfig);
     populateSettingsForm(currentAppConfig);
     applyConfigToDom(currentAppConfig);
   } catch (err) {
@@ -2304,8 +2304,8 @@ async function resetAllSettings() {
     return;
   }
   try {
-    const updated = await rpcCall('config.resetDefaults', { category: null });
-    currentAppConfig = updated;
+    const res = await rpcCall('config.resetDefaults', { category: 'all' });
+    currentAppConfig = (res && res.updatedConfig) ? res.updatedConfig : (res || currentAppConfig);
     populateSettingsForm(currentAppConfig);
     applyConfigToDom(currentAppConfig);
   } catch (err) {

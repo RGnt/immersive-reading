@@ -52,18 +52,27 @@ public sealed class ConfigurationManager : IConfigurationManager
     {
         lock (_lock)
         {
+            var merged = _currentConfig with
+            {
+                Directories = newConfig.Directories ?? _currentConfig.Directories,
+                Appearance = newConfig.Appearance ?? _currentConfig.Appearance,
+                Reader = newConfig.Reader ?? _currentConfig.Reader,
+                Llm = newConfig.Llm ?? _currentConfig.Llm,
+                Dictionaries = newConfig.Dictionaries ?? _currentConfig.Dictionaries
+            };
+
             using var conn = _db.OpenConnection();
             using var tx = conn.BeginTransaction();
 
-            SaveCategory(conn, tx, "directories", newConfig.Directories);
-            SaveCategory(conn, tx, "appearance", newConfig.Appearance);
-            SaveCategory(conn, tx, "reader", newConfig.Reader);
-            SaveCategory(conn, tx, "llm", newConfig.Llm);
-            SaveCategory(conn, tx, "dictionaries", newConfig.Dictionaries);
+            SaveCategory(conn, tx, "directories", merged.Directories);
+            SaveCategory(conn, tx, "appearance", merged.Appearance);
+            SaveCategory(conn, tx, "reader", merged.Reader);
+            SaveCategory(conn, tx, "llm", merged.Llm);
+            SaveCategory(conn, tx, "dictionaries", merged.Dictionaries);
 
             tx.Commit();
 
-            _currentConfig = newConfig;
+            _currentConfig = merged;
         }
 
         ConfigChanged?.Invoke(this, _currentConfig);

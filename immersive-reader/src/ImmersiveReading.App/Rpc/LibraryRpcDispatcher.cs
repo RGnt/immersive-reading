@@ -664,26 +664,64 @@ public sealed class LibraryRpcDispatcher
             case "config.update":
             {
                 if (_configManager is null) throw new InvalidOperationException("Configuration manager not configured.");
-                string cat = GetRequiredString(p, "category");
-                string settingsJson;
-                if (p.TryGetProperty("settings", out var sProp))
+
+                // Mode 1: Entire configuration tree passed as { config: { directories, appearance, ... } }
+                if (p.TryGetProperty("config", out var configProp))
                 {
-                    settingsJson = sProp.ValueKind == JsonValueKind.String ? sProp.GetString()! : sProp.GetRawText();
-                }
-                else
-                {
-                    settingsJson = p.GetRawText();
+                    string fullConfigJson = configProp.GetRawText();
+                    var newConfig = JsonSerializer.Deserialize<AppConfig>(fullConfigJson, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    }) ?? throw new ArgumentException("Failed to deserialize configuration object.");
+
+                    var updated = await _configManager.UpdateConfigAsync(newConfig, ct).ConfigureAwait(false);
+                    EmitEvent("config.changed", new { category = "all", config = updated });
+                    return new { ok = true, updatedConfig = updated };
                 }
 
-                var updated = await _configManager.UpdateCategoryJsonAsync(cat, settingsJson, ct).ConfigureAwait(false);
-                EmitEvent("config.changed", new { category = cat, config = updated });
-                return new { ok = true, updatedConfig = updated };
+                // Mode 2: Per-category update passed as { category: "reader", settings: { ... } }
+                string? cat = GetOptionalString(p, "category");
+                if (!string.IsNullOrWhiteSpace(cat))
+                {
+                    string settingsJson;
+                    if (p.TryGetProperty("settings", out var sProp))
+                    {
+                        settingsJson = sProp.ValueKind == JsonValueKind.String ? sProp.GetString()! : sProp.GetRawText();
+                    }
+                    else
+                    {
+                        settingsJson = p.GetRawText();
+                    }
+
+                    var updated = await _configManager.UpdateCategoryJsonAsync(cat, settingsJson, ct).ConfigureAwait(false);
+                    EmitEvent("config.changed", new { category = cat, config = updated });
+                    return new { ok = true, updatedConfig = updated };
+                }
+
+                // Mode 3: The parameters object itself is the AppConfig tree
+                if (p.TryGetProperty("reader", out _) || p.TryGetProperty("appearance", out _))
+                {
+                    var newConfig = JsonSerializer.Deserialize<AppConfig>(p.GetRawText(), new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    }) ?? throw new ArgumentException("Failed to deserialize configuration object.");
+
+                    var updated = await _configManager.UpdateConfigAsync(newConfig, ct).ConfigureAwait(false);
+                    EmitEvent("config.changed", new { category = "all", config = updated });
+                    return new { ok = true, updatedConfig = updated };
+                }
+
+                throw new ArgumentException("Either 'config' or 'category' must be provided to 'config.update'.");
             }
 
             case "config.resetDefaults":
             {
                 if (_configManager is null) throw new InvalidOperationException("Configuration manager not configured.");
                 string? cat = GetOptionalString(p, "category");
+                if (string.Equals(cat, "all", StringComparison.OrdinalIgnoreCase))
+                {
+                    cat = null;
+                }
                 var updated = await _configManager.ResetDefaultsAsync(cat, ct).ConfigureAwait(false);
                 EmitEvent("config.changed", new { category = cat ?? "all", config = updated });
                 return new { ok = true, updatedConfig = updated };

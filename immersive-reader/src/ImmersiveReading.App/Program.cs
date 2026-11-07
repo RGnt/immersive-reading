@@ -375,6 +375,27 @@ public static class Program
             return 1;
         }
 
+        // 7. Verify config.update RPC with full config object and category reset
+        string cfgUpdateRes = dispatcher
+            .DispatchJsonAsync("""{"id":"v-cfg-1","method":"config.update","params":{"config":{"reader":{"fontSizePx":26,"writingMode":"horizontal-tb"}}}}""")
+            .GetAwaiter()
+            .GetResult();
+        if (!cfgUpdateRes.Contains("\"ok\":true"))
+        {
+            Console.Error.WriteLine($"FAIL: config.update failed: {cfgUpdateRes}");
+            return 1;
+        }
+
+        string cfgResetRes = dispatcher
+            .DispatchJsonAsync("""{"id":"v-cfg-2","method":"config.resetDefaults","params":{"category":"all"}}""")
+            .GetAwaiter()
+            .GetResult();
+        if (!cfgResetRes.Contains("\"ok\":true"))
+        {
+            Console.Error.WriteLine($"FAIL: config.resetDefaults failed: {cfgResetRes}");
+            return 1;
+        }
+
         Console.WriteLine($"VERIFY_READER_OK: book={bookId} ({detail.Summary.Title}), chapter={textChapter.SpineHref}, tokens={enriched.TokenMap.Tokens.Count}, lookupTop={lookupRes.Terms[0].Expression}[{lookupRes.Terms[0].Reading}], kanjiCards={lookupRes.Kanji.Count}, masterPdfs={studyPack.MasterPdfs.Count}, vocabSets={studyPack.VocabularySets.Count}");
         return 0;
     }
