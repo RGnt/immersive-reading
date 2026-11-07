@@ -184,9 +184,10 @@
       </div>
 
       <div class="reader-center-controls">
-        <button class="btn btn-sm btn-secondary" onclick="navigateChapter(-1)" title="Previous Chapter">◀</button>
+        <button class="btn btn-sm btn-secondary" onclick="navigateChapter(-1)" title="Previous Chapter ([ / p)">◀</button>
         <select id="reader-chapter-dropdown" class="control-select" onchange="onChapterDropdownChange(this.value)"></select>
-        <button class="btn btn-sm btn-secondary" onclick="navigateChapter(1)" title="Next Chapter">▶</button>
+        <button class="btn btn-sm btn-secondary" onclick="navigateChapter(1)" title="Next Chapter (] / n)">▶</button>
+        <span id="reader-progress-indicator" class="reader-progress-badge">Ch 1/1</span>
       </div>
 
       <div class="reader-right-controls">
@@ -198,15 +199,17 @@
           <option value="Off">Furigana: Off</option>
         </select>
 
-        <button id="btn-reader-writing-mode" class="btn btn-sm btn-secondary" onclick="toggleReaderWritingMode()">Writing Mode: Vertical 縦書き</button>
+        <button id="btn-reader-writing-mode" class="btn btn-sm btn-secondary" onclick="toggleReaderWritingMode()" title="Toggle Vertical / Horizontal (v)">Writing Mode: Vertical 縦書き</button>
+        <button class="btn btn-sm btn-secondary" onclick="toggleReaderShortcutsHelp()" title="Vim Motions &amp; Shortcuts (?)">⌨️ Vim Keys (?)</button>
         <button class="btn btn-sm btn-secondary" onclick="openSettingsModal()" title="Global Settings (Ctrl+,)">⚙️ Settings</button>
         <button class="btn btn-sm btn-secondary" onclick="openDictionariesModal()">📚 Dictionaries</button>
-        <button class="btn btn-sm btn-primary" onclick="toggleAiCompanionDrawer()">🧠 AI Tutor &amp; n+1 Chat</button>
+        <button class="btn btn-sm btn-primary" onclick="toggleAiCompanionDrawer()" title="AI Tutor Drawer (a)">🧠 AI Tutor &amp; n+1 Chat</button>
       </div>
     </header>
 
     <div class="reader-body-wrap">
       <iframe id="reader-frame" class="reader-iframe" src="about:blank"></iframe>
+      <div id="reader-toast" class="reader-toast hidden"></div>
 
       <!-- PHASE 5: AI COMPREHENSION & n+1 PERSONA CHAT DRAWER -->
       <aside id="ai-companion-drawer" class="inspector hidden" style="width:400px;border-left:1px solid var(--border-color);background:#0f172a;display:flex;flex-direction:column;z-index:40">
@@ -940,6 +943,138 @@
           <button type="button" class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
           <button type="button" class="btn btn-primary" onclick="saveSettingsModal()">Save Changes</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Reader Vim Motions & Keyboard Shortcuts Cheat Sheet -->
+  <div id="reader-shortcuts-modal" class="modal-backdrop hidden" onclick="toggleReaderShortcutsHelp()">
+    <div class="shortcuts-dialog" onclick="event.stopPropagation()">
+      <div class="shortcuts-dialog-header">
+        <div>
+          <h3 style="margin:0;font-size:16px;display:flex;align-items:center;gap:8px">
+            <span>⌨️</span>
+            <span>Vim Motions &amp; Reader Shortcuts</span>
+          </h3>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+            Motions work anytime while reading, whether focus is in the text or on the controls.
+          </div>
+        </div>
+        <button type="button" class="btn-icon" onclick="toggleReaderShortcutsHelp()" title="Close (Escape)">✕</button>
+      </div>
+
+      <div class="shortcuts-grid">
+        <!-- GROUP 1: Navigation & Scrolling -->
+        <div class="shortcut-group">
+          <div class="shortcut-group-title">🧭 Navigation &amp; Scrolling</div>
+          <div class="shortcut-row">
+            <span>Scroll line down</span>
+            <div class="shortcut-keys"><kbd>j</kbd> <kbd>↓</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Scroll line up</span>
+            <div class="shortcut-keys"><kbd>k</kbd> <kbd>↑</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Page forward (Vertical: Left)</span>
+            <div class="shortcut-keys"><kbd>h</kbd> <kbd>←</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Page backward (Vertical: Right)</span>
+            <div class="shortcut-keys"><kbd>l</kbd> <kbd>→</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Page forward / backward</span>
+            <div class="shortcut-keys"><kbd>Space</kbd> <kbd>⇧ Space</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Half page forward / backward</span>
+            <div class="shortcut-keys"><kbd>Ctrl+d</kbd> <kbd>Ctrl+u</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Jump to chapter start / end</span>
+            <div class="shortcut-keys"><kbd>gg</kbd> <kbd>G</kbd></div>
+          </div>
+        </div>
+
+        <!-- GROUP 2: Word & Dictionary Motions -->
+        <div class="shortcut-group">
+          <div class="shortcut-group-title">🔍 Word &amp; Dictionary Motions</div>
+          <div class="shortcut-row">
+            <span>Jump to next Japanese word</span>
+            <div class="shortcut-keys"><kbd>w</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Jump to previous Japanese word</span>
+            <div class="shortcut-keys"><kbd>b</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Look up active word in dictionary</span>
+            <div class="shortcut-keys"><kbd>e</kbd> <kbd>Enter</kbd> <kbd>d</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Mark word status</span>
+            <div class="shortcut-keys"><kbd>1</kbd> - <kbd>4</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Mine flashcard sentence</span>
+            <div class="shortcut-keys"><kbd>m</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Clear word highlight / popover</span>
+            <div class="shortcut-keys"><kbd>Esc</kbd></div>
+          </div>
+        </div>
+
+        <!-- GROUP 3: Chapter & Book Navigation -->
+        <div class="shortcut-group">
+          <div class="shortcut-group-title">📖 Chapter &amp; Library</div>
+          <div class="shortcut-row">
+            <span>Next chapter</span>
+            <div class="shortcut-keys"><kbd>]</kbd> <kbd>n</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Previous chapter</span>
+            <div class="shortcut-keys"><kbd>[</kbd> <kbd>p</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Close reader &amp; return to library</span>
+            <div class="shortcut-keys"><kbd>q</kbd> <kbd>Esc</kbd></div>
+          </div>
+        </div>
+
+        <!-- GROUP 4: Toggles & Display -->
+        <div class="shortcut-group">
+          <div class="shortcut-group-title">🎛️ Reader Toggles &amp; AI</div>
+          <div class="shortcut-row">
+            <span>Cycle Furigana mode</span>
+            <div class="shortcut-keys"><kbd>f</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Toggle Writing mode (縦/横)</span>
+            <div class="shortcut-keys"><kbd>v</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Increase / decrease font size</span>
+            <div class="shortcut-keys"><kbd>+</kbd> <kbd>-</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Reset font size (22px)</span>
+            <div class="shortcut-keys"><kbd>0</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Toggle AI Tutor &amp; quiz drawer</span>
+            <div class="shortcut-keys"><kbd>a</kbd></div>
+          </div>
+          <div class="shortcut-row">
+            <span>Toggle this shortcuts guide</span>
+            <div class="shortcut-keys"><kbd>?</kbd></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;text-align:right">
+        <button type="button" class="btn btn-primary btn-sm" onclick="toggleReaderShortcutsHelp()">Got It</button>
       </div>
     </div>
   </div>

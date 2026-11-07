@@ -36,6 +36,15 @@ body {
   outline: 1.5px solid #3b82f6 !important;
 }
 
+/* Vim Cursor Focused Token */
+.ir-tok-cursor {
+  background-color: rgba(56, 189, 248, 0.38) !important;
+  outline: 2px solid #38bdf8 !important;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.55) !important;
+  border-radius: 3px !important;
+  transition: all 0.1s ease;
+}
+
 /* Ruby Styling */
 ruby {
   ruby-align: center;

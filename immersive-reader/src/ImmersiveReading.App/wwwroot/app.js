@@ -1869,6 +1869,16 @@ async function loadChapterInReader(spineHref, preloadedHtml) {
     iframe.onload = () => applyReaderThemeToIframe();
   }
 
+  // Update progress indicator badge
+  const progressBadge = document.getElementById('reader-progress-indicator');
+  if (progressBadge && readerState.activeSession) {
+    const chapters = readerState.activeSession.book.chapters || [];
+    const cur = readerState.currentChapterIndex + 1;
+    const total = Math.max(1, chapters.length);
+    const pct = Math.round((cur / total) * 100);
+    progressBadge.textContent = `Ch ${cur}/${total} • ${pct}%`;
+  }
+
   // Persist progress to backend
   rpcCall('reader.saveProgress', {
     bookId,
@@ -1901,6 +1911,11 @@ function navigateChapter(delta) {
     readerState.currentSpineHref = chapters[nextIdx].spineHref;
     document.getElementById('reader-chapter-dropdown').value = readerState.currentSpineHref;
     loadChapterInReader(readerState.currentSpineHref);
+    showReaderToast(`Chapter ${nextIdx + 1}/${chapters.length}: ${chapters[nextIdx].title}`);
+  } else if (nextIdx < 0) {
+    showReaderToast('Already at the first chapter');
+  } else {
+    showReaderToast('Reached the end of the book');
   }
 }
 
@@ -1927,11 +1942,276 @@ function toggleReaderWritingMode() {
   if (iframe && iframe.contentWindow) {
     iframe.contentWindow.postMessage({ type: 'ir-set-writing-mode', mode: readerState.writingMode }, '*');
   }
+  showReaderToast(`Writing Mode: ${readerState.writingMode === 'vertical-rl' ? 'Vertical 縦書き' : 'Horizontal 横書き'}`);
 }
 
 function updateReaderWritingModeButton() {
   const btn = document.getElementById('btn-reader-writing-mode');
   btn.textContent = readerState.writingMode === 'vertical-rl' ? 'Writing Mode: Vertical 縦書き' : 'Writing Mode: Horizontal 横書き';
+}
+
+// Reader Vim Motion & Keyboard Navigation Controller
+function sendVimMotion(payload) {
+  const iframe = document.getElementById('reader-frame');
+  if (iframe && iframe.contentWindow) {
+    iframe.contentWindow.postMessage({ type: 'ir-vim-motion', ...payload }, '*');
+  }
+}
+
+function cycleFuriganaMode() {
+  const modes = ['AllKanji', 'UnknownAndLearningOnly', 'AuthorOnly', 'Hover', 'Off'];
+  const labels = {
+    'AllKanji': 'All Kanji',
+    'UnknownAndLearningOnly': 'Unknown & Learning Only',
+    'AuthorOnly': 'Author Only',
+    'Hover': 'On Hover',
+    'Off': 'Off'
+  };
+  const curIdx = modes.indexOf(readerState.furiganaMode);
+  const nextMode = modes[(curIdx + 1) % modes.length];
+  onFuriganaModeChange(nextMode);
+  const select = document.getElementById('reader-furigana-select');
+  if (select) select.value = nextMode;
+  showReaderToast(`Furigana: ${labels[nextMode] || nextMode}`);
+}
+
+function adjustReaderFontSize(delta) {
+  if (!readerState.fontSizePx) readerState.fontSizePx = 22;
+  if (delta === 0) {
+    readerState.fontSizePx = 22;
+  } else {
+    readerState.fontSizePx = Math.max(14, Math.min(42, readerState.fontSizePx + delta));
+  }
+  document.documentElement.style.setProperty('--reader-font-size', readerState.fontSizePx + 'px');
+  sendVimMotion({ action: 'adjust-font-size', delta });
+  showReaderToast(`Font Size: ${readerState.fontSizePx}px`);
+}
+
+let readerToastTimeout = null;
+function showReaderToast(message) {
+  let toast = document.getElementById('reader-toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.remove('hidden');
+  clearTimeout(readerToastTimeout);
+  readerToastTimeout = setTimeout(() => {
+    toast.classList.add('hidden');
+  }, 1400);
+}
+
+function toggleReaderShortcutsHelp(forceOpen) {
+  const modal = document.getElementById('reader-shortcuts-modal');
+  if (!modal) return;
+  if (forceOpen === true) {
+    modal.classList.remove('hidden');
+  } else if (forceOpen === false) {
+    modal.classList.add('hidden');
+  } else {
+    modal.classList.toggle('hidden');
+  }
+}
+
+let lastVimKeyTime = 0;
+let lastVimKeyChar = '';
+
+function handleReaderKeydown(e) {
+  const isReaderActive = !document.getElementById('reader-fullscreen').classList.contains('hidden');
+  if (!isReaderActive) return false;
+
+  const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+  if (isInput) return false;
+
+  const key = e.key;
+
+  // Double 'g' sequence for jump to start
+  if (key === 'g' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const now = Date.now();
+    if (lastVimKeyChar === 'g' && (now - lastVimKeyTime < 500)) {
+      lastVimKeyChar = '';
+      sendVimMotion({ action: 'scroll-to', target: 'start' });
+      showReaderToast('Jump to Chapter Start (gg)');
+      return true;
+    }
+    lastVimKeyChar = 'g';
+    lastVimKeyTime = now;
+    return true;
+  }
+  lastVimKeyChar = '';
+
+  switch (key) {
+    case 'j':
+    case 'ArrowDown':
+      sendVimMotion({ action: 'scroll-step', direction: 'down' });
+      return true;
+
+    case 'k':
+    case 'ArrowUp':
+      sendVimMotion({ action: 'scroll-step', direction: 'up' });
+      return true;
+
+    case 'h':
+    case 'ArrowLeft':
+      if (readerState.writingMode === 'vertical-rl') {
+        sendVimMotion({ action: 'scroll-page', forward: true });
+        showReaderToast('Page Forward (h)');
+      } else {
+        sendVimMotion({ action: 'scroll-step', direction: 'left' });
+      }
+      return true;
+
+    case 'l':
+    case 'ArrowRight':
+      if (readerState.writingMode === 'vertical-rl') {
+        sendVimMotion({ action: 'scroll-page', forward: false });
+        showReaderToast('Page Backward (l)');
+      } else {
+        sendVimMotion({ action: 'scroll-step', direction: 'right' });
+      }
+      return true;
+
+    case ' ':
+      if (e.shiftKey) {
+        sendVimMotion({ action: 'scroll-page', forward: false });
+        showReaderToast('Page Backward (⇧ Space)');
+      } else {
+        sendVimMotion({ action: 'scroll-page', forward: true });
+        showReaderToast('Page Forward (Space)');
+      }
+      return true;
+
+    case 'PageDown':
+      sendVimMotion({ action: 'scroll-page', forward: true });
+      return true;
+
+    case 'PageUp':
+      sendVimMotion({ action: 'scroll-page', forward: false });
+      return true;
+
+    case 'd':
+      if (e.ctrlKey || e.metaKey) {
+        sendVimMotion({ action: 'scroll-half-page', forward: true });
+        showReaderToast('Half Page Down (Ctrl+d)');
+        return true;
+      }
+      sendVimMotion({ action: 'lookup-current-word' });
+      return true;
+
+    case 'u':
+      if (e.ctrlKey || e.metaKey) {
+        sendVimMotion({ action: 'scroll-half-page', forward: false });
+        showReaderToast('Half Page Up (Ctrl+u)');
+        return true;
+      }
+      return false;
+
+    case 'G':
+    case 'End':
+      sendVimMotion({ action: 'scroll-to', target: 'end' });
+      showReaderToast('Jump to Chapter End (G)');
+      return true;
+
+    case 'Home':
+      sendVimMotion({ action: 'scroll-to', target: 'start' });
+      showReaderToast('Jump to Chapter Start (Home)');
+      return true;
+
+    case 'w':
+      sendVimMotion({ action: 'next-word' });
+      return true;
+
+    case 'b':
+      sendVimMotion({ action: 'prev-word' });
+      return true;
+
+    case 'e':
+    case 'Enter':
+      sendVimMotion({ action: 'lookup-current-word' });
+      return true;
+
+    case '1':
+    case '2':
+    case '3':
+    case '4': {
+      const popover = document.getElementById('dict-popover');
+      if (popover && !popover.classList.contains('hidden')) {
+        const statusIdx = parseInt(key, 10) - 1;
+        updateWordStatusFromPopover(0, statusIdx);
+        return true;
+      }
+      return false;
+    }
+
+    case 'm': {
+      const popover = document.getElementById('dict-popover');
+      if (popover && !popover.classList.contains('hidden')) {
+        mineFlashcardFromPopover(0);
+        return true;
+      }
+      return false;
+    }
+
+    case ']':
+    case 'n':
+      navigateChapter(1);
+      return true;
+
+    case '[':
+    case 'p':
+      navigateChapter(-1);
+      return true;
+
+    case 'f':
+      cycleFuriganaMode();
+      return true;
+
+    case 'v':
+      toggleReaderWritingMode();
+      return true;
+
+    case '+':
+    case '=':
+      adjustReaderFontSize(+2);
+      return true;
+
+    case '-':
+    case '_':
+      adjustReaderFontSize(-2);
+      return true;
+
+    case '0':
+      adjustReaderFontSize(0);
+      return true;
+
+    case 'a':
+      toggleAiCompanionDrawer();
+      return true;
+
+    case '?':
+      toggleReaderShortcutsHelp();
+      return true;
+
+    case 'q':
+      closeReaderView();
+      return true;
+
+    case 'Escape': {
+      const shortcutsModal = document.getElementById('reader-shortcuts-modal');
+      if (shortcutsModal && !shortcutsModal.classList.contains('hidden')) {
+        toggleReaderShortcutsHelp(false);
+        return true;
+      }
+      const popover = document.getElementById('dict-popover');
+      if (popover && !popover.classList.contains('hidden')) {
+        closeDictPopover();
+        return true;
+      }
+      sendVimMotion({ action: 'clear-word-cursor' });
+      closeReaderView();
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // =========================================================================
@@ -2209,6 +2489,15 @@ function closeDictPopover() {
 
 // Global keyboard shortcuts
 window.addEventListener('keydown', function (e) {
+  // If reader view is active, delegate to reader Vim / keyboard controller first
+  const isReaderActive = !document.getElementById('reader-fullscreen').classList.contains('hidden');
+  if (isReaderActive) {
+    if (handleReaderKeydown(e)) {
+      e.preventDefault();
+      return;
+    }
+  }
+
   // Settings modal shortcut: Ctrl+, or Cmd+,
   if ((e.ctrlKey || e.metaKey) && e.key === ',') {
     e.preventDefault();
@@ -2268,7 +2557,13 @@ window.addEventListener('keydown', function (e) {
 window.addEventListener('message', function (e) {
   const data = e.data;
   if (!data || typeof data !== 'object') return;
-  if (data.type === 'ir-token-click') {
+  if (data.type === 'ir-reader-keydown') {
+    handleReaderKeydown(data);
+  } else if (data.type === 'ir-word-focused') {
+    if (data.surface) {
+      showReaderToast(`Word: ${data.surface}`);
+    }
+  } else if (data.type === 'ir-token-click') {
     handleReaderTokenClick(data.tokenId, data.clientRect);
   } else if (data.type === 'ir-clear-lookup') {
     closeDictPopover();
