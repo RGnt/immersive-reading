@@ -2010,11 +2010,19 @@ function applyConfigToDom(config) {
     if (r.writingMode) {
       readerState.writingMode = r.writingMode;
       updateReaderWritingModeButton();
+      const iframe = document.getElementById('reader-frame');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({ type: 'ir-set-writing-mode', mode: r.writingMode }, '*');
+      }
     }
     if (r.furiganaMode) {
       readerState.furiganaMode = r.furiganaMode;
       const fSelect = document.getElementById('reader-furigana-select');
       if (fSelect) fSelect.value = r.furiganaMode;
+      const iframe = document.getElementById('reader-frame');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({ type: 'ir-set-furigana-mode', mode: r.furiganaMode }, '*');
+      }
     }
   }
 
