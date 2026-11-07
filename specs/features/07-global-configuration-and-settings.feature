@@ -63,3 +63,4 @@ Feature: Global Configuration & Application Settings
     But the "llm" settings should retain their custom profile "LM Studio Local"
     When the user requests "config.resetDefaults" for category "all"
     Then all categories should be restored to their initial factory defaults
+

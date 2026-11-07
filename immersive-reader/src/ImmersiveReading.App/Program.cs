@@ -59,6 +59,26 @@ public static class Program
             getWordStatus: (lemma, reading) => vocabTracker.GetStatus("ja", lemma, reading));
         var vocabBudgetService = new VocabularyBudgetService(db, studyPackBridge);
 
+        var configManager = new ConfigurationManager(db, extractorBooksDir);
+        var activeConfig = configManager.CurrentConfig;
+
+        var aiLlmProvider = new OpenAiCompatibleLlmProvider(new LlmEndpointOptions(
+            EndpointUrl: string.IsNullOrWhiteSpace(activeConfig.Llm.EndpointUrl) ? "offline://heuristic" : activeConfig.Llm.EndpointUrl,
+            ModelId: activeConfig.Llm.ModelId,
+            ApiKey: activeConfig.Llm.ApiKey,
+            TimeoutSeconds: activeConfig.Llm.TimeoutSeconds,
+            EnableOfflineHeuristicFallback: activeConfig.Llm.EnableOfflineHeuristicFallback));
+
+        configManager.ConfigChanged += (s, cfg) =>
+        {
+            aiLlmProvider.UpdateOptions(new LlmEndpointOptions(
+                EndpointUrl: string.IsNullOrWhiteSpace(cfg.Llm.EndpointUrl) ? "offline://heuristic" : cfg.Llm.EndpointUrl,
+                ModelId: cfg.Llm.ModelId,
+                ApiKey: cfg.Llm.ApiKey,
+                TimeoutSeconds: cfg.Llm.TimeoutSeconds,
+                EnableOfflineHeuristicFallback: cfg.Llm.EnableOfflineHeuristicFallback));
+        };
+
         using var featurePluginHost = new FeaturePluginHost(readerContextService, vocabBudgetService, snippetEnricher);
         var aiCompanionPlugin = new AiCompanionPlugin(
             db,
@@ -66,7 +86,7 @@ public static class Program
             vocabBudgetService,
             snippetEnricher,
             japanesePlugin,
-            new OpenAiCompatibleLlmProvider(new LlmEndpointOptions(EndpointUrl: "offline://heuristic", EnableOfflineHeuristicFallback: true)));
+            aiLlmProvider);
         featurePluginHost.RegisterPluginAsync(aiCompanionPlugin).GetAwaiter().GetResult();
 
         string wwwrootDir = ResolveWwwrootDir(AppContext.BaseDirectory, readerRoot);
@@ -84,7 +104,8 @@ public static class Program
                 dictDb: dictDb,
                 studyPackBridge: studyPackBridge,
                 flashcardService: flashcardService,
-                featurePluginHost: featurePluginHost);
+                featurePluginHost: featurePluginHost,
+                configManager: configManager);
             string response = smokeDispatcher
                 .DispatchJsonAsync("""{"id":"smoke-1","method":"library.getBootstrapState","params":{}}""")
                 .GetAwaiter()
@@ -108,7 +129,8 @@ public static class Program
                 featurePluginHost,
                 wwwrootDir,
                 coversDir,
-                extractorOutputDir);
+                extractorOutputDir,
+                configManager);
         }
 
         bool verifyUi = args.Contains("--verify-ui", StringComparer.OrdinalIgnoreCase);
@@ -133,7 +155,8 @@ public static class Program
                 Console.WriteLine(summary);
                 verifyExitCode = passed ? 0 : 1;
                 window?.Close();
-            });
+            },
+            configManager: configManager);
 
         window = new PhotinoWindow()
             .SetTitle("Immersive Reading — EPUB Library & Reader")
@@ -260,7 +283,8 @@ public static class Program
         FeaturePluginHost featurePluginHost,
         string wwwrootDir,
         string coversDir,
-        string extractorOutputDir)
+        string extractorOutputDir,
+        IConfigurationManager? configManager = null)
     {
         var dispatcher = new LibraryRpcDispatcher(
             libraryManager,
@@ -272,7 +296,8 @@ public static class Program
             dictDb: dictDb,
             studyPackBridge: studyPackBridge,
             flashcardService: flashcardService,
-            featurePluginHost: featurePluginHost);
+            featurePluginHost: featurePluginHost,
+            configManager: configManager);
 
         // 1. Bootstrap library and dictionaries
         string bootstrapJson = dispatcher

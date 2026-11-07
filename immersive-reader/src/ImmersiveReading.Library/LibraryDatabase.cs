@@ -329,6 +329,14 @@ public sealed class LibraryDatabase : IDisposable
             created_at_utc      TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON persona_chat_messages(chat_id, created_at_utc ASC);
+
+        CREATE TABLE IF NOT EXISTS app_settings (
+            setting_key         TEXT PRIMARY KEY NOT NULL,
+            category            TEXT NOT NULL,
+            value_json          TEXT NOT NULL,
+            updated_at_utc      TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_app_settings_category ON app_settings(category);
         """;
 }
 

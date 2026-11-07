@@ -70,6 +70,11 @@ function handlePushEvent(eventName, data) {
     if (state.activeBookDetail && data && data.bookId === state.activeBookDetail.summary.bookId) {
       loadInspectorStudyPack(data.bookId);
     }
+  } else if (eventName === 'config.changed') {
+    if (data && data.config) {
+      currentAppConfig = data.config;
+      applyConfigToDom(currentAppConfig);
+    }
   } else if (eventName === 'ui.runReaderSelfTest') {
     runReaderUiSelfTest();
   }
@@ -153,6 +158,10 @@ async function runReaderUiSelfTest() {
 window.addEventListener('DOMContentLoaded', async () => {
   try {
     const boot = await rpcCall('library.getBootstrapState', {});
+    if (boot.config) {
+      currentAppConfig = boot.config;
+      applyConfigToDom(currentAppConfig);
+    }
     state.folders = boot.folders || [];
     state.tags = boot.tags || [];
     state.customFields = boot.customFields || [];
@@ -1143,9 +1152,11 @@ async function loadChapterInReader(spineHref, preloadedHtml) {
 
   if (htmlContent) {
     iframe.srcdoc = htmlContent;
+    iframe.onload = () => applyReaderThemeToIframe();
   } else {
     iframe.removeAttribute('srcdoc');
     iframe.src = `ir-book://${bookId}/${spineHref}`;
+    iframe.onload = () => applyReaderThemeToIframe();
   }
 
   // Persist progress to backend
@@ -1486,8 +1497,24 @@ function closeDictPopover() {
   activeLookupResult = null;
 }
 
-// Global keyboard shortcuts for popover
+// Global keyboard shortcuts
 window.addEventListener('keydown', function (e) {
+  // Settings modal shortcut: Ctrl+, or Cmd+,
+  if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+    e.preventDefault();
+    openSettingsModal();
+    return;
+  }
+
+  // Escape key: close settings or dictionary popover
+  if (e.key === 'Escape') {
+    const settingsModal = document.getElementById('modal-settings');
+    if (settingsModal && !settingsModal.classList.contains('hidden')) {
+      closeSettingsModal();
+      return;
+    }
+  }
+
   const popover = document.getElementById('dict-popover');
   if (!popover || popover.classList.contains('hidden')) return;
 
@@ -1840,5 +1867,449 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// =========================================================================
+// Global Configuration & Settings Controller (Spec 07)
+// =========================================================================
+
+let currentAppConfig = {
+  directories: {
+    defaultScanDirectory: '',
+    extractorRootDirectory: '',
+    pythonExecutablePath: '',
+    flashcardsDirectory: ''
+  },
+  appearance: {
+    themePreset: 'slate',
+    bgPrimary: '#0f172a',
+    bgSurface: '#1e293b',
+    textPrimary: '#f8fafc',
+    textMuted: '#94a3b8',
+    borderColor: '#334155',
+    accentColor: '#38bdf8',
+    rubyColor: '#e2e8f0',
+    uiFontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Yu Gothic UI", sans-serif'
+  },
+  reader: {
+    fontFamily: "'Noto Serif JP', 'Yu Mincho', serif",
+    fontSizePx: 22,
+    lineHeight: 1.85,
+    writingMode: 'vertical-rl',
+    furiganaMode: 'AllKanji',
+    autoSavePosition: true,
+    columnMaxWidthPx: 900
+  },
+  llm: {
+    preset: 'ollama',
+    endpointUrl: 'http://localhost:11434/v1/chat/completions',
+    modelId: 'llama3.2',
+    apiKey: '',
+    timeoutSeconds: 15,
+    temperature: 0.7,
+    quizThresholdPercent: 80,
+    personaUnknownThreshold: 1
+  },
+  dictionaries: {
+    maxScanLength: 16,
+    maxDeinflections: 4,
+    maxResults: 12,
+    cardExportFormat: 'both',
+    autoClipboard: true
+  }
+};
+
+const THEME_PRESETS = {
+  'slate': {
+    bgPrimary: '#0f172a',
+    bgSurface: '#1e293b',
+    textPrimary: '#f8fafc',
+    textMuted: '#94a3b8',
+    borderColor: '#334155',
+    accentColor: '#38bdf8',
+    rubyColor: '#e2e8f0'
+  },
+  'warm-paper': {
+    bgPrimary: '#fbf0d9',
+    bgSurface: '#f4e3c1',
+    textPrimary: '#2d241e',
+    textMuted: '#7c6f64',
+    borderColor: '#d5c4a1',
+    accentColor: '#af3a03',
+    rubyColor: '#9d0006'
+  },
+  'tokyo-night': {
+    bgPrimary: '#1a1b26',
+    bgSurface: '#24283b',
+    textPrimary: '#c0caf5',
+    textMuted: '#7aa2f7',
+    borderColor: '#414868',
+    accentColor: '#bb9af7',
+    rubyColor: '#f7768e'
+  },
+  'e-ink': {
+    bgPrimary: '#ffffff',
+    bgSurface: '#f0f0f0',
+    textPrimary: '#000000',
+    textMuted: '#555555',
+    borderColor: '#cccccc',
+    accentColor: '#000000',
+    rubyColor: '#444444'
+  }
+};
+
+const LLM_PRESETS = {
+  'ollama': {
+    endpointUrl: 'http://localhost:11434/v1/chat/completions',
+    modelId: 'llama3.2'
+  },
+  'lmstudio': {
+    endpointUrl: 'http://localhost:1234/v1/chat/completions',
+    modelId: 'qwen2.5:7b'
+  },
+  'openai': {
+    endpointUrl: 'https://api.openai.com/v1/chat/completions',
+    modelId: 'gpt-4o-mini'
+  },
+  'offline': {
+    endpointUrl: 'http://localhost:0/offline-heuristic',
+    modelId: 'heuristic-local'
+  }
+};
+
+let activeSettingsTab = 'general';
+
+function applyConfigToDom(config) {
+  if (!config) return;
+  const root = document.documentElement;
+
+  // Appearance
+  if (config.appearance) {
+    const app = config.appearance;
+    if (app.bgPrimary) root.style.setProperty('--bg-primary', app.bgPrimary);
+    if (app.bgSurface) root.style.setProperty('--bg-surface', app.bgSurface);
+    if (app.textPrimary) root.style.setProperty('--text-primary', app.textPrimary);
+    if (app.textMuted) root.style.setProperty('--text-muted', app.textMuted);
+    if (app.borderColor) root.style.setProperty('--border-color', app.borderColor);
+    if (app.accentColor) root.style.setProperty('--accent-color', app.accentColor);
+    if (app.rubyColor) root.style.setProperty('--ruby-color', app.rubyColor);
+    if (app.uiFontFamily) {
+      root.style.setProperty('--ui-font-family', app.uiFontFamily);
+      document.body.style.fontFamily = app.uiFontFamily;
+    }
+  }
+
+  // Reader Settings
+  if (config.reader) {
+    const r = config.reader;
+    if (r.fontFamily) root.style.setProperty('--reader-font', r.fontFamily);
+    if (r.fontSizePx) root.style.setProperty('--reader-font-size', `${r.fontSizePx}px`);
+    if (r.lineHeight) root.style.setProperty('--reader-line-height', r.lineHeight);
+    if (r.columnMaxWidthPx) root.style.setProperty('--reader-column-width', `${r.columnMaxWidthPx}px`);
+
+    if (r.writingMode) {
+      readerState.writingMode = r.writingMode;
+      updateReaderWritingModeButton();
+    }
+    if (r.furiganaMode) {
+      readerState.furiganaMode = r.furiganaMode;
+      const fSelect = document.getElementById('reader-furigana-select');
+      if (fSelect) fSelect.value = r.furiganaMode;
+    }
+  }
+
+  // Update open Reader iframe if present
+  applyReaderThemeToIframe();
+
+  // Directory scan default
+  if (config.directories && config.directories.defaultScanDirectory) {
+    state.defaultScanDir = config.directories.defaultScanDirectory;
+  }
+}
+
+function applyReaderThemeToIframe() {
+  const iframe = document.getElementById('reader-frame');
+  if (!iframe || !iframe.contentDocument) return;
+  try {
+    const doc = iframe.contentDocument;
+    const rRoot = doc.documentElement;
+    if (currentAppConfig.appearance) {
+      const app = currentAppConfig.appearance;
+      if (app.bgPrimary) rRoot.style.setProperty('--bg-primary', app.bgPrimary);
+      if (app.textPrimary) rRoot.style.setProperty('--text-primary', app.textPrimary);
+      if (app.rubyColor) rRoot.style.setProperty('--ruby-color', app.rubyColor);
+    }
+    if (currentAppConfig.reader) {
+      const r = currentAppConfig.reader;
+      if (r.fontFamily) rRoot.style.setProperty('--reader-font', r.fontFamily);
+      if (r.fontSizePx) rRoot.style.setProperty('--reader-font-size', `${r.fontSizePx}px`);
+      if (r.lineHeight) rRoot.style.setProperty('--reader-line-height', r.lineHeight);
+    }
+  } catch (e) {
+    // Cross-origin guard (about:blank or same-origin)
+  }
+}
+
+function openSettingsModal() {
+  populateSettingsForm(currentAppConfig);
+  switchSettingsTab(activeSettingsTab);
+  document.getElementById('modal-settings').classList.remove('hidden');
+}
+
+function closeSettingsModal() {
+  document.getElementById('modal-settings').classList.add('hidden');
+  // Re-apply saved config in case user tweaked colors but didn't save
+  applyConfigToDom(currentAppConfig);
+}
+
+function switchSettingsTab(tabName) {
+  activeSettingsTab = tabName;
+  document.querySelectorAll('.settings-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
+  });
+  document.querySelectorAll('.settings-pane').forEach(pane => {
+    pane.classList.remove('active');
+  });
+  const targetPane = document.getElementById(`settings-pane-${tabName}`);
+  if (targetPane) {
+    targetPane.classList.add('active');
+  }
+}
+
+function populateSettingsForm(cfg) {
+  if (!cfg) return;
+
+  // Directories
+  const d = cfg.directories || {};
+  document.getElementById('cfg-dir-scan').value = d.defaultScanDirectory || '';
+  document.getElementById('cfg-dir-extractor').value = d.extractorRootDirectory || '';
+  document.getElementById('cfg-dir-python').value = d.pythonExecutablePath || '';
+  document.getElementById('cfg-dir-flashcards').value = d.flashcardsDirectory || '';
+
+  // Appearance
+  const a = cfg.appearance || {};
+  document.getElementById('cfg-app-preset').value = a.themePreset || 'slate';
+  document.getElementById('cfg-app-font').value = a.uiFontFamily || '';
+  setPaletteField('cfg-col-bg', 'cfg-hex-bg', a.bgPrimary || '#0f172a');
+  setPaletteField('cfg-col-surface', 'cfg-hex-surface', a.bgSurface || '#1e293b');
+  setPaletteField('cfg-col-text', 'cfg-hex-text', a.textPrimary || '#f8fafc');
+  setPaletteField('cfg-col-muted', 'cfg-hex-muted', a.textMuted || '#94a3b8');
+  setPaletteField('cfg-col-border', 'cfg-hex-border', a.borderColor || '#334155');
+  setPaletteField('cfg-col-accent', 'cfg-hex-accent', a.accentColor || '#38bdf8');
+  setPaletteField('cfg-col-ruby', 'cfg-hex-ruby', a.rubyColor || '#e2e8f0');
+
+  // Reader
+  const r = cfg.reader || {};
+  document.getElementById('cfg-reader-font').value = r.fontFamily || "'Noto Serif JP', 'Yu Mincho', serif";
+  document.getElementById('cfg-reader-writing').value = r.writingMode || 'vertical-rl';
+  document.getElementById('cfg-reader-fontsize').value = r.fontSizePx || 22;
+  document.getElementById('cfg-reader-lineheight').value = r.lineHeight || 1.85;
+  document.getElementById('cfg-reader-furigana').value = r.furiganaMode || 'AllKanji';
+  document.getElementById('cfg-reader-maxwidth').value = r.columnMaxWidthPx || 900;
+  document.getElementById('cfg-reader-savepos').checked = r.autoSavePosition !== false;
+
+  // LLM
+  const l = cfg.llm || {};
+  document.getElementById('cfg-llm-preset').value = l.preset || 'ollama';
+  document.getElementById('cfg-llm-endpoint').value = l.endpointUrl || '';
+  document.getElementById('cfg-llm-model').value = l.modelId || '';
+  document.getElementById('cfg-llm-apikey').value = l.apiKey || '';
+  document.getElementById('cfg-llm-timeout').value = l.timeoutSeconds || 15;
+  document.getElementById('cfg-llm-temp').value = l.temperature || 0.7;
+  document.getElementById('cfg-llm-quiz-threshold').value = l.quizThresholdPercent || 80;
+  document.getElementById('cfg-llm-persona-unknown').value = l.personaUnknownThreshold || 1;
+  document.getElementById('cfg-llm-test-result').textContent = '';
+
+  // Dictionaries
+  const dict = cfg.dictionaries || {};
+  document.getElementById('cfg-dict-max-scan').value = dict.maxScanLength || 16;
+  document.getElementById('cfg-dict-max-depth').value = dict.maxDeinflections || 4;
+  document.getElementById('cfg-dict-max-results').value = dict.maxResults || 12;
+  document.getElementById('cfg-dict-export-format').value = dict.cardExportFormat || 'both';
+  document.getElementById('cfg-dict-autocopy').checked = dict.autoClipboard !== false;
+}
+
+function setPaletteField(pickerId, hexId, value) {
+  const picker = document.getElementById(pickerId);
+  const hex = document.getElementById(hexId);
+  if (picker) picker.value = value;
+  if (hex) hex.value = value;
+}
+
+function syncColorInput(pickerId, hexValue) {
+  const picker = document.getElementById(pickerId);
+  if (picker && /^#[0-9a-fA-F]{6}$/.test(hexValue)) {
+    picker.value = hexValue;
+  }
+  document.getElementById('cfg-app-preset').value = 'custom';
+  previewFormColors();
+}
+
+function onCustomColorChange() {
+  document.getElementById('cfg-hex-bg').value = document.getElementById('cfg-col-bg').value;
+  document.getElementById('cfg-hex-surface').value = document.getElementById('cfg-col-surface').value;
+  document.getElementById('cfg-hex-text').value = document.getElementById('cfg-col-text').value;
+  document.getElementById('cfg-hex-muted').value = document.getElementById('cfg-col-muted').value;
+  document.getElementById('cfg-hex-border').value = document.getElementById('cfg-col-border').value;
+  document.getElementById('cfg-hex-accent').value = document.getElementById('cfg-col-accent').value;
+  document.getElementById('cfg-hex-ruby').value = document.getElementById('cfg-col-ruby').value;
+  document.getElementById('cfg-app-preset').value = 'custom';
+  previewFormColors();
+}
+
+function onThemePresetSelect(presetKey) {
+  const preset = THEME_PRESETS[presetKey];
+  if (!preset) return;
+  setPaletteField('cfg-col-bg', 'cfg-hex-bg', preset.bgPrimary);
+  setPaletteField('cfg-col-surface', 'cfg-hex-surface', preset.bgSurface);
+  setPaletteField('cfg-col-text', 'cfg-hex-text', preset.textPrimary);
+  setPaletteField('cfg-col-muted', 'cfg-hex-muted', preset.textMuted);
+  setPaletteField('cfg-col-border', 'cfg-hex-border', preset.borderColor);
+  setPaletteField('cfg-col-accent', 'cfg-hex-accent', preset.accentColor);
+  setPaletteField('cfg-col-ruby', 'cfg-hex-ruby', preset.rubyColor);
+  previewFormColors();
+}
+
+function previewFormColors() {
+  const preview = {
+    appearance: {
+      bgPrimary: document.getElementById('cfg-col-bg').value,
+      bgSurface: document.getElementById('cfg-col-surface').value,
+      textPrimary: document.getElementById('cfg-col-text').value,
+      textMuted: document.getElementById('cfg-col-muted').value,
+      borderColor: document.getElementById('cfg-col-border').value,
+      accentColor: document.getElementById('cfg-col-accent').value,
+      rubyColor: document.getElementById('cfg-col-ruby').value,
+      uiFontFamily: document.getElementById('cfg-app-font').value
+    }
+  };
+  applyConfigToDom(preview);
+}
+
+function onLlmPresetSelect(presetKey) {
+  const preset = LLM_PRESETS[presetKey];
+  if (!preset) return;
+  document.getElementById('cfg-llm-endpoint').value = preset.endpointUrl;
+  document.getElementById('cfg-llm-model').value = preset.modelId;
+}
+
+async function testLlmConnectivity() {
+  const statusEl = document.getElementById('cfg-llm-test-result');
+  statusEl.textContent = 'Testing connection...';
+  statusEl.style.color = 'var(--text-muted)';
+  try {
+    const res = await rpcCall('config.testLlmEndpoint', {
+      endpointUrl: document.getElementById('cfg-llm-endpoint').value,
+      modelId: document.getElementById('cfg-llm-model').value,
+      apiKey: document.getElementById('cfg-llm-apikey').value,
+      timeoutSeconds: parseInt(document.getElementById('cfg-llm-timeout').value, 10) || 15
+    });
+    if (res && res.reachable) {
+      const modelsText = (res.models && res.models.length > 0)
+        ? ` (${res.models.length} models: ${res.models.slice(0, 3).join(', ')}${res.models.length > 3 ? '...' : ''})`
+        : '';
+      statusEl.textContent = `✓ ${res.message}${modelsText}`;
+      statusEl.style.color = '#10b981';
+    } else {
+      statusEl.textContent = `✗ ${res.message || 'Connection failed'}`;
+      statusEl.style.color = '#ef4444';
+    }
+  } catch (err) {
+    statusEl.textContent = `✗ ${err.message || 'Connection error'}`;
+    statusEl.style.color = '#ef4444';
+  }
+}
+
+function collectConfigFromForm() {
+  return {
+    directories: {
+      defaultScanDirectory: document.getElementById('cfg-dir-scan').value.trim(),
+      extractorRootDirectory: document.getElementById('cfg-dir-extractor').value.trim(),
+      pythonExecutablePath: document.getElementById('cfg-dir-python').value.trim(),
+      flashcardsDirectory: document.getElementById('cfg-dir-flashcards').value.trim()
+    },
+    appearance: {
+      themePreset: document.getElementById('cfg-app-preset').value,
+      bgPrimary: document.getElementById('cfg-col-bg').value,
+      bgSurface: document.getElementById('cfg-col-surface').value,
+      textPrimary: document.getElementById('cfg-col-text').value,
+      textMuted: document.getElementById('cfg-col-muted').value,
+      borderColor: document.getElementById('cfg-col-border').value,
+      accentColor: document.getElementById('cfg-col-accent').value,
+      rubyColor: document.getElementById('cfg-col-ruby').value,
+      uiFontFamily: document.getElementById('cfg-app-font').value.trim()
+    },
+    reader: {
+      fontFamily: document.getElementById('cfg-reader-font').value.trim(),
+      writingMode: document.getElementById('cfg-reader-writing').value,
+      fontSizePx: parseInt(document.getElementById('cfg-reader-fontsize').value, 10) || 22,
+      lineHeight: parseFloat(document.getElementById('cfg-reader-lineheight').value) || 1.85,
+      furiganaMode: document.getElementById('cfg-reader-furigana').value,
+      columnMaxWidthPx: parseInt(document.getElementById('cfg-reader-maxwidth').value, 10) || 900,
+      autoSavePosition: document.getElementById('cfg-reader-savepos').checked
+    },
+    llm: {
+      preset: document.getElementById('cfg-llm-preset').value,
+      endpointUrl: document.getElementById('cfg-llm-endpoint').value.trim(),
+      modelId: document.getElementById('cfg-llm-model').value.trim(),
+      apiKey: document.getElementById('cfg-llm-apikey').value.trim(),
+      timeoutSeconds: parseInt(document.getElementById('cfg-llm-timeout').value, 10) || 15,
+      temperature: parseFloat(document.getElementById('cfg-llm-temp').value) || 0.7,
+      quizThresholdPercent: parseInt(document.getElementById('cfg-llm-quiz-threshold').value, 10) || 80,
+      personaUnknownThreshold: parseInt(document.getElementById('cfg-llm-persona-unknown').value, 10) || 1
+    },
+    dictionaries: {
+      maxScanLength: parseInt(document.getElementById('cfg-dict-max-scan').value, 10) || 16,
+      maxDeinflections: parseInt(document.getElementById('cfg-dict-max-depth').value, 10) || 4,
+      maxResults: parseInt(document.getElementById('cfg-dict-max-results').value, 10) || 12,
+      cardExportFormat: document.getElementById('cfg-dict-export-format').value,
+      autoClipboard: document.getElementById('cfg-dict-autocopy').checked
+    }
+  };
+}
+
+async function saveSettingsModal() {
+  const newConfig = collectConfigFromForm();
+  try {
+    const updated = await rpcCall('config.update', { config: newConfig });
+    currentAppConfig = updated || newConfig;
+    applyConfigToDom(currentAppConfig);
+    closeSettingsModal();
+  } catch (err) {
+    alert(`Failed to save settings: ${err.message}`);
+  }
+}
+
+async function resetSettingsCategory() {
+  const categoryMap = {
+    general: 'directories',
+    appearance: 'appearance',
+    reader: 'reader',
+    llm: 'llm',
+    dictionaries: 'dictionaries'
+  };
+  const cat = categoryMap[activeSettingsTab] || activeSettingsTab;
+  try {
+    const updated = await rpcCall('config.resetDefaults', { category: cat });
+    currentAppConfig = updated;
+    populateSettingsForm(currentAppConfig);
+    applyConfigToDom(currentAppConfig);
+  } catch (err) {
+    alert(`Failed to reset ${cat} settings: ${err.message}`);
+  }
+}
+
+async function resetAllSettings() {
+  if (!confirm('Are you sure you want to reset ALL configuration to factory defaults?')) {
+    return;
+  }
+  try {
+    const updated = await rpcCall('config.resetDefaults', { category: null });
+    currentAppConfig = updated;
+    populateSettingsForm(currentAppConfig);
+    applyConfigToDom(currentAppConfig);
+  } catch (err) {
+    alert(`Failed to reset settings: ${err.message}`);
+  }
 }
 

@@ -1,5 +1,22 @@
 /* Injected Reader Stylesheet for Immersive Reading */
 
+:root {
+  --bg-primary: #0f172a;
+  --text-primary: #f8fafc;
+  --ruby-color: #e2e8f0;
+  --reader-font: "Noto Serif JP", "Yu Mincho", serif;
+  --reader-font-size: 22px;
+  --reader-line-height: 1.85;
+}
+
+body {
+  font-family: var(--reader-font, "Noto Serif JP", "Yu Mincho", serif);
+  font-size: var(--reader-font-size, 22px);
+  line-height: var(--reader-line-height, 1.85);
+  background-color: var(--bg-primary, #0f172a);
+  color: var(--text-primary, #f8fafc);
+}
+
 /* Token Base Styling */
 .ir-tok {
   display: inline;
@@ -27,6 +44,7 @@ ruby {
 rt {
   font-size: 0.58em;
   user-select: none;
+  color: var(--ruby-color, #e2e8f0);
 }
 
 /* Furigana Display Modes (Zero Re-Parse, Instant CSS Switching) */

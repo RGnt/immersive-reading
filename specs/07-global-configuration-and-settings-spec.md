@@ -235,3 +235,4 @@ When appearance settings change, JavaScript applies them directly to `document.d
 | **`TASK-CFG.4`** | `ImmersiveReading.App/wwwroot` | Build Settings Modal in `index.html`, add CSS custom property bindings in `styles.css`, and add configuration controller in `app.js`. |
 | **`TASK-CFG.5`** | `ImmersiveReading.Plugins.AiCompanion` | Connect `OpenAiCompatibleLlmProvider` to live configuration changes. |
 | **`TASK-CFG.6`** | `tests/` | Create xUnit specification tests validating default seeding, updates, persistence, and invalid input rejection. |
+

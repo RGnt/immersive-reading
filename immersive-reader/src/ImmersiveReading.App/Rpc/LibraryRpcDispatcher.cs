@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ImmersiveReading.Core.Config;
 using ImmersiveReading.Core.Extensions;
 using ImmersiveReading.Core.Library;
 using ImmersiveReading.Core.Plugins;
@@ -23,6 +24,7 @@ public sealed class LibraryRpcDispatcher
     private readonly FlashcardMiningService? _flashcardService;
     private readonly FeaturePluginHost? _featurePluginHost;
     private readonly Action<bool, string>? _onSelfTestCompleted;
+    private readonly IConfigurationManager? _configManager;
     private StudyPackLease? _activeStudyLease;
     private bool _bootstrappedWorkspaceBooks;
 
@@ -45,7 +47,8 @@ public sealed class LibraryRpcDispatcher
         PythonStudyPackBridge? studyPackBridge = null,
         FlashcardMiningService? flashcardService = null,
         FeaturePluginHost? featurePluginHost = null,
-        Action<bool, string>? onSelfTestCompleted = null)
+        Action<bool, string>? onSelfTestCompleted = null,
+        IConfigurationManager? configManager = null)
     {
         _library = library;
         _db = db;
@@ -59,6 +62,7 @@ public sealed class LibraryRpcDispatcher
         _flashcardService = flashcardService;
         _featurePluginHost = featurePluginHost;
         _onSelfTestCompleted = onSelfTestCompleted;
+        _configManager = configManager;
     }
 
     public async Task<string> DispatchJsonAsync(string rawRequestJson, CancellationToken ct = default)
@@ -101,13 +105,18 @@ public sealed class LibraryRpcDispatcher
                 var tags = _library.ListTags();
                 var customFields = _library.ListCustomFieldDefinitions();
                 var initialPage = _library.ListBooks(new BookListQuery(Limit: 100));
+                var config = _configManager?.GetConfig() ?? AppConfig.CreateDefault();
+                string defaultScanDir = !string.IsNullOrWhiteSpace(config.Directories.DefaultScanDirectory)
+                    ? config.Directories.DefaultScanDirectory
+                    : (_workspaceBooksDir ?? "");
                 return new
                 {
                     folders,
                     tags,
                     customFields,
                     initialPage,
-                    defaultScanDir = _workspaceBooksDir ?? ""
+                    defaultScanDir,
+                    config
                 };
             }
 
@@ -630,6 +639,137 @@ public sealed class LibraryRpcDispatcher
                 string summary = GetOptionalString(p, "summary") ?? "";
                 _onSelfTestCompleted?.Invoke(passed, summary);
                 return new { ok = true };
+            }
+
+            case "config.getAll":
+            {
+                return _configManager?.GetConfig() ?? AppConfig.CreateDefault();
+            }
+
+            case "config.getCategory":
+            {
+                string cat = GetRequiredString(p, "category").ToLowerInvariant();
+                var cfg = _configManager?.GetConfig() ?? AppConfig.CreateDefault();
+                return cat switch
+                {
+                    "directories" => (object)cfg.Directories,
+                    "appearance" => cfg.Appearance,
+                    "reader" => cfg.Reader,
+                    "llm" => cfg.Llm,
+                    "dictionaries" => cfg.Dictionaries,
+                    _ => throw new ArgumentException($"Unknown category '{cat}'.")
+                };
+            }
+
+            case "config.update":
+            {
+                if (_configManager is null) throw new InvalidOperationException("Configuration manager not configured.");
+                string cat = GetRequiredString(p, "category");
+                string settingsJson;
+                if (p.TryGetProperty("settings", out var sProp))
+                {
+                    settingsJson = sProp.ValueKind == JsonValueKind.String ? sProp.GetString()! : sProp.GetRawText();
+                }
+                else
+                {
+                    settingsJson = p.GetRawText();
+                }
+
+                var updated = await _configManager.UpdateCategoryJsonAsync(cat, settingsJson, ct).ConfigureAwait(false);
+                EmitEvent("config.changed", new { category = cat, config = updated });
+                return new { ok = true, updatedConfig = updated };
+            }
+
+            case "config.resetDefaults":
+            {
+                if (_configManager is null) throw new InvalidOperationException("Configuration manager not configured.");
+                string? cat = GetOptionalString(p, "category");
+                var updated = await _configManager.ResetDefaultsAsync(cat, ct).ConfigureAwait(false);
+                EmitEvent("config.changed", new { category = cat ?? "all", config = updated });
+                return new { ok = true, updatedConfig = updated };
+            }
+
+            case "config.testLlmEndpoint":
+            {
+                string endpoint = GetOptionalString(p, "endpointUrl") ?? "http://localhost:11434/v1/chat/completions";
+                string apiKey = GetOptionalString(p, "apiKey") ?? "";
+                string modelId = GetOptionalString(p, "modelId") ?? "llama3.2";
+                int timeout = p.TryGetProperty("timeoutSeconds", out var ts) && ts.ValueKind == JsonValueKind.Number ? ts.GetInt32() : 5;
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(Math.Clamp(timeout, 2, 30)) };
+                if (!string.IsNullOrWhiteSpace(apiKey))
+                {
+                    client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+                }
+
+                var models = new List<string>();
+                bool endpointReached = false;
+                string statusMessage = "";
+
+                try
+                {
+                    string modelsUrl = endpoint.Replace("/chat/completions", "/models");
+                    if (modelsUrl.Contains("localhost:11434") && !modelsUrl.Contains("/v1/models"))
+                    {
+                        modelsUrl = "http://localhost:11434/api/tags";
+                    }
+
+                    var response = await client.GetAsync(modelsUrl, ct).ConfigureAwait(false);
+                    sw.Stop();
+                    if (response.IsSuccessStatusCode)
+                    {
+                        endpointReached = true;
+                        statusMessage = $"Connected (HTTP {(int)response.StatusCode}) in {sw.ElapsedMilliseconds} ms";
+                        var raw = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+                        using var doc = JsonDocument.Parse(raw);
+                        if (doc.RootElement.TryGetProperty("data", out var dataArr) && dataArr.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var el in dataArr.EnumerateArray())
+                            {
+                                if (el.TryGetProperty("id", out var idProp))
+                                {
+                                    string m = idProp.GetString() ?? "";
+                                    if (!string.IsNullOrWhiteSpace(m)) models.Add(m);
+                                }
+                            }
+                        }
+                        else if (doc.RootElement.TryGetProperty("models", out var ollamaArr) && ollamaArr.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (var el in ollamaArr.EnumerateArray())
+                            {
+                                if (el.TryGetProperty("name", out var nameProp))
+                                {
+                                    string m = nameProp.GetString() ?? "";
+                                    if (!string.IsNullOrWhiteSpace(m)) models.Add(m);
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        statusMessage = $"HTTP {(int)response.StatusCode}: {response.ReasonPhrase}";
+                    }
+                }
+                catch (Exception ex)
+                {
+                    sw.Stop();
+                    statusMessage = $"Connection failed: {ex.Message}";
+                }
+
+                if (!string.IsNullOrWhiteSpace(modelId) && !models.Contains(modelId))
+                {
+                    models.Insert(0, modelId);
+                }
+
+                return new
+                {
+                    success = endpointReached,
+                    latencyMs = sw.ElapsedMilliseconds,
+                    statusMessage,
+                    models,
+                    activeModel = modelId
+                };
             }
 
             case "extensions.list":
