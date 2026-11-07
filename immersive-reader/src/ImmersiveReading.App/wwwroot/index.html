@@ -173,133 +173,6 @@
         </div>
       </footer>
     </main>
-
-    <!-- RIGHT INSPECTOR DRAWER: Editable Metadata, OPF Diff, Custom Fields & Chapters -->
-    <aside class="inspector" id="inspector-panel">
-      <div id="inspector-empty" class="inspector-empty">
-        <p>Select a book to inspect or edit its bibliographic metadata, ISBN, series volume, tags, and custom fields (such as <code>jiten.moe</code> links).</p>
-      </div>
-
-      <div id="inspector-content" class="inspector-content hidden">
-        <div class="inspector-header">
-          <div class="inspector-cover-box" id="insp-cover-box"></div>
-          <div class="inspector-head-meta">
-            <div class="book-id-pill" id="insp-book-id">book-...</div>
-            <div id="insp-edited-badge" class="edited-pill hidden">Edited (OPF Preserved)</div>
-            <button type="button" class="btn btn-primary btn-sm" style="margin-top:6px;width:100%" onclick="openCurrentBookInReader()">📖 Read Book</button>
-            <div class="inspector-quick-links" id="insp-quick-links"></div>
-          </div>
-        </div>
-
-        <form id="inspector-form" onsubmit="saveInspectorBook(event)">
-          <div class="form-section-title">Bibliographic Metadata</div>
-
-          <label class="form-label">Title
-            <input type="text" id="insp-title" class="form-input" required />
-          </label>
-
-          <label class="form-label">Sort Title (Kana / Reading Sort)
-            <input type="text" id="insp-sort-title" class="form-input" />
-          </label>
-
-          <div class="form-row-2">
-            <label class="form-label">Series Name
-              <input type="text" id="insp-series-name" class="form-input" placeholder="e.g. 本好きの下剋上" />
-            </label>
-            <label class="form-label">Volume #
-              <input type="number" step="0.1" id="insp-series-index" class="form-input" placeholder="1.0" />
-            </label>
-          </div>
-
-          <div class="form-row-2">
-            <label class="form-label">Author(s)
-              <input type="text" id="insp-authors" class="form-input" />
-            </label>
-            <label class="form-label">Author Sort (Kana)
-              <input type="text" id="insp-author-sort" class="form-input" />
-            </label>
-          </div>
-
-          <div class="form-row-2">
-            <label class="form-label">ISBN-13 / ISBN-10
-              <input type="text" id="insp-isbn" class="form-input" placeholder="978..." />
-            </label>
-            <label class="form-label">Published Date
-              <input type="text" id="insp-pub-date" class="form-input" placeholder="YYYY-MM-DD" />
-            </label>
-          </div>
-
-          <div class="form-row-2">
-            <label class="form-label">Publisher
-              <input type="text" id="insp-publisher" class="form-input" />
-            </label>
-            <label class="form-label">Imprint / Label
-              <input type="text" id="insp-imprint" class="form-input" placeholder="e.g. 電撃文庫" />
-            </label>
-          </div>
-
-          <div class="form-row-3">
-            <label class="form-label">Language
-              <input type="text" id="insp-language" class="form-input" value="ja" />
-            </label>
-            <label class="form-label">Writing Mode
-              <select id="insp-writing-mode" class="form-input">
-                <option value="auto">Auto</option>
-                <option value="vertical-rl">Vertical (vertical-rl)</option>
-                <option value="horizontal-tb">Horizontal</option>
-              </select>
-            </label>
-            <label class="form-label">Manual Sort #
-              <input type="number" id="insp-custom-sort" class="form-input" value="0" />
-            </label>
-          </div>
-
-          <label class="form-label">Virtual Folder / Series Location
-            <select id="insp-folder-id" class="form-input"></select>
-          </label>
-
-          <label class="form-label">Synopsis / Description
-            <textarea id="insp-description" class="form-textarea" rows="3"></textarea>
-          </label>
-
-          <div class="form-section-title">Manual Tags</div>
-          <div id="insp-tags-selector" class="tag-Checkboxes"></div>
-
-          <div class="form-section-title">Custom Fields (Book &amp; Inherited from Folder/Series)</div>
-          <div id="insp-custom-fields" class="custom-fields-editor"></div>
-
-          <div class="inspector-actions">
-            <button type="submit" class="btn btn-primary">💾 Save Changes</button>
-            <button type="button" class="btn btn-secondary" onclick="resetCurrentBookToOpf()" title="Restore raw EPUB OPF metadata">↺ Reset to OPF</button>
-            <button type="button" class="btn btn-danger" onclick="deleteCurrentBook()">🗑</button>
-          </div>
-        </form>
-
-        <details class="inspector-details">
-          <summary>Original EPUB OPF Metadata &amp; File Info</summary>
-          <div id="insp-opf-raw" class="opf-raw-box"></div>
-        </details>
-
-        <details class="inspector-details" open>
-          <summary>Chapters (<span id="insp-chapter-count">0</span>)</summary>
-          <div id="insp-chapters-list" class="chapters-mini-list"></div>
-        </details>
-
-        <details class="inspector-details" open>
-          <summary>Study Pack, PDFs &amp; 20-Word Sets (<span id="insp-studypack-status">Checking...</span>)</summary>
-          <div id="insp-studypack-box" class="opf-raw-box" style="display:flex;flex-direction:column;gap:8px">
-            <div id="insp-studypack-pdfs"></div>
-            <div id="insp-studypack-sets"></div>
-            <div id="insp-studypack-mined"></div>
-            <div style="display:flex;gap:6px;margin-top:4px">
-              <button type="button" class="btn btn-sm btn-secondary" onclick="buildCurrentBookStudyPack(false)">⚡ Build Full Study Pack</button>
-              <button type="button" class="btn btn-sm btn-secondary" onclick="buildCurrentBookStudyPack(true)">⚡ Enrich Reader JSON</button>
-            </div>
-            <div id="insp-studypack-build-log" style="font-size:11px;color:var(--text-muted)"></div>
-          </div>
-        </details>
-      </div>
-    </aside>
   </div>
 
   <!-- FULLSCREEN EPUB READER VIEW (Phase 2) -->
@@ -502,6 +375,190 @@
           <button type="submit" class="btn btn-primary">Import Book</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Book Info, Metadata & jiten.moe Integration -->
+  <div id="book-info-modal" class="modal-backdrop hidden" onclick="onBookInfoBackdropClick(event)">
+    <div class="book-info-modal-card" onclick="event.stopPropagation()">
+      <div class="book-info-modal-header">
+        <div class="book-info-header-meta">
+          <div class="book-info-thumb" id="insp-cover-box"></div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <h3 id="insp-modal-title" style="margin:0;font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:480px">Book Details &amp; Metadata</h3>
+              <span class="book-id-pill" id="insp-book-id">book-...</span>
+              <span id="insp-edited-badge" class="edited-pill hidden">Edited (OPF Preserved)</span>
+            </div>
+            <div id="insp-modal-sub" style="font-size:12px;color:var(--text-muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:550px"></div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" class="btn btn-primary btn-sm" onclick="openCurrentBookInReader()">📖 Read Book</button>
+          <button type="button" class="btn-icon" onclick="closeBookInfoModal()" title="Close (Escape)">✕</button>
+        </div>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="book-info-tab-nav">
+        <button type="button" class="book-info-tab-btn active" id="tab-btn-meta" onclick="switchBookInfoTab('meta')">📋 Bibliographic Metadata</button>
+        <button type="button" class="book-info-tab-btn" id="tab-btn-jiten" onclick="switchBookInfoTab('jiten')">🌐 jiten.moe &amp; Custom Fields</button>
+        <button type="button" class="book-info-tab-btn" id="tab-btn-chapters" onclick="switchBookInfoTab('chapters')">📑 Chapters (<span id="insp-chapter-count">0</span>)</button>
+        <button type="button" class="book-info-tab-btn" id="tab-btn-studypack" onclick="switchBookInfoTab('studypack')">📚 Study Pack (<span id="insp-studypack-status">Checking...</span>)</button>
+        <button type="button" class="book-info-tab-btn" id="tab-btn-opf" onclick="switchBookInfoTab('opf')">ℹ️ File &amp; OPF Info</button>
+      </div>
+
+      <!-- Scrollable Form Body -->
+      <form id="inspector-form" onsubmit="saveInspectorBook(event)" class="book-info-body">
+        <!-- Hidden helper elements for backwards compatibility -->
+        <div id="inspector-empty" class="hidden"></div>
+        <div id="inspector-content" class="hidden"></div>
+
+        <!-- TAB 1: Bibliographic Metadata -->
+        <div id="pane-book-meta" class="book-info-tab-pane">
+          <label class="form-label">Title
+            <input type="text" id="insp-title" class="form-input" required />
+          </label>
+
+          <label class="form-label">Sort Title (Kana / Reading Sort)
+            <input type="text" id="insp-sort-title" class="form-input" />
+          </label>
+
+          <div class="form-row-2">
+            <label class="form-label">Series Name
+              <input type="text" id="insp-series-name" class="form-input" placeholder="e.g. 本好きの下剋上" />
+            </label>
+            <label class="form-label">Volume #
+              <input type="number" step="0.1" id="insp-series-index" class="form-input" placeholder="1.0" />
+            </label>
+          </div>
+
+          <div class="form-row-2">
+            <label class="form-label">Author(s)
+              <input type="text" id="insp-authors" class="form-input" />
+            </label>
+            <label class="form-label">Author Sort (Kana)
+              <input type="text" id="insp-author-sort" class="form-input" />
+            </label>
+          </div>
+
+          <div class="form-row-2">
+            <label class="form-label">ISBN-13 / ISBN-10
+              <input type="text" id="insp-isbn" class="form-input" placeholder="978..." />
+            </label>
+            <label class="form-label">Published Date
+              <input type="text" id="insp-pub-date" class="form-input" placeholder="YYYY-MM-DD" />
+            </label>
+          </div>
+
+          <div class="form-row-2">
+            <label class="form-label">Publisher
+              <input type="text" id="insp-publisher" class="form-input" />
+            </label>
+            <label class="form-label">Imprint / Label
+              <input type="text" id="insp-imprint" class="form-input" placeholder="e.g. 電撃文庫" />
+            </label>
+          </div>
+
+          <div class="form-row-3">
+            <label class="form-label">Language
+              <input type="text" id="insp-language" class="form-input" value="ja" />
+            </label>
+            <label class="form-label">Writing Mode
+              <select id="insp-writing-mode" class="form-input">
+                <option value="auto">Auto</option>
+                <option value="vertical-rl">Vertical (vertical-rl)</option>
+                <option value="horizontal-tb">Horizontal</option>
+              </select>
+            </label>
+            <label class="form-label">Manual Sort #
+              <input type="number" id="insp-custom-sort" class="form-input" value="0" />
+            </label>
+          </div>
+
+          <label class="form-label">Virtual Folder / Series Location
+            <select id="insp-folder-id" class="form-input"></select>
+          </label>
+
+          <label class="form-label">Synopsis / Description
+            <textarea id="insp-description" class="form-textarea" rows="4"></textarea>
+          </label>
+        </div>
+
+        <!-- TAB 2: jiten.moe & Custom Fields -->
+        <div id="pane-book-jiten" class="book-info-tab-pane hidden">
+          <!-- Jiten.moe 1-Click Integration Card -->
+          <div class="jiten-integration-card">
+            <div class="jiten-card-head">
+              <div class="jiten-card-title">
+                <span class="jiten-badge">jiten.moe</span>
+                <span>Japanese Immersion Vocabulary &amp; Difficulty Lookup</span>
+              </div>
+              <div id="insp-quick-links"></div>
+            </div>
+
+            <div style="font-size:12px;color:var(--text-muted);line-height:1.4">
+              Query jiten.moe to link official vocabulary decks, difficulty ratings (1–10), and character/word statistics with a single click.
+            </div>
+
+            <div id="insp-jiten-status-banner" class="hidden"></div>
+
+            <div style="display:flex;gap:8px;align-items:center;margin-top:4px">
+              <button type="button" class="btn btn-primary btn-sm" onclick="lookupJitenMoeForCurrentBook()">⚡ 1-Click Look Up on jiten.moe</button>
+              <input type="text" id="jiten-manual-query" class="form-input" style="flex:1;font-size:12px;padding:4px 8px" placeholder="Or enter custom title to search on jiten.moe..." onkeydown="if(event.key==='Enter'){event.preventDefault();lookupJitenMoeForCurrentBook(this.value);}" />
+              <button type="button" class="btn btn-secondary btn-sm" onclick="lookupJitenMoeForCurrentBook(document.getElementById('jiten-manual-query').value)">🔍 Search</button>
+            </div>
+
+            <!-- Jiten Lookup Results Box -->
+            <div id="insp-jiten-results"></div>
+          </div>
+
+          <div class="form-section-title">Manual Tags</div>
+          <div id="insp-tags-selector" class="tag-Checkboxes"></div>
+
+          <div class="form-section-title">Custom Fields (Direct &amp; Inherited)</div>
+          <div id="insp-custom-fields" class="custom-fields-editor"></div>
+        </div>
+
+        <!-- TAB 3: Chapters -->
+        <div id="pane-book-chapters" class="book-info-tab-pane hidden">
+          <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px">
+            Click any chapter below to launch the reader directly into that chapter.
+          </div>
+          <div id="insp-chapters-list" class="chapters-mini-list" style="max-height:480px"></div>
+        </div>
+
+        <!-- TAB 4: Study Pack & Flashcards -->
+        <div id="pane-book-studypack" class="book-info-tab-pane hidden">
+          <div id="insp-studypack-box" class="opf-raw-box" style="display:flex;flex-direction:column;gap:10px;max-height:480px">
+            <div id="insp-studypack-pdfs"></div>
+            <div id="insp-studypack-sets"></div>
+            <div id="insp-studypack-mined"></div>
+            <div style="display:flex;gap:8px;margin-top:6px">
+              <button type="button" class="btn btn-sm btn-secondary" onclick="buildCurrentBookStudyPack(false)">⚡ Build Full Study Pack</button>
+              <button type="button" class="btn btn-sm btn-secondary" onclick="buildCurrentBookStudyPack(true)">⚡ Enrich Reader JSON</button>
+            </div>
+            <div id="insp-studypack-build-log" style="font-size:11px;color:var(--text-muted)"></div>
+          </div>
+        </div>
+
+        <!-- TAB 5: File & OPF Info -->
+        <div id="pane-book-opf" class="book-info-tab-pane hidden">
+          <div id="insp-opf-raw" class="opf-raw-box" style="max-height:480px;line-height:1.7"></div>
+        </div>
+      </form>
+
+      <!-- Modal Footer -->
+      <div class="book-info-modal-footer">
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="resetCurrentBookToOpf()" title="Restore raw EPUB OPF metadata">↺ Reset to OPF</button>
+          <button type="button" class="btn btn-danger btn-sm" onclick="deleteCurrentBook()">🗑 Delete Book</button>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="closeBookInfoModal()">Close</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('inspector-form').requestSubmit()">💾 Save Changes</button>
+        </div>
+      </div>
     </div>
   </div>
 

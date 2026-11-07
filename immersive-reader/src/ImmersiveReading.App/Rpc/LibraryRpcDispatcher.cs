@@ -320,6 +320,137 @@ public sealed class LibraryRpcDispatcher
                 return new { ok = true };
             }
 
+            case "library.searchJitenMoe":
+            {
+                string query = GetRequiredString(p, "query").Trim();
+                if (string.IsNullOrWhiteSpace(query))
+                {
+                    return new { items = Array.Empty<object>(), totalItems = 0 };
+                }
+
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+                client.DefaultRequestHeaders.Add("User-Agent", "ImmersiveReading/1.0");
+
+                string url = $"https://api.jiten.moe/api/media-deck/get-media-decks?titleFilter={Uri.EscapeDataString(query)}";
+                using var response = await client.GetAsync(url, ct).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
+
+                using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+
+                var items = new List<object>();
+                if (doc.RootElement.TryGetProperty("data", out var dataArr) && dataArr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var elem in dataArr.EnumerateArray())
+                    {
+                        long deckId = elem.TryGetProperty("deckId", out var dId) ? dId.GetInt64() : 0;
+                        string origTitle = elem.TryGetProperty("originalTitle", out var ot) ? ot.GetString() ?? "" : "";
+                        string? romaji = elem.TryGetProperty("romajiTitle", out var rt) ? rt.GetString() : null;
+                        string? english = elem.TryGetProperty("englishTitle", out var et) ? et.GetString() : null;
+                        string? cover = elem.TryGetProperty("coverName", out var cv) ? cv.GetString() : null;
+                        string? desc = elem.TryGetProperty("description", out var ds) ? ds.GetString() : null;
+                        int charCount = elem.TryGetProperty("characterCount", out var cc) ? cc.GetInt32() : 0;
+                        int wordCount = elem.TryGetProperty("wordCount", out var wc) ? wc.GetInt32() : 0;
+                        double difficulty = elem.TryGetProperty("difficultyRaw", out var dr) && dr.ValueKind == JsonValueKind.Number
+                            ? dr.GetDouble()
+                            : (elem.TryGetProperty("difficulty", out var df) && df.ValueKind == JsonValueKind.Number ? df.GetDouble() : 0.0);
+                        int childrenCount = elem.TryGetProperty("childrenDeckCount", out var ch) ? ch.GetInt32() : 0;
+
+                        items.Add(new
+                        {
+                            deckId,
+                            originalTitle = origTitle,
+                            romajiTitle = romaji,
+                            englishTitle = english,
+                            coverUrl = cover,
+                            description = desc,
+                            characterCount = charCount,
+                            wordCount = wordCount,
+                            difficulty = Math.Round(difficulty, 2),
+                            childrenDeckCount = childrenCount,
+                            jitenUrl = $"https://jiten.moe/decks/media/{deckId}"
+                        });
+                    }
+                }
+
+                int totalItems = doc.RootElement.TryGetProperty("totalItems", out var ti) ? ti.GetInt32() : items.Count;
+                return new { items, totalItems };
+            }
+
+            case "library.getJitenDeckDetail":
+            {
+                long deckId = p.TryGetProperty("deckId", out var idProp) && idProp.ValueKind == JsonValueKind.Number
+                    ? idProp.GetInt64()
+                    : long.Parse(GetRequiredString(p, "deckId"));
+
+                using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+                client.DefaultRequestHeaders.Add("User-Agent", "ImmersiveReading/1.0");
+
+                string url = $"https://api.jiten.moe/api/media-deck/{deckId}/detail";
+                using var response = await client.GetAsync(url, ct).ConfigureAwait(false);
+                response.EnsureSuccessStatusCode();
+
+                using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+
+                object? mainDeck = null;
+                var subDecks = new List<object>();
+
+                if (doc.RootElement.TryGetProperty("data", out var dataObj) && dataObj.ValueKind == JsonValueKind.Object)
+                {
+                    if (dataObj.TryGetProperty("mainDeck", out var md) && md.ValueKind == JsonValueKind.Object)
+                    {
+                        long mdId = md.TryGetProperty("deckId", out var dId) ? dId.GetInt64() : deckId;
+                        string origTitle = md.TryGetProperty("originalTitle", out var ot) ? ot.GetString() ?? "" : "";
+                        string? romaji = md.TryGetProperty("romajiTitle", out var rt) ? rt.GetString() : null;
+                        string? english = md.TryGetProperty("englishTitle", out var et) ? et.GetString() : null;
+                        string? cover = md.TryGetProperty("coverName", out var cv) ? cv.GetString() : null;
+                        string? desc = md.TryGetProperty("description", out var ds) ? ds.GetString() : null;
+                        int charCount = md.TryGetProperty("characterCount", out var cc) ? cc.GetInt32() : 0;
+                        double difficulty = md.TryGetProperty("difficultyRaw", out var dr) && dr.ValueKind == JsonValueKind.Number
+                            ? dr.GetDouble()
+                            : (md.TryGetProperty("difficulty", out var df) && df.ValueKind == JsonValueKind.Number ? df.GetDouble() : 0.0);
+
+                        mainDeck = new
+                        {
+                            deckId = mdId,
+                            originalTitle = origTitle,
+                            romajiTitle = romaji,
+                            englishTitle = english,
+                            coverUrl = cover,
+                            description = desc,
+                            characterCount = charCount,
+                            difficulty = Math.Round(difficulty, 2),
+                            jitenUrl = $"https://jiten.moe/decks/media/{mdId}"
+                        };
+                    }
+
+                    if (dataObj.TryGetProperty("subDecks", out var sdArr) && sdArr.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var sub in sdArr.EnumerateArray())
+                        {
+                            long subId = sub.TryGetProperty("deckId", out var sId) ? sId.GetInt64() : 0;
+                            string sTitle = sub.TryGetProperty("originalTitle", out var st) ? st.GetString() ?? "" : "";
+                            int sCharCount = sub.TryGetProperty("characterCount", out var sc) ? sc.GetInt32() : 0;
+                            double sDiff = sub.TryGetProperty("difficultyRaw", out var sdr) && sdr.ValueKind == JsonValueKind.Number
+                                ? sdr.GetDouble()
+                                : (sub.TryGetProperty("difficulty", out var sdf) && sdf.ValueKind == JsonValueKind.Number ? sdf.GetDouble() : 0.0);
+
+                            subDecks.Add(new
+                            {
+                                deckId = subId,
+                                originalTitle = sTitle,
+                                characterCount = sCharCount,
+                                difficulty = Math.Round(sDiff, 2),
+                                jitenUrl = $"https://jiten.moe/decks/media/{subId}"
+                            });
+                        }
+                    }
+                }
+
+                return new { mainDeck, subDecks };
+            }
+
             case "reader.openBook":
             {
                 string bookId = GetRequiredString(p, "bookId");

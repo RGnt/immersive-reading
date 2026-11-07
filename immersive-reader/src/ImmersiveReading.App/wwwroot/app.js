@@ -413,8 +413,11 @@ function renderTableView(viewport, items) {
         <td onclick="event.stopPropagation()">
           <input type="checkbox" ${isSelected ? 'checked' : ''} onchange="handleBookCheckboxChange(event, '${b.bookId}', this.checked)" />
         </td>
-        <td onclick="event.stopPropagation()">
-          <button type="button" class="btn btn-primary btn-sm" style="padding:3px 8px;font-size:11px" onclick="openBookInReader('${b.bookId}')">📖 Read</button>
+        <td onclick="event.stopPropagation()" style="white-space:nowrap">
+          <div style="display:inline-flex;gap:4px">
+            <button type="button" class="btn btn-primary btn-sm" style="padding:3px 8px;font-size:11px" onclick="openBookInReader('${b.bookId}')" title="Read book">📖 Read</button>
+            <button type="button" class="btn btn-secondary btn-sm" style="padding:3px 8px;font-size:11px" onclick="openBookInfoModal('${b.bookId}')" title="Book Details, Metadata &amp; jiten.moe">ℹ️ Info</button>
+          </div>
         </td>
         <td>
           <div style="display:flex;align-items:center;gap:6px">
@@ -466,7 +469,10 @@ function renderGridView(viewport, items) {
           <div class="card-title" title="${escapeHtml(b.title)}">${escapeHtml(b.title)}</div>
           <div class="card-sub">${escapeHtml(b.seriesName || b.authors || '—')}${volBadge}</div>
           <div class="card-sub" style="font-size:10px">${escapeHtml(b.folderPathBreadcrumb || '')}</div>
-          <button type="button" class="btn btn-primary btn-sm" style="margin-top:6px;width:100%;font-size:11px;padding:4px 0" onclick="event.stopPropagation(); openBookInReader('${b.bookId}')">📖 Read Book</button>
+          <div style="display:flex;gap:4px;margin-top:6px">
+            <button type="button" class="btn btn-primary btn-sm" style="flex:1;font-size:11px;padding:4px 0" onclick="event.stopPropagation(); openBookInReader('${b.bookId}')" title="Read book">📖 Read</button>
+            <button type="button" class="btn btn-secondary btn-sm" style="flex:1;font-size:11px;padding:4px 0" onclick="event.stopPropagation(); openBookInfoModal('${b.bookId}')" title="Book Details, Metadata &amp; jiten.moe">ℹ️ Info</button>
+          </div>
         </div>
       </div>
     `;
@@ -512,12 +518,37 @@ async function inspectBook(bookId) {
 }
 
 function populateInspector(detail) {
-  document.getElementById('inspector-empty').classList.add('hidden');
-  document.getElementById('inspector-content').classList.remove('hidden');
+  const emptyEl = document.getElementById('inspector-empty');
+  if (emptyEl) emptyEl.classList.add('hidden');
+  const contentEl = document.getElementById('inspector-content');
+  if (contentEl) contentEl.classList.remove('hidden');
 
   const s = detail.summary;
   document.getElementById('insp-book-id').textContent = s.bookId;
   document.getElementById('insp-edited-badge').classList.toggle('hidden', !s.isMetadataEdited);
+
+  const modalTitle = document.getElementById('insp-modal-title');
+  if (modalTitle) modalTitle.textContent = s.title || 'Book Details & Metadata';
+  const modalSub = document.getElementById('insp-modal-sub');
+  if (modalSub) {
+    const vol = s.seriesIndex != null ? ` #${s.seriesIndex}` : '';
+    const series = s.seriesName ? `${s.seriesName}${vol}` : '';
+    modalSub.textContent = [series, s.authors, s.publisher].filter(Boolean).join(' • ');
+  }
+
+  const jitenQueryInput = document.getElementById('jiten-manual-query');
+  if (jitenQueryInput) {
+    jitenQueryInput.value = s.seriesName || s.title || '';
+  }
+  const jitenBanner = document.getElementById('insp-jiten-status-banner');
+  if (jitenBanner) {
+    jitenBanner.classList.add('hidden');
+    jitenBanner.innerHTML = '';
+  }
+  const jitenResults = document.getElementById('insp-jiten-results');
+  if (jitenResults) {
+    jitenResults.innerHTML = '';
+  }
 
   const coverBox = document.getElementById('insp-cover-box');
   if (s.coverCachePath) {
@@ -529,10 +560,12 @@ function populateInspector(detail) {
 
   // Quick links (e.g. effective jiten.moe URL)
   const quickLinks = document.getElementById('insp-quick-links');
-  quickLinks.innerHTML = '';
-  const jiten = s.customFields && s.customFields['jiten_moe_url'];
-  if (jiten && jiten.effectiveValueText) {
-    quickLinks.innerHTML = `<a href="${escapeHtml(jiten.effectiveValueText)}" target="_blank" class="jiten-link-pill" style="margin-top:6px">🔗 Open on jiten.moe ${jiten.isInherited ? '(from ' + escapeHtml(jiten.sourceEntityName) + ')' : ''}</a>`;
+  if (quickLinks) {
+    quickLinks.innerHTML = '';
+    const jiten = s.customFields && s.customFields['jiten_moe_url'];
+    if (jiten && jiten.effectiveValueText) {
+      quickLinks.innerHTML = `<a href="${escapeHtml(jiten.effectiveValueText)}" target="_blank" class="jiten-link-pill" style="margin-top:0">🔗 Open on jiten.moe ${jiten.isInherited ? '(from ' + escapeHtml(jiten.sourceEntityName) + ')' : ''}</a>`;
+    }
   }
 
   document.getElementById('insp-title').value = s.title || '';
@@ -770,6 +803,7 @@ async function saveInspectorBook(e) {
   const updated = await rpcCall('library.updateBookMetadata', req);
   state.activeBookDetail = updated;
   populateInspector(updated);
+  closeBookInfoModal();
   await reloadSidebarAndBooks();
 }
 
@@ -784,12 +818,180 @@ async function resetCurrentBookToOpf() {
 
 async function deleteCurrentBook() {
   if (!state.activeBookDetail) return;
-  const bookId = state.activeBookDetail.summary.bookId;
-  await rpcCall('library.deleteBook', { bookId });
+  const s = state.activeBookDetail.summary;
+  if (!confirm(`Are you sure you want to remove "${s.title}" from your library?`)) return;
+  await rpcCall('library.deleteBook', { bookId: s.bookId });
   state.activeBookDetail = null;
-  document.getElementById('inspector-content').classList.add('hidden');
-  document.getElementById('inspector-empty').classList.remove('hidden');
+  closeBookInfoModal();
   await reloadSidebarAndBooks();
+}
+
+// Modal Pop-up & Tab Controllers
+function switchBookInfoTab(tabKey) {
+  const tabs = ['meta', 'jiten', 'chapters', 'studypack', 'opf'];
+  for (const t of tabs) {
+    const btn = document.getElementById(`tab-btn-${t}`);
+    const pane = document.getElementById(`pane-book-${t}`);
+    if (btn) btn.classList.toggle('active', t === tabKey);
+    if (pane) pane.classList.toggle('hidden', t !== tabKey);
+  }
+}
+
+async function openBookInfoModal(bookId) {
+  if (!bookId && state.activeBookDetail) {
+    bookId = state.activeBookDetail.summary.bookId;
+  }
+  if (!bookId) return;
+  await inspectBook(bookId);
+  switchBookInfoTab('meta');
+  const modal = document.getElementById('book-info-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeBookInfoModal() {
+  const modal = document.getElementById('book-info-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function onBookInfoBackdropClick(e) {
+  if (e.target.id === 'book-info-modal') {
+    closeBookInfoModal();
+  }
+}
+
+// Jiten.moe Integration (One-Button Press Action)
+async function lookupJitenMoeForCurrentBook(customQuery) {
+  const detail = state.activeBookDetail;
+  if (!detail) return;
+  const s = detail.summary;
+  const query = (customQuery || s.seriesName || s.title || '').trim();
+  if (!query) {
+    alert('Please enter a title or series name to look up on jiten.moe');
+    return;
+  }
+
+  const resultsBox = document.getElementById('insp-jiten-results');
+  if (!resultsBox) return;
+  resultsBox.innerHTML = `<div style="padding:10px;color:var(--text-muted)">🔍 Searching jiten.moe for "<strong>${escapeHtml(query)}</strong>"...</div>`;
+
+  try {
+    const res = await rpcCall('library.searchJitenMoe', { query });
+    const items = res?.items || [];
+    if (items.length === 0) {
+      resultsBox.innerHTML = `
+        <div style="padding:10px;background:rgba(0,0,0,0.15);border-radius:6px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span style="color:var(--text-muted)">No direct matches on jiten.moe for "<strong>${escapeHtml(query)}</strong>".</span>
+          <a href="https://jiten.moe/decks/media?search=${encodeURIComponent(query)}" target="_blank" class="btn btn-sm btn-secondary">🌐 Search on jiten.moe in Browser</a>
+        </div>
+      `;
+      return;
+    }
+
+    resultsBox.innerHTML = `
+      <div class="jiten-results-grid">
+        ${items.map(item => `
+          <div class="jiten-match-item">
+            ${item.coverUrl ? `<img src="${escapeHtml(item.coverUrl)}" class="jiten-match-cover" alt="" onerror="this.style.display='none'" />` : ''}
+            <div class="jiten-match-info">
+              <div class="jiten-match-title">${escapeHtml(item.originalTitle)}</div>
+              <div class="jiten-match-sub">${escapeHtml([item.romajiTitle, item.englishTitle].filter(Boolean).join(' • '))}</div>
+              <div class="jiten-match-stats">
+                <span class="jiten-diff-pill">★ Diff: ${item.difficulty}/10</span>
+                <span>Chars: ${item.characterCount ? item.characterCount.toLocaleString() : 0}</span>
+                <span>Words: ${item.wordCount ? item.wordCount.toLocaleString() : 0}</span>
+                ${item.childrenDeckCount > 0 ? `<span style="color:var(--accent-color)">${item.childrenDeckCount} Volumes</span>` : ''}
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+                <button type="button" class="btn btn-primary btn-sm" onclick='applyJitenDeck(${JSON.stringify(item)})'>⚡ Apply to Book</button>
+                ${item.childrenDeckCount > 0 ? `<button type="button" class="btn btn-secondary btn-sm" onclick="expandJitenSubDecks(${item.deckId})">▼ View Volumes</button>` : ''}
+                <a href="${escapeHtml(item.jitenUrl)}" target="_blank" class="btn-link" style="font-size:11px">🔗 View on jiten.moe</a>
+              </div>
+              <div id="jiten-subdecks-${item.deckId}" class="hidden" style="margin-top:8px;padding-left:8px;border-left:2px solid var(--border-color)"></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch (err) {
+    resultsBox.innerHTML = `
+      <div style="padding:10px;color:var(--danger)">
+        Failed to query jiten.moe: ${escapeHtml(err.message || String(err))}
+        <div style="margin-top:6px">
+          <a href="https://jiten.moe/decks/media?search=${encodeURIComponent(query)}" target="_blank" class="btn btn-sm btn-secondary">🌐 Open Search in Browser</a>
+        </div>
+      </div>
+    `;
+  }
+}
+
+async function expandJitenSubDecks(deckId) {
+  const container = document.getElementById(`jiten-subdecks-${deckId}`);
+  if (!container) return;
+  if (!container.classList.contains('hidden')) {
+    container.classList.add('hidden');
+    return;
+  }
+  container.classList.remove('hidden');
+  container.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px 0">Loading volume subdecks...</div>';
+
+  try {
+    const res = await rpcCall('library.getJitenDeckDetail', { deckId });
+    const subDecks = res?.subDecks || [];
+    if (subDecks.length === 0) {
+      container.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px 0">No volume subdecks found.</div>';
+      return;
+    }
+    container.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+        ${subDecks.map(sd => `
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:rgba(0,0,0,0.18);border-radius:4px">
+            <div>
+              <strong style="color:var(--text-primary)">${escapeHtml(sd.originalTitle)}</strong>
+              <span class="jiten-diff-pill" style="font-size:10px;margin-left:6px">★ ${sd.difficulty}</span>
+              <span style="opacity:0.6;margin-left:6px;font-size:11px">${sd.characterCount ? sd.characterCount.toLocaleString() : 0} chars</span>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" style="font-size:10px;padding:2px 8px" onclick='applyJitenDeck(${JSON.stringify(sd)})'>⚡ Apply Vol</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  } catch (err) {
+    container.innerHTML = `<div style="color:var(--danger);font-size:11px">Error loading volumes: ${escapeHtml(err.message)}</div>`;
+  }
+}
+
+function applyJitenDeck(deck) {
+  if (!deck) return;
+  const cfInputs = document.querySelectorAll('.insp-cf-input');
+  for (const input of cfInputs) {
+    const key = input.dataset.fieldKey;
+    if (key === 'jiten_moe_url') {
+      input.value = deck.jitenUrl || `https://jiten.moe/decks/media/${deck.deckId}`;
+    } else if (key === 'jiten_difficulty') {
+      input.value = deck.difficulty != null ? deck.difficulty : '';
+    }
+  }
+
+  const descEl = document.getElementById('insp-description');
+  if (descEl && !descEl.value.trim() && deck.description) {
+    descEl.value = deck.description;
+  }
+
+  const quickLinks = document.getElementById('insp-quick-links');
+  if (quickLinks) {
+    quickLinks.innerHTML = `<a href="${escapeHtml(deck.jitenUrl || `https://jiten.moe/decks/media/${deck.deckId}`)}" target="_blank" class="jiten-link-pill" style="margin-top:0">🔗 Open on jiten.moe (Applied)</a>`;
+  }
+
+  const statusEl = document.getElementById('insp-jiten-status-banner');
+  if (statusEl) {
+    statusEl.innerHTML = `
+      <div style="padding:8px 12px;background:rgba(16,185,129,0.15);border:1px solid #10b981;border-radius:6px;color:#34d399;font-size:12px;display:flex;align-items:center;gap:8px">
+        <span>✓</span>
+        <span>Applied Jiten.moe information (Deck #${deck.deckId}, Difficulty: ${deck.difficulty || '—'})! Click <strong>Save Changes</strong> below to persist.</span>
+      </div>
+    `;
+    statusEl.classList.remove('hidden');
+  }
 }
 
 // =========================================================================
@@ -803,7 +1005,6 @@ function handleBookRowClick(e, bookId) {
   // If Shift is held, range-select
   if (e.shiftKey && lastSelectedBookId) {
     selectBookRange(lastSelectedBookId, bookId);
-    inspectBook(bookId);
     return;
   }
 
@@ -816,13 +1017,16 @@ function handleBookRowClick(e, bookId) {
       lastSelectedBookId = bookId;
     }
     renderBooksViewport();
-    inspectBook(bookId);
     return;
   }
 
-  // Regular single click: inspect book
+  // Regular single click: select book
   lastSelectedBookId = bookId;
-  inspectBook(bookId);
+  if (!state.selectedBookIds.has(bookId)) {
+    state.selectedBookIds.clear();
+    state.selectedBookIds.add(bookId);
+  }
+  renderBooksViewport();
 }
 
 function handleBookCheckboxChange(e, bookId, checked) {
@@ -1187,6 +1391,10 @@ function showBookContextMenu(e, bookId) {
     <div class="context-menu-item" onclick="openBookInReader('${bookId}'); hideContextMenu()">
       <span>📖</span>
       <span>Read Now</span>
+    </div>
+    <div class="context-menu-item" onclick="openBookInfoModal('${bookId}'); hideContextMenu()">
+      <span>ℹ️</span>
+      <span>Book Info &amp; Metadata...</span>
     </div>
     <div class="context-menu-item" onclick="openBulkEditModal(); hideContextMenu()">
       <span>✎</span>
@@ -1576,6 +1784,7 @@ async function openCurrentBookInReader() {
 async function openBookInReader(bookId, optionalSpineHref) {
   if (!bookId) return;
   closeDictPopover();
+  closeBookInfoModal();
 
   const params = { bookId };
   if (optionalSpineHref) {
@@ -2023,6 +2232,12 @@ window.addEventListener('keydown', function (e) {
   // Escape key: close context menu, settings modal, or clear selection
   if (e.key === 'Escape') {
     hideContextMenu();
+
+    const infoModal = document.getElementById('book-info-modal');
+    if (infoModal && !infoModal.classList.contains('hidden')) {
+      closeBookInfoModal();
+      return;
+    }
 
     const settingsModal = document.getElementById('modal-settings');
     if (settingsModal && !settingsModal.classList.contains('hidden')) {
