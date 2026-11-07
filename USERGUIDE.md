@@ -50,11 +50,22 @@ Welcome to **Immersive Reading**, an offline-first Japanese reading environment 
 
 Immersive Reading is built on **.NET 10** and **Photino.NET**, providing a lightweight, native desktop window powered by your operating system's native webview.
 
-### Launching the Desktop Application
+### Running the Portable Release (Recommended for Friends / Testers)
+If you received the portable ZIP distribution (`ImmersiveReading-win-x64.zip`):
+1. Extract the ZIP anywhere on your system (e.g. your Desktop or Documents folder).
+2. Double-click **`START-READER.bat`** or **`ImmersiveReading.App.exe`**.
+3. *No installation, administrative privileges, or .NET runtime installation required!*
+
+### Launching from Source Code (Developer Mode)
 Open a terminal in the project root and run:
 ```powershell
 cd k:\immersive-reading\immersive-reader
 dotnet run --project src\ImmersiveReading.App
+```
+
+To build a standalone ZIP release yourself for sharing:
+```powershell
+.\scripts\package_windows.ps1
 ```
 
 ### First-Time Launch Experience

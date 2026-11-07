@@ -123,6 +123,9 @@ enrichement-extractor/books/
 # ==========================================
 # Generated Pipeline Outputs & Artifacts
 # ==========================================
+dist/
+**/dist/
+immersive-reader/dist/
 output/
 **/output/
 enrichement-extractor/output/

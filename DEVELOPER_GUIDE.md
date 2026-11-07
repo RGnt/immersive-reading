@@ -287,7 +287,7 @@ dotnet run --project src\ImmersiveReading.App -- --verify-ui
 
 ### Run Unit & Specification Test Suites
 ```powershell
-# Run all 35 .NET 10 xUnit tests (Phases 1-5 Gherkin specs)
+# Run all 48 .NET 10 xUnit tests (Phases 1-5 Gherkin specs)
 cd k:\immersive-reading\immersive-reader
 dotnet test ImmersiveReading.sln
 
@@ -295,6 +295,13 @@ dotnet test ImmersiveReading.sln
 cd k:\immersive-reading\enrichement-extractor
 .venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
+
+### Package Standalone Windows x64 Release (.ZIP)
+```powershell
+# From workspace root:
+.\scripts\package_windows.ps1
+```
+Builds a 100% self-contained release into `dist/ImmersiveReading-win-x64/` and compresses it into `dist/ImmersiveReading-win-x64.zip` (~50 MB, including native SQLite, MeCab dictionaries, WebView2 host, and complete UI). Automatically runs `--verify-reader` against the compiled binary to ensure the release is functional before archiving.
 
 ---
 

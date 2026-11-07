@@ -428,7 +428,7 @@ public static class Program
             }
             dir = dir.Parent;
         }
-        return Directory.GetCurrentDirectory();
+        return startDir;
     }
 
     private static string FindWorkspaceRoot(string startDir)

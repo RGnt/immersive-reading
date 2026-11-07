@@ -28,6 +28,12 @@ cd k:\immersive-reading\enrichement-extractor
 .venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
+### 3. Build Portable Windows Release Package (.ZIP)
+```powershell
+.\scripts\package_windows.ps1
+```
+Builds a 100% self-contained Windows x64 release in `dist/ImmersiveReading-win-x64/` and packages it into `dist/ImmersiveReading-win-x64.zip` (~50 MB, including native SQLite, MeCab dictionaries, WebView2 host, and complete UI). Recipients do not need to install the .NET SDK or runtime.
+
 ---
 
 ## Architecture at a Glance
