@@ -3,3 +3,8 @@
 __pycache__/
 *.egg-info/
 tmp/
+books/
+output/
+dist/
+*.epub
+*.pdf

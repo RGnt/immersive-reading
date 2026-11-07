@@ -89,11 +89,37 @@ coverage.xml
 *.cover
 *.pyo
 
-# Enrichement Extractor Output & Publications
+# ==========================================
+# Input Material (Books, EPUBs, Decks, User CSVs)
+# ==========================================
+books/
+**/books/
+enrichement-extractor/books/
+*.epub
+*.mobi
+*.azw3
+*.cbz
+*.cbr
+
+# User CSV and TSV vocabulary/mining decks
+*.tsv
+*.csv
+# Keep reference dictionaries under enrichement-extractor/data/ tracked
+!enrichement-extractor/data/**
+
+# ==========================================
+# Generated Pipeline Outputs & Artifacts
+# ==========================================
+output/
+**/output/
 enrichement-extractor/output/
 enrichement-extractor/.cache/
 enrichement-extractor/.enrichment/
 enrichement-extractor/tmp/
+enrichement-extractor/dist/
 tmp/
 *.tmp
-
+*.pdf
+*.zip
+# Keep reference assets under enrichement-extractor/data/ tracked
+!enrichement-extractor/data/**
