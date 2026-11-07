@@ -2,6 +2,9 @@
 
 Welcome to the **Immersive Reading** repository! If you just opened this workspace and want to understand **how the pieces fit together** or **jump straight into modifying a specific subsystem**, this guide is for you.
 
+> [!TIP]
+> Looking for instructions on how to use the desktop application, manage books, or use reader shortcuts? See the **[USERGUIDE.md](USERGUIDE.md)**.
+
 ---
 
 ## 1. Quick-Find: "I Want to Work On... Where Do I Start?"

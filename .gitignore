@@ -39,9 +39,22 @@ project.assets.json
 # Immersive Reader Runtime Application Data & Local Databases
 immersive-reader/.library-data/
 .library-data/
+**/.library-data/
 *.db
+**/*.db
 *.db-wal
+**/*.db-wal
 *.db-shm
+**/*.db-shm
+*.db-journal
+**/*.db-journal
+*.sqlite
+**/*.sqlite
+*.sqlite3
+**/*.sqlite3
+**/library.db
+**/dictionaries.db
+**/vocabulary.db
 
 # ==========================================
 # Python Artifacts & Virtual Environments

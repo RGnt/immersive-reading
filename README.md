@@ -36,14 +36,15 @@ The ecosystem is divided into two cooperative projects linked by deterministic B
 
 | Component | Technology | Primary Role |
 | :--- | :--- | :--- |
-| **[`immersive-reader/`](immersive-reader)** | .NET 10, Photino.NET, SQLite (WAL+FTS5), AngleSharp, MeCab.DotNet | **Interactive Desktop Reader & High-Scale Library (24k+ books)**.<br>• Nested virtual folders, tags, and inheritable custom fields.<br>• On-the-fly, pre-render `<ruby>` furigana and token span enrichment via custom `ir-book://` scheme.<br>• Sub-5ms indexed SQLite dictionary popover (Yomitan format-3, KANJIDIC2, KanjiVG, rule deinflector).<br>• 1-click Anki sentence mining preserving untranslated story sentences.<br>• AI Companion plugin: zero-spoiler comprehension quizzes and $n+1$ vocabulary-constrained persona chat. |
+| **[`immersive-reader/`](immersive-reader)** | .NET 10, Photino.NET, SQLite (WAL+FTS5), AngleSharp, MeCab.DotNet | **Interactive Desktop Reader & High-Scale Library (24k+ books)**.<br>• Full-width 2-column layout with Book Info modal, 1-click jiten.moe metadata & difficulty ratings.<br>• Nested virtual folders, tags, inheritable custom fields, multi-select drag-and-drop, and empty folder pruning.<br>• Distraction-free reader with Vim motion navigation (`j`/`k`/`h`/`l`/`w`/`b`/`e`/`m`/`f`/`v`/`gg`/`G`), vertical/horizontal layout, and dynamic furigana modes.<br>• On-the-fly, pre-render `<ruby>` furigana and token span enrichment via custom `ir-book://` scheme.<br>• Sub-5ms indexed SQLite dictionary popover (Yomitan format-3, KANJIDIC2, KanjiVG, rule deinflector).<br>• 1-click Anki sentence mining preserving untranslated story sentences.<br>• AI Companion plugin: zero-spoiler comprehension quizzes and $n+1$ vocabulary-constrained persona chat.<br>• Centralized Global Configuration (`Ctrl+,`) with live CSS theming. |
 | **[`enrichement-extractor/`](enrichement-extractor)** | Python >= 3.12, SudachiPy, ReportLab, PyMuPDF | **Offline Batch Study-Pack & Printable PDF Generator**.<br>• 100% offline, deterministic linguistic analysis.<br>• 20-word ordered learning sets (`vocabulary-sets.json`) and kanji context cards.<br>• Printable A4 master and chapter PDFs (`kanji-master.pdf`, `vocabulary-master.pdf`, `grammar-master.pdf`).<br>• Atomic staged releases under `.publication/` with OS-level byte-range leases for zero-race concurrent reader access. |
 
 ---
 
-## Documentation & Developer Guides
+## Documentation & Guides
 
-- **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** — **Start here if you are new:** "Where do I start to work on X?", 5 end-to-end runtime flows, step-by-step recipes for adding features, and how .NET and Python connect.
+- **[USERGUIDE.md](USERGUIDE.md)** — **End-User Guide:** Full guide to using the desktop application, library management, Vim motions, 1-click jiten.moe integration, instant dictionary lookup, sentence mining, and settings.
+- **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** — **Developer Onboarding:** "Where do I start to work on X?", 5 end-to-end runtime flows, step-by-step recipes for adding features, and how .NET and Python connect.
 - **[LLM-WIKI.md](LLM-WIKI.md)** — Master single-file architectural and operational reference, system invariants, contracts, and module catalog.
 - **[AGENTS.md](AGENTS.md)** — Rules and hard invariants for AI coding agents working in this workspace.
 

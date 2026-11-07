@@ -4,8 +4,10 @@ Welcome to the **Immersive Reading LLM Wiki**. This knowledge base documents [`e
 
 ---
 
-## Wiki Pages
+## Wiki Pages & Guides
 
+-1. **[Comprehensive End-User Guide (`../USERGUIDE.md`)](../USERGUIDE.md)**
+    - Complete guide for readers: library navigation, Vim motions, 1-click jiten.moe lookup, sub-5ms dictionary popover, 1-click Anki mining, and settings.
 0. **[Developer Onboarding & Connections (`../DEVELOPER_GUIDE.md`)](../DEVELOPER_GUIDE.md)**
    - Practical guide for someone opening the codebase for the first time: how `immersive-reader/` (.NET 10) and `enrichement-extractor/` (Python) connect, the 5 end-to-end runtime flows, and where to jump in to modify any feature.
 1. **[Master Single-File Reference (`../LLM-WIKI.md`)](../LLM-WIKI.md)**

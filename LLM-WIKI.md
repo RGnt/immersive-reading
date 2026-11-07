@@ -8,6 +8,7 @@
 
 | Wiki Page | Scope & When to Read |
 | :--- | :--- |
+| **[USERGUIDE.md](USERGUIDE.md)** | **End-user manual:** Desktop app usage, library management, Vim motions, 1-click jiten.moe, instant dictionary lookup, sentence mining, and settings |
 | **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** | **Start here if you're new:** How `.NET 10` (`immersive-reader/`) and `Python` (`enrichement-extractor/`) connect, 5 end-to-end runtime flows, and "Where do I start to work on X?" |
 | **[LLM-WIKI.md](LLM-WIKI.md)** *(this file)* | Single-file master map: architecture, module index, invariants, contracts, and task playbooks |
 | **[wiki/index.md](wiki/index.md)** | Topic index, glossary of domain terms, and cross-reference directory |

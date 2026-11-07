@@ -149,6 +149,33 @@ public sealed class LibraryRpcDispatcher
                     ct: ct).ConfigureAwait(false);
             }
 
+            case "library.importBookBytes":
+            {
+                string fileName = GetRequiredString(p, "fileName");
+                string base64 = GetRequiredString(p, "fileBytesBase64");
+                string? folderId = GetOptionalString(p, "folderId");
+                string? seriesName = GetOptionalString(p, "seriesName");
+                double? seriesIdx = GetOptionalDouble(p, "seriesIndex");
+
+                byte[] bytes = Convert.FromBase64String(base64);
+                string tempDir = Path.Combine(Path.GetTempPath(), "ir-imports");
+                Directory.CreateDirectory(tempDir);
+                string cleanFileName = Path.GetFileName(fileName);
+                if (string.IsNullOrWhiteSpace(cleanFileName) || !cleanFileName.EndsWith(".epub", StringComparison.OrdinalIgnoreCase))
+                {
+                    cleanFileName = $"imported-{Guid.NewGuid():N}.epub";
+                }
+                string tempFilePath = Path.Combine(tempDir, $"{Guid.NewGuid():N}-{cleanFileName}");
+                await File.WriteAllBytesAsync(tempFilePath, bytes, ct).ConfigureAwait(false);
+
+                return await _library.ImportBookAsync(
+                    tempFilePath,
+                    folderId,
+                    seriesName,
+                    seriesIdx,
+                    ct: ct).ConfigureAwait(false);
+            }
+
             case "library.scanDirectory":
             {
                 string rootDir = GetRequiredString(p, "rootDirectory");
