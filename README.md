@@ -55,6 +55,7 @@ The ecosystem is divided into two cooperative projects linked by deterministic B
 - **[04 — Photino.NET Reader UI & IPC (`specs/04-photino-reader-ui-and-ipc-spec.md`)](specs/04-photino-reader-ui-and-ipc-spec.md)** — `ir-book://` custom scheme interceptor, JSON-RPC 2.0 IPC protocol, vertical (`vertical-rl`) & horizontal typography, and interactive Popover UI.
 - **[05 — Extensibility, AI Comprehension & $n+1$ Persona Chat (`specs/05-extensibility-and-ai-companion-spec.md`)](specs/05-extensibility-and-ai-companion-spec.md)** — General `IFeaturePlugin` architecture, Reading Comprehension Quizzes (MCQ $\rightarrow$ Freeform from just-read text), spoiler-safe $n+1$ Vocabulary-Constrained Persona Chat (verified by `MeCab.DotNet`), and `ILlmProvider` SDK.
 - **[06 — Junior Developer Implementation Plan & Task Backlog (`specs/06-junior-developer-implementation-plan.md`)](specs/06-junior-developer-implementation-plan.md)** — Step-by-step developer tickets (`TASK-2.1` through `TASK-5.4`) with exact file paths, algorithms, and verification tests for Phases 2–5.
+- **[07 — Global Configuration & Settings System (`specs/07-global-configuration-and-settings-spec.md`)](specs/07-global-configuration-and-settings-spec.md)** — Centralized Settings Screen, `app_settings` SQLite storage, CSS custom properties engine, and live LLM/Directory/Reader updates.
 - **Gherkin BDD Feature Suite (`specs/features/`)**:
   - [01-library-ingestion-and-24k-scanning.feature](specs/features/01-library-ingestion-and-24k-scanning.feature)
   - [02-library-hierarchy-tags-and-custom-fields.feature](specs/features/02-library-hierarchy-tags-and-custom-fields.feature)
@@ -62,6 +63,7 @@ The ecosystem is divided into two cooperative projects linked by deterministic B
   - [04-onthefly-dictionary-lookup-and-vocab.feature](specs/features/04-onthefly-dictionary-lookup-and-vocab.feature)
   - [05-photino-reader-and-study-pack-bridge.feature](specs/features/05-photino-reader-and-study-pack-bridge.feature)
   - [06-ai-comprehension-and-n-plus-one-persona-chat.feature](specs/features/06-ai-comprehension-and-n-plus-one-persona-chat.feature)
+  - [07-global-configuration-and-settings.feature](specs/features/07-global-configuration-and-settings.feature)
 
 ### 2. `enrichement-extractor` Codebase Wiki (`wiki/`)
 1. **[Wiki Home & Glossary (`wiki/index.md`)](wiki/index.md)** — Workspace layout, domain glossary, and cross-reference index.

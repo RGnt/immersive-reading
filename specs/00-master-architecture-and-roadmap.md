@@ -34,6 +34,7 @@ The **Immersive Reading Desktop Application** is a local-first, offline EPUB lib
 | **[04-photino-reader-ui-and-ipc-spec.md](04-photino-reader-ui-and-ipc-spec.md)** | Photino.NET host setup, `ir-book://` custom scheme interceptor, JSON-RPC IPC protocol, vertical/horizontal EPUB pagination, and UI components |
 | **[05-extensibility-and-ai-companion-spec.md](05-extensibility-and-ai-companion-spec.md)** | General `IFeaturePlugin` architecture, Reading Comprehension Quizzes (MCQ $\rightarrow$ Freeform from just-read text), $n+1$ Vocabulary-Constrained Persona Chat (spoiler-safe + MeCab-verified), and `ILlmProvider` SDK |
 | **[06-junior-developer-implementation-plan.md](06-junior-developer-implementation-plan.md)** | Step-by-step Junior Developer Implementation Guide & Ticket Backlog (`TASK-2.1` through `TASK-5.4`) for Phases 2–5 |
+| **[07-global-configuration-and-settings-spec.md](07-global-configuration-and-settings-spec.md)** | Centralized Global Configuration screen, `app_settings` SQLite storage, CSS custom properties engine, and live LLM/Directory/Reader updates |
 
 ### 2.1 Executable Gherkin BDD Feature Specifications (`specs/features/`)
 
@@ -45,6 +46,7 @@ The **Immersive Reading Desktop Application** is a local-first, offline EPUB lib
 | **[04-onthefly-dictionary-lookup-and-vocab.feature](features/04-onthefly-dictionary-lookup-and-vocab.feature)** | `@phase3` — `< 5 ms` dictionary lookup, verb/adjective deinflection, 16-char token-boundary prefix scanning, homograph disambiguation, KanjiVG stroke cards, and live DOM vocabulary status updates |
 | **[05-photino-reader-and-study-pack-bridge.feature](features/05-photino-reader-and-study-pack-bridge.feature)** | `@phase2` / `@phase4` — `ir-book://` custom scheme chapter enrichment & relative asset streaming, path-traversal security, token-level progress persistence, and `enrichement-extractor` study pack bridge |
 | **[06-ai-comprehension-and-n-plus-one-persona-chat.feature](features/06-ai-comprehension-and-n-plus-one-persona-chat.feature)** | `@phase5` — Zero-spoiler passage extraction, adaptive comprehension quizzes (`MultipleChoice` $\rightarrow$ `Guided` $\rightarrow$ `FreeForm`), and spoiler-safe $n+1$ persona chat verified by `MeCab.DotNet` |
+| **[07-global-configuration-and-settings.feature](features/07-global-configuration-and-settings.feature)** | `@config` — Centralized application settings, live theme/color updates, directories, LLM endpoint connectivity, and category reset |
 
 ---
 
