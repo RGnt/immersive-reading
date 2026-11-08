@@ -21,21 +21,26 @@ export async function runReactReaderSelfTest(): Promise<void> {
     // 2. Open book in Reader store
     await readerStore.openBook(targetBook.bookId);
 
-    // Wait for iframe to render
-    await new Promise((r) => setTimeout(r, 400));
+    async function waitForTokens(timeoutMs = 3000): Promise<number> {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        const frame = document.getElementById('reader-frame') as HTMLIFrameElement | null;
+        const doc = frame?.contentDocument;
+        const count = doc ? doc.querySelectorAll('.ir-tok').length : 0;
+        if (count > 0) return count;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return 0;
+    }
 
-    const iframe = document.getElementById('reader-frame') as HTMLIFrameElement | null;
-    let iframeDoc = iframe ? iframe.contentDocument : null;
-    let tokCount = iframeDoc ? iframeDoc.querySelectorAll('.ir-tok').length : 0;
+    let tokCount = await waitForTokens(2000);
 
     // Advance through chapters if cover image had 0 tokens
     const chapters = useReaderStore.getState().chapters;
-    for (let i = 0; i < Math.min(chapters.length, 6) && tokCount === 0; i++) {
-      if (i !== useReaderStore.getState().currentChapterIndex) {
+    for (let i = 0; i < chapters.length && tokCount === 0; i++) {
+      if (!chapters[i].isExcluded && i !== useReaderStore.getState().currentChapterIndex) {
         await readerStore.loadChapter(chapters[i].spineHref, i);
-        await new Promise((r) => setTimeout(r, 350));
-        iframeDoc = iframe ? iframe.contentDocument : null;
-        tokCount = iframeDoc ? iframeDoc.querySelectorAll('.ir-tok').length : 0;
+        tokCount = await waitForTokens(2000);
       }
     }
 

@@ -147,6 +147,7 @@ export interface ChapterSummary {
   title: string;
   charCount: number;
   readProgressPercent: number;
+  isExcluded?: boolean;
 }
 
 export interface OpfOriginalMetadata {

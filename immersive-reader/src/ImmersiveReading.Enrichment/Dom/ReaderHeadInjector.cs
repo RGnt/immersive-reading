@@ -29,13 +29,20 @@ public static class ReaderHeadInjector
         }
 
         // Writing mode class
-        if (options.WritingMode == "vertical-rl")
+        if (options.WritingMode == "vertical-rl" ||
+            (options.WritingMode == "auto" && (html.ClassList.Contains("vrtl") || document.Body?.ClassList.Contains("vrtl") == true)))
         {
             html.ClassList.Add("ir-mode-vertical");
         }
-        else if (options.WritingMode == "horizontal-tb")
+        else if (options.WritingMode == "horizontal-tb" ||
+                 (options.WritingMode == "auto" && (html.ClassList.Contains("hltr") || document.Body?.ClassList.Contains("hltr") == true)))
         {
             html.ClassList.Add("ir-mode-horizontal");
+        }
+        else if (options.WritingMode == "auto")
+        {
+            // Default Japanese/auto texts to vertical mode
+            html.ClassList.Add("ir-mode-vertical");
         }
 
         // Furigana mode class
@@ -59,6 +66,35 @@ public static class ReaderHeadInjector
         {
             html.InsertBefore(head, html.FirstChild);
         }
+
+        // Inline critical theme styling so tokens and colors are visible immediately
+        var criticalStyle = document.CreateElement("style");
+        criticalStyle.Id = "ir-critical-theme";
+        criticalStyle.TextContent = """
+            :root {
+              --bg-primary: #0f172a;
+              --text-primary: #f8fafc;
+              --ruby-color: #e2e8f0;
+              --reader-font: "Noto Serif JP", "Yu Mincho", serif;
+              --reader-font-size: 22px;
+              --reader-line-height: 1.85;
+            }
+            html, body {
+              background-color: var(--bg-primary, #0f172a) !important;
+              color: var(--text-primary, #f8fafc) !important;
+              font-family: var(--reader-font, "Noto Serif JP", "Yu Mincho", serif);
+            }
+            p, div, span, a, h1, h2, h3, h4, h5, h6 {
+              color: inherit;
+            }
+            .ir-tok {
+              color: var(--text-primary, #f8fafc) !important;
+            }
+            rt {
+              color: var(--ruby-color, #e2e8f0) !important;
+            }
+            """;
+        head.AppendChild(criticalStyle);
 
         // Link stylesheet
         var link = document.CreateElement("link");

@@ -71,9 +71,26 @@ public sealed class ReaderRpcModule(
 
         if (string.IsNullOrEmpty(initialSpineHref) && detail.Chapters.Count > 0)
         {
-            var firstValid = detail.Chapters.FirstOrDefault(c => !c.IsExcluded) ?? detail.Chapters[0];
+            var firstValid = detail.Chapters.FirstOrDefault(c => !c.IsExcluded && c.CharCount > 0)
+                ?? detail.Chapters.FirstOrDefault(c => !c.IsExcluded)
+                ?? detail.Chapters[0];
             initialSpineHref = firstValid.SpineHref;
             initialChapterIndex = firstValid.ChapterIndex;
+        }
+        else if (string.IsNullOrWhiteSpace(requestedSpineHref) && detail.Chapters.Count > 0)
+        {
+            // If saved reading progress points to an excluded cover/front-matter chapter, advance to first story chapter
+            var targetCh = detail.Chapters.FirstOrDefault(c => string.Equals(c.SpineHref, initialSpineHref, StringComparison.OrdinalIgnoreCase));
+            if (targetCh is not null && targetCh.IsExcluded)
+            {
+                var storyCh = detail.Chapters.FirstOrDefault(c => !c.IsExcluded && c.CharCount > 0)
+                    ?? detail.Chapters.FirstOrDefault(c => !c.IsExcluded);
+                if (storyCh is not null)
+                {
+                    initialSpineHref = storyCh.SpineHref;
+                    initialChapterIndex = storyCh.ChapterIndex;
+                }
+            }
         }
 
         if (bookSchemeHandler is not null)
