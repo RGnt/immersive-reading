@@ -67,7 +67,11 @@ public sealed record DictionarySettings(
     int MaxDeinflections = 4,
     int MaxResults = 12,
     string CardExportFormat = "both",
-    bool AutoClipboard = true
+    bool AutoClipboard = true,
+    string AnkiConnectUrl = "http://127.0.0.1:8765",
+    string AnkiDeckName = "Japanese::ImmersiveReading",
+    string AnkiModelName = "Japanese (Recognition)",
+    bool AutoSyncAnki = false
 );
 
 public sealed record LibrarySettings(

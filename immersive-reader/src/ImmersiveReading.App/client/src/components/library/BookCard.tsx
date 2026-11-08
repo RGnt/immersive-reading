@@ -11,6 +11,10 @@ interface BookCardProps {
 export const BookCard: React.FC<BookCardProps> = ({ book }) => {
   const openBook = useReaderStore((s) => s.openBook);
   const inspectBook = useLibraryStore((s) => s.inspectBook);
+  const selectedBookIds = useLibraryStore((s) => s.selectedBookIds);
+  const toggleSelectBook = useLibraryStore((s) => s.toggleSelectBook);
+
+  const isSelected = selectedBookIds.includes(book.bookId);
 
   const coverUrl = book.coverCachePath
     ? `ir-app://covers/${book.bookId}.jpg`
@@ -18,7 +22,11 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
 
   return (
     <div
-      className="book-card group relative bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg overflow-hidden flex flex-col hover:border-[var(--accent-color)] transition-all cursor-pointer shadow-sm hover:shadow-md"
+      className={`book-card group relative bg-[var(--bg-surface)] border rounded-lg overflow-hidden flex flex-col transition-all cursor-pointer shadow-sm hover:shadow-md ${
+        isSelected
+          ? 'border-[var(--accent-color)] ring-2 ring-[var(--accent-color)]/40'
+          : 'border-[var(--border-color)] hover:border-[var(--accent-color)]'
+      }`}
       onClick={() => inspectBook(book.bookId)}
       onDoubleClick={(e) => {
         e.stopPropagation();
@@ -27,6 +35,22 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
       title={`${book.title} - ${book.authors}\nDouble-click to read`}
     >
       <div className="relative aspect-[2/3] w-full bg-[var(--bg-primary)] overflow-hidden flex items-center justify-center">
+        {/* CHECKBOX OVERLAY */}
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleSelectBook(book.bookId);
+          }}
+          className={`absolute top-2 left-2 z-10 w-5 h-5 rounded border flex items-center justify-center transition-all cursor-pointer ${
+            isSelected
+              ? 'bg-[var(--accent-color)] border-[var(--accent-color)] text-black'
+              : 'bg-black/60 border-white/50 text-transparent opacity-0 group-hover:opacity-100 hover:border-white'
+          }`}
+          title={isSelected ? 'Deselect book' : 'Select book'}
+        >
+          <span className="text-[11px] font-bold">✓</span>
+        </div>
+
         {coverUrl ? (
           <img
             src={coverUrl}

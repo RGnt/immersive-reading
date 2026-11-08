@@ -225,8 +225,8 @@ public sealed class AppServices : IDisposable
             new Rpc.Modules.LibraryRpcModule(Library, events),
             new Rpc.Modules.JitenRpcModule(Library),
             new Rpc.Modules.ReaderRpcModule(Library, BookScheme, LookupEngine, VocabTracker, Db, events),
-            new Rpc.Modules.DictionaryRpcModule(DictDb),
-            new Rpc.Modules.StudyPackRpcModule(Library, StudyPackBridge, Flashcards, events),
+            new Rpc.Modules.DictionaryRpcModule(DictDb, events: events),
+            new Rpc.Modules.StudyPackRpcModule(Library, StudyPackBridge, Flashcards, events, Config),
             new Rpc.Modules.ConfigRpcModule(Config, events),
             new Rpc.Modules.ExtensionsRpcModule(PluginHost, onSelfTestCompleted)
         ];

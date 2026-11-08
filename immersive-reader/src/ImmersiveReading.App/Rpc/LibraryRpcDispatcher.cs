@@ -98,7 +98,7 @@ public sealed class LibraryRpcDispatcher : IDisposable
         yield return new Modules.JitenRpcModule(library);
         yield return new Modules.ReaderRpcModule(library, bookSchemeHandler, lookupEngine, vocabTracker, db, events);
         yield return new Modules.DictionaryRpcModule(dictDb);
-        yield return new Modules.StudyPackRpcModule(library, studyPackBridge, flashcardService, events);
+        yield return new Modules.StudyPackRpcModule(library, studyPackBridge, flashcardService, events, configManager);
         yield return new Modules.ConfigRpcModule(configManager, events);
         yield return new Modules.ExtensionsRpcModule(featurePluginHost, onSelfTestCompleted);
     }

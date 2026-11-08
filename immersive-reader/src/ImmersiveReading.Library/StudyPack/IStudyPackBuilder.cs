@@ -18,13 +18,15 @@ public sealed class PythonBuildRunner : IStudyPackBuilder
 {
     private readonly string _outputRoot;
     private readonly string? _extractorRoot;
+    private readonly string? _configuredPythonExe;
 
-    public PythonBuildRunner(string outputRoot, string? extractorRoot = null)
+    public PythonBuildRunner(string outputRoot, string? extractorRoot = null, string? configuredPythonExe = null)
     {
         _outputRoot = Path.GetFullPath(outputRoot);
         _extractorRoot = extractorRoot is not null
             ? Path.GetFullPath(extractorRoot)
             : Path.GetDirectoryName(_outputRoot);
+        _configuredPythonExe = configuredPythonExe;
     }
 
     public async Task<StudyPackBuildResult> BuildStudyPackAsync(
@@ -39,10 +41,18 @@ public sealed class PythonBuildRunner : IStudyPackBuilder
             return new StudyPackBuildResult(false, -1, "enrichement-extractor root directory not found.", null);
         }
 
-        string pythonExe = Path.Combine(_extractorRoot, ".venv", "Scripts", "python.exe");
-        if (!File.Exists(pythonExe))
+        string pythonExe = _configuredPythonExe ?? "";
+        if (string.IsNullOrWhiteSpace(pythonExe) || !File.Exists(pythonExe))
         {
-            pythonExe = "python";
+            pythonExe = Path.Combine(_extractorRoot, ".venv", "Scripts", "python.exe");
+            if (!File.Exists(pythonExe))
+            {
+                pythonExe = Path.Combine(_extractorRoot, ".venv", "bin", "python");
+            }
+            if (!File.Exists(pythonExe))
+            {
+                pythonExe = "python3";
+            }
         }
 
         string subCommand = readerOnly ? "enrich" : "build";

@@ -20,6 +20,9 @@ jobs:
           - target: win-x64
             os: windows-latest
             archive_ext: zip
+          - target: osx-arm64
+            os: macos-latest
+            archive_ext: tar.gz
 
     steps:
       - name: Checkout repository
@@ -57,6 +60,7 @@ jobs:
             --self-contained true \
             -p:PublishSingleFile=true \
             -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:BuildReactClient=false \
             -o ./dist/immersive-reader
 
       - name: Clean Symbols (*.pdb)
@@ -69,6 +73,24 @@ jobs:
         shell: bash
         run: |
           mkdir -p ./release-pkg
+          chmod +x ./dist/immersive-reader/ImmersiveReading.App
+          ARCHIVE_NAME="immersive-reader-${{ steps.date.outputs.date }}-${{ matrix.target }}.tar.gz"
+          tar -czvf "./release-pkg/${ARCHIVE_NAME}" -C ./dist immersive-reader
+          echo "archive_path=./release-pkg/${ARCHIVE_NAME}" >> "$GITHUB_ENV"
+          echo "archive_name=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
+
+      - name: Package Release Archive (macOS tar.gz)
+        if: matrix.target == 'osx-arm64'
+        shell: bash
+        run: |
+          mkdir -p ./release-pkg
+          chmod +x ./dist/immersive-reader/ImmersiveReading.App
+          cat << 'EOF' > ./dist/immersive-reader/START-READER.command
+          #!/bin/bash
+          cd "$(dirname "$0")"
+          exec ./ImmersiveReading.App "$@"
+          EOF
+          chmod +x ./dist/immersive-reader/START-READER.command
           ARCHIVE_NAME="immersive-reader-${{ steps.date.outputs.date }}-${{ matrix.target }}.tar.gz"
           tar -czvf "./release-pkg/${ARCHIVE_NAME}" -C ./dist immersive-reader
           echo "archive_path=./release-pkg/${ARCHIVE_NAME}" >> "$GITHUB_ENV"

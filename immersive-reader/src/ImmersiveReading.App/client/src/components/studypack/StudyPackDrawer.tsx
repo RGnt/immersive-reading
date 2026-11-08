@@ -1,14 +1,40 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStudyPackStore } from '../../stores/useStudyPackStore';
-import { X, Sparkles, FileText, Loader2 } from 'lucide-react';
+import { X, Sparkles, FileText, Loader2, Zap, Bookmark, Check } from 'lucide-react';
 
 export const StudyPackDrawer: React.FC = () => {
-  const { isOpen, closeDrawer, overview, isLoading, selectedVocabSetIndex, selectVocabSet } = useStudyPackStore();
+  const {
+    isOpen,
+    closeDrawer,
+    overview,
+    minedCards,
+    isLoading,
+    isSyncingAnki,
+    selectedVocabSetIndex,
+    selectVocabSet,
+    syncAllToAnki,
+  } = useStudyPackStore();
+
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const vocabSets = overview?.vocabularySets || [];
   const activeSet = vocabSets[selectedVocabSetIndex];
+
+  const handleSyncAnki = async () => {
+    setSyncMessage(null);
+    try {
+      const res = await syncAllToAnki();
+      if (res?.message) {
+        setSyncMessage(res.message);
+      } else if (res?.success) {
+        setSyncMessage(`Successfully synced ${res.addedCount} cards to Anki!`);
+      }
+    } catch (err: any) {
+      setSyncMessage(`Anki sync failed: ${err.message || String(err)}`);
+    }
+  };
 
   return (
     <div
@@ -100,6 +126,63 @@ export const StudyPackDrawer: React.FC = () => {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+            </div>
+
+            {/* MINED FLASHCARDS & ANKI DIRECT SYNC */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center space-x-1.5">
+                  <Bookmark className="w-3.5 h-3.5 text-emerald-400" />
+                  <h4 className="text-[11px] font-bold uppercase text-[var(--text-muted)] tracking-wider">
+                    Mined Cards ({minedCards.length})
+                  </h4>
+                </div>
+                {minedCards.length > 0 && (
+                  <button
+                    onClick={handleSyncAnki}
+                    disabled={isSyncingAnki}
+                    className="flex items-center space-x-1 px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-[11px] font-bold text-amber-300 disabled:opacity-50 transition-colors"
+                  >
+                    {isSyncingAnki ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Zap className="w-3 h-3 text-amber-400" />
+                    )}
+                    <span>Sync to Anki</span>
+                  </button>
+                )}
+              </div>
+
+              {syncMessage && (
+                <div className="p-2 mb-2 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center space-x-1.5">
+                  <Check className="w-3.5 h-3.5 shrink-0" />
+                  <span>{syncMessage}</span>
+                </div>
+              )}
+
+              {minedCards.length === 0 ? (
+                <div className="p-4 text-center rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[11px] text-[var(--text-muted)]">
+                  No cards mined yet. Highlight words while reading to create 1-click cards!
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                  {minedCards.map((c: any) => (
+                    <div
+                      key={c.id}
+                      className="p-2 rounded bg-[var(--bg-primary)] border border-[var(--border-color)]/60 text-xs"
+                    >
+                      <div className="flex items-baseline space-x-2">
+                        <span className="font-bold text-[var(--text-primary)]">{c.prompt}</span>
+                        {c.reading && <span className="text-[10px] text-[var(--text-muted)]">[{c.reading}]</span>}
+                        <span className="text-[9px] px-1 py-0.2 rounded bg-black/40 text-[var(--text-muted)] ml-auto font-mono">
+                          {c.chapterTitle || `Ch ${c.chapterNumber}`}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-muted)] mt-0.5 line-clamp-1">{c.meaning}</p>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

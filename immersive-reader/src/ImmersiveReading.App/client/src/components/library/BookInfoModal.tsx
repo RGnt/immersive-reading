@@ -16,7 +16,11 @@ import {
   CheckCircle,
   FileCode,
   FileText,
-  BookCheck
+  BookCheck,
+  Download,
+  AlertTriangle,
+  FileCheck,
+  Loader2,
 } from 'lucide-react';
 
 export const BookInfoModal: React.FC = () => {
@@ -61,6 +65,9 @@ export const BookInfoModal: React.FC = () => {
   const [isJitenSearching, setIsJitenSearching] = useState(false);
   const [jitenResults, setJitenResults] = useState<any[]>([]);
   const [jitenStatus, setJitenStatus] = useState<string | null>(null);
+  const [hasDeckCsv, setHasDeckCsv] = useState(false);
+  const [deckCsvFileName, setDeckCsvFileName] = useState<string | null>(null);
+  const [isDownloadingDeck, setIsDownloadingDeck] = useState(false);
 
   useEffect(() => {
     if (!activeBookDetail) return;
@@ -79,6 +86,8 @@ export const BookInfoModal: React.FC = () => {
     setWritingMode(s.writingMode || 'vertical-rl');
     setCustomSortOrder(String(s.customSortOrder || 0));
     setFolderId(s.folderId || '');
+    setHasDeckCsv(!!activeBookDetail.hasDeckCsv);
+    setDeckCsvFileName(activeBookDetail.deckCsvFileName || null);
     
     // Extract tag IDs
     const currentTags = Array.isArray(s.tags)
@@ -228,6 +237,43 @@ export const BookInfoModal: React.FC = () => {
     }
 
     setJitenStatus(`Applied jiten.moe deck #${deck.deckId} (Diff: ${deck.difficulty || '—'}). Click Save Changes below to persist!`);
+  };
+
+  const extractDeckId = (val?: string): number | null => {
+    if (!val) return null;
+    const match = val.match(/(\d+)(?!.*\d)/);
+    return match ? parseInt(match[1], 10) : null;
+  };
+
+  const handleDownloadDeck = async (deckId?: number, deckMeta?: any) => {
+    const targetDeckId = deckId ?? extractDeckId(bookCustomFields['jiten_moe_url']);
+    if (!targetDeckId) {
+      setJitenStatus('No valid Jiten deck ID found to download. Search for a deck below.');
+      return;
+    }
+
+    setIsDownloadingDeck(true);
+    setJitenStatus('Downloading deck CSV from jiten.moe and attaching to book folder...');
+    try {
+      const res = await rpc.call<any>('library.downloadJitenDeckCsv', {
+        bookId: book.bookId,
+        deckId: targetDeckId,
+      });
+
+      if (res?.ok) {
+        setHasDeckCsv(true);
+        setDeckCsvFileName(res.fileName || 'deck.csv');
+        if (deckMeta) {
+          applyJitenDeck(deckMeta);
+        }
+        setJitenStatus(`⚡ Successfully downloaded and attached deck.csv (${Math.round((res.fileSizeBytes || 0) / 1024)} KB)!`);
+        await fetchBooks();
+      }
+    } catch (err: any) {
+      setJitenStatus(`Download failed: ${err.message || String(err)}`);
+    } finally {
+      setIsDownloadingDeck(false);
+    }
   };
 
   const toggleTag = (tagId: string) => {
@@ -620,6 +666,52 @@ export const BookInfoModal: React.FC = () => {
                   )}
                 </div>
 
+                {/* 1-Click Deck Status & Download */}
+                <div className="p-3 rounded bg-black/30 border border-[var(--border-color)] flex items-center justify-between">
+                  <div className="flex items-center space-x-2.5">
+                    {hasDeckCsv ? (
+                      <FileCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                    )}
+                    <div>
+                      <div className="font-semibold text-xs text-[var(--text-primary)] flex items-center space-x-2">
+                        <span>Vocabulary Deck:</span>
+                        {hasDeckCsv ? (
+                          <span className="text-emerald-400 font-bold">✓ {deckCsvFileName || 'deck.csv'} Attached</span>
+                        ) : (
+                          <span className="text-amber-400 font-bold">⚠️ No deck.csv in book folder</span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-[var(--text-muted)]">
+                        {hasDeckCsv
+                          ? 'Enrichment pipeline and study packs will use this deck for vocabulary & pitch data.'
+                          : 'Download the vocabulary deck below to enable frequency & JLPT metadata, definitions, and pitch accent.'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    {extractDeckId(bookCustomFields['jiten_moe_url']) ? (
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadDeck()}
+                        disabled={isDownloadingDeck}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 disabled:opacity-50 shadow-sm"
+                      >
+                        {isDownloadingDeck ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                        <span>{hasDeckCsv ? '⚡ Re-download CSV Deck' : '⚡ 1-Click Download & Attach Deck'}</span>
+                      </button>
+                    ) : (
+                      !hasDeckCsv && (
+                        <span className="text-[10px] text-[var(--text-muted)] italic">
+                          Search below to 1-click install
+                        </span>
+                      )
+                    )}
+                  </div>
+                </div>
+
                 <form onSubmit={handleJitenSearch} className="flex space-x-2">
                   <input
                     type="text"
@@ -682,17 +774,26 @@ export const BookInfoModal: React.FC = () => {
                           <div className="flex items-center space-x-2 mt-2">
                             <button
                               type="button"
-                              onClick={() => applyJitenDeck(item)}
-                              className="px-2.5 py-1 rounded bg-[var(--accent-color)] text-black text-[11px] font-semibold hover:opacity-90"
+                              onClick={() => handleDownloadDeck(item.deckId, item)}
+                              disabled={isDownloadingDeck}
+                              className="px-2.5 py-1 rounded bg-[var(--accent-color)] text-black text-[11px] font-semibold hover:opacity-90 flex items-center space-x-1"
                             >
-                              ⚡ Apply to Book
+                              {isDownloadingDeck ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                              <span>⚡ 1-Click Download CSV & Apply</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => applyJitenDeck(item)}
+                              className="px-2.5 py-1 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-[11px] hover:border-[var(--accent-color)]"
+                            >
+                              Apply Metadata Only
                             </button>
                             {item.jitenUrl && (
                               <a
                                 href={item.jitenUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="text-[11px] text-[var(--accent-color)] hover:underline inline-flex items-center space-x-0.5"
+                                className="text-[11px] text-[var(--accent-color)] hover:underline inline-flex items-center space-x-0.5 ml-1"
                               >
                                 <span>View on jiten.moe</span>
                                 <ExternalLink className="w-2.5 h-2.5" />
@@ -810,6 +911,22 @@ export const BookInfoModal: React.FC = () => {
                     {book.hasStudyPack ? 'READY' : 'NOT GENERATED'}
                   </span>
                 </div>
+
+                {!hasDeckCsv && (
+                  <div className="p-2.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                      <span>No vocabulary deck CSV attached. Vocabulary cards & pitch accents require a deck.csv.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('jiten')}
+                      className="px-2.5 py-1 rounded bg-amber-500 text-black font-semibold text-[11px] hover:opacity-90 shrink-0"
+                    >
+                      1-Click Download Deck ➔
+                    </button>
+                  </div>
+                )}
 
                 <p className="text-xs text-[var(--text-muted)] leading-relaxed">
                   Study packs include offline Kanji Master PDFs, 20-word Vocabulary set PDFs, and Anki-compatible

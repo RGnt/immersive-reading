@@ -44,6 +44,10 @@ export interface AppConfig {
     maxResults: number;
     cardExportFormat: 'tsv' | 'anki' | 'both';
     autoClipboard: boolean;
+    ankiConnectUrl?: string;
+    ankiDeckName?: string;
+    ankiModelName?: string;
+    autoSyncAnki?: boolean;
   };
   library: LibrarySettings;
 }
@@ -162,6 +166,51 @@ export interface BookDetail {
   chapters: ChapterSummary[];
   effectiveCustomFields?: any[];
   directBookCustomFields?: Record<string, string>;
+  hasDeckCsv?: boolean;
+  deckCsvFileName?: string;
+}
+
+export interface DictionaryItem {
+  dictionaryId: string;
+  title: string;
+  revision: string;
+  language: string;
+  priorityOrder: number;
+  enabled: boolean;
+  importedAtUtc: string;
+}
+
+export interface DictionaryPreset {
+  id: string;
+  title: string;
+  description: string;
+  downloadUrl: string;
+  approxSizeMb: number;
+  defaultPriority: number;
+}
+
+export interface PythonDetectInfo {
+  found: boolean;
+  pythonPath?: string | null;
+  version?: string | null;
+  isConfigured: boolean;
+  portableZipExists: boolean;
+  portableZipPath?: string | null;
+}
+
+export interface BookmarkItem {
+  bookmarkId: string;
+  bookId: string;
+  chapterIndex: number;
+  spineHref: string;
+  startTokenId?: number | null;
+  endTokenId?: number | null;
+  startCharOffset: number;
+  endCharOffset: number;
+  selectedText: string;
+  userNote: string;
+  highlightColor?: string | null;
+  createdAtUtc: string;
 }
 
 export interface ReaderChapterPayload {

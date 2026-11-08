@@ -1,6 +1,6 @@
 import React from 'react';
 import { useReaderStore } from '../../stores/useReaderStore';
-import { Bookmark, X, Loader2 } from 'lucide-react';
+import { Bookmark, X, Loader2, Zap } from 'lucide-react';
 
 export const DictionaryPopover: React.FC = () => {
   const { popover, closePopover, setPopoverTab, mineFlashcard, updateWordStatus } = useReaderStore();
@@ -128,17 +128,32 @@ export const DictionaryPopover: React.FC = () => {
                     </div>
 
                     <div className="pt-1 flex items-center justify-between border-t border-[var(--border-color)]/30">
-                      <button
-                        onClick={() => mineFlashcard(idx)}
-                        className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors ${
-                          t._minedCardId
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                            : 'bg-emerald-600/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-600/30'
-                        }`}
-                      >
-                        <Bookmark className="w-3 h-3" />
-                        <span>{t._minedCardId ? '✓ Mined' : '+ Mine Card'}</span>
-                      </button>
+                      <div className="flex items-center space-x-1.5">
+                        <button
+                          onClick={() => mineFlashcard(idx)}
+                          className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors ${
+                            t._minedCardId
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : 'bg-emerald-600/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-600/30'
+                          }`}
+                        >
+                          <Bookmark className="w-3 h-3" />
+                          <span>{t._minedCardId ? '✓ Mined' : '+ Mine Card'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => mineFlashcard(idx, true)}
+                          className={`flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-semibold border transition-colors ${
+                            t._ankiSynced
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                              : 'bg-amber-600/20 text-amber-400 border-amber-500/40 hover:bg-amber-600/30'
+                          }`}
+                          title="Instant 1-click sync to local Anki (Port 8765)"
+                        >
+                          <Zap className="w-3 h-3" />
+                          <span>{t._ankiSynced ? '⚡ In Anki' : '⚡ Anki'}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}

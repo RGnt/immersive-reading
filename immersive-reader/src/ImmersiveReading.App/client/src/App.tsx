@@ -12,8 +12,10 @@ import { useConfigStore } from './stores/useConfigStore';
 import { useReaderStore } from './stores/useReaderStore';
 import { rpc } from './services/rpc';
 import { runReactReaderSelfTest } from './services/selfTestRunner';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 export const App: React.FC = () => {
+  useKeyboardShortcuts();
   const loadBootstrap = useLibraryStore((s) => s.loadBootstrap);
   const loadConfig = useConfigStore((s) => s.loadConfig);
   const isReaderActive = useReaderStore((s) => s.isActive);

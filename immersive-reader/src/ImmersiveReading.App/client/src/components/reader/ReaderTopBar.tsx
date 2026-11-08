@@ -10,6 +10,9 @@ import {
   Sparkles,
   AlignVerticalSpaceAround,
   AlignHorizontalSpaceAround,
+  Search,
+  Bookmark,
+  HelpCircle,
 } from 'lucide-react';
 
 export const ReaderTopBar: React.FC = () => {
@@ -27,6 +30,10 @@ export const ReaderTopBar: React.FC = () => {
     toggleWritingMode,
     adjustFontSize,
     fontSizePx,
+    openSearch,
+    toggleBookmarks,
+    bookmarks,
+    toggleShortcuts,
   } = useReaderStore();
 
   const openCompanion = useCompanionStore((s) => s.openCompanion);
@@ -129,6 +136,31 @@ export const ReaderTopBar: React.FC = () => {
           )}
         </button>
 
+        {/* IN-READER SEARCH BUTTON */}
+        <button
+          onClick={openSearch}
+          className="flex items-center space-x-1 px-2 py-1 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent-color)]"
+          title="Find in chapter (Ctrl+F)"
+        >
+          <Search className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Find</span>
+        </button>
+
+        {/* BOOKMARKS BUTTON */}
+        <button
+          onClick={toggleBookmarks}
+          className="flex items-center space-x-1 px-2 py-1 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:border-[var(--accent-color)] relative"
+          title="Bookmarks & Saved Positions"
+        >
+          <Bookmark className="w-3.5 h-3.5 text-amber-400" />
+          <span className="hidden sm:inline">Marks</span>
+          {bookmarks.length > 0 && (
+            <span className="text-[9px] px-1 rounded-full bg-amber-500/20 text-amber-300 font-bold ml-0.5">
+              {bookmarks.length}
+            </span>
+          )}
+        </button>
+
         <button
           onClick={() => openStudyPack(bookDetail.summary.bookId)}
           className="flex items-center space-x-1 px-2 py-1 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-emerald-400 hover:border-emerald-400"
@@ -146,6 +178,15 @@ export const ReaderTopBar: React.FC = () => {
         >
           <Bot className="w-3.5 h-3.5" />
           <span>AI Companion</span>
+        </button>
+
+        {/* SHORTCUTS HELP BUTTON */}
+        <button
+          onClick={() => toggleShortcuts()}
+          className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)] border border-transparent hover:border-[var(--border-color)]"
+          title="Keyboard Shortcuts & Vim Motions (?)"
+        >
+          <HelpCircle className="w-4 h-4" />
         </button>
       </div>
     </div>

@@ -16,10 +16,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="wwwroot/**/*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <Target Name="BuildReactClient" BeforeTargets="BeforeBuild" Condition="!Exists('wwwroot\dist\index.html')">
+  <Target Name="BuildReactClient" BeforeTargets="BeforeBuild" Condition="!Exists('wwwroot/dist/index.html') And '$(BuildReactClient)' != 'false'">
     <Message Importance="high" Text="Building React frontend with Vite..." />
     <Exec Command="npm run build" WorkingDirectory="client" />
   </Target>

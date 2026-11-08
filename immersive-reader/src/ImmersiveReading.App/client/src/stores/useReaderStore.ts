@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { rpc } from '../services/rpc';
-import type { BookDetail, ChapterSummary } from '../types/api';
+import type { BookDetail, ChapterSummary, BookmarkItem } from '../types/api';
 
 export interface TermSense {
   dictionaryTitle: string;
@@ -28,6 +28,7 @@ export interface LookupTerm {
   senses: TermSense[];
   userStatus?: number;
   _minedCardId?: string;
+  _ankiSynced?: boolean;
 }
 
 export interface LookupQueryResult {
@@ -58,6 +59,20 @@ interface ReaderState {
   fontSizePx: number;
   popover: PopoverState;
 
+  // Search state
+  isSearchOpen: boolean;
+  searchQuery: string;
+  searchMatchCount: number;
+  searchCurrentIndex: number;
+
+  // Bookmark state
+  bookmarks: BookmarkItem[];
+  isBookmarksOpen: boolean;
+
+  // Shortcuts & Toast state
+  isShortcutsOpen: boolean;
+  toastMessage: string | null;
+
   // Actions
   openBook: (bookId: string, initialHref?: string) => Promise<void>;
   loadChapter: (spineHref: string, chapterIndex?: number, preloadedHtml?: string) => Promise<void>;
@@ -65,13 +80,28 @@ interface ReaderState {
   nextChapter: () => Promise<void>;
   prevChapter: () => Promise<void>;
   setFuriganaMode: (mode: 'AllKanji' | 'Uncommon' | 'None') => void;
+  cycleFuriganaMode: () => void;
   toggleWritingMode: () => void;
   adjustFontSize: (deltaPx: number) => void;
   handleTokenClick: (tokenId: number, rect: { left: number; top: number; width?: number; height?: number }) => Promise<void>;
   closePopover: () => void;
   setPopoverTab: (tab: 'words' | 'kanji') => void;
-  mineFlashcard: (selectedTermIndex?: number) => Promise<any>;
+  mineFlashcard: (selectedTermIndex?: number, forceAnkiSync?: boolean) => Promise<any>;
   updateWordStatus: (termIndex: number, statusInt: number) => Promise<void>;
+
+  // Search & Bookmark Actions
+  openSearch: () => void;
+  closeSearch: () => void;
+  setSearchQuery: (query: string) => void;
+  setSearchResults: (count: number, current: number) => void;
+  toggleBookmarks: () => void;
+  loadBookmarks: () => Promise<void>;
+  addBookmark: (note?: string, selectedText?: string) => Promise<void>;
+  removeBookmark: (bookmarkId: string) => Promise<void>;
+
+  // Shortcuts & Toast Actions
+  toggleShortcuts: (force?: boolean) => void;
+  showToast: (message: string) => void;
 }
 
 export const useReaderStore = create<ReaderState>((set, get) => ({
@@ -92,6 +122,14 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     isLoading: false,
     activeTab: 'words',
   },
+  isSearchOpen: false,
+  searchQuery: '',
+  searchMatchCount: 0,
+  searchCurrentIndex: 0,
+  bookmarks: [],
+  isBookmarksOpen: false,
+  isShortcutsOpen: false,
+  toastMessage: null,
 
   openBook: async (bookId: string, initialHref?: string) => {
     try {
@@ -119,6 +157,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       if (!initialHtml && spineHref) {
         await get().loadChapter(spineHref, chapterIndex);
       }
+      await get().loadBookmarks();
     } catch (err) {
       console.error('Failed to open book in reader:', err);
     }
@@ -184,6 +223,14 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     set({ furiganaMode });
   },
 
+  cycleFuriganaMode: () => {
+    const modes: ('AllKanji' | 'Uncommon' | 'None')[] = ['AllKanji', 'Uncommon', 'None'];
+    const curIdx = modes.indexOf(get().furiganaMode);
+    const nextMode = modes[(curIdx + 1) % modes.length];
+    set({ furiganaMode: nextMode });
+    get().showToast(`Furigana: ${nextMode}`);
+  },
+
   toggleWritingMode: () => {
     const current = get().writingMode;
     set({ writingMode: current === 'vertical-rl' ? 'horizontal-tb' : 'vertical-rl' });
@@ -244,7 +291,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     set((s) => ({ popover: { ...s.popover, activeTab } }));
   },
 
-  mineFlashcard: async (selectedTermIndex = 0) => {
+  mineFlashcard: async (selectedTermIndex = 0, forceAnkiSync = false) => {
     const { bookDetail, chapters, currentChapterIndex, popover } = get();
     if (!bookDetail || !popover.result || !popover.result.terms[selectedTermIndex]) return null;
 
@@ -265,9 +312,13 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
         meaningGloss: firstSense,
         sentenceText,
         sentenceRuby,
+        syncToAnki: forceAnkiSync,
       });
 
       term._minedCardId = res?.card?.id || 'mined';
+      if (res?.anki?.success) {
+        term._ankiSynced = true;
+      }
       set((s) => ({ popover: { ...s.popover } }));
       return res;
     } catch (err) {
@@ -294,5 +345,64 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     } catch (err) {
       console.error('Failed to set vocabulary status:', err);
     }
+  },
+
+  openSearch: () => set({ isSearchOpen: true }),
+  closeSearch: () =>
+    set({ isSearchOpen: false, searchQuery: '', searchMatchCount: 0, searchCurrentIndex: 0 }),
+  setSearchQuery: (searchQuery: string) => set({ searchQuery }),
+  setSearchResults: (searchMatchCount: number, searchCurrentIndex: number) =>
+    set({ searchMatchCount, searchCurrentIndex }),
+
+  toggleBookmarks: () => set((s) => ({ isBookmarksOpen: !s.isBookmarksOpen })),
+  loadBookmarks: async () => {
+    const { bookDetail } = get();
+    if (!bookDetail) return;
+    try {
+      const res = await rpc.call<any>('reader.getBookmarks', { bookId: bookDetail.summary.bookId });
+      set({ bookmarks: res?.bookmarks || [] });
+    } catch (err) {
+      console.error('Failed to load bookmarks:', err);
+    }
+  },
+  addBookmark: async (note = '', selectedText) => {
+    const { bookDetail, currentChapterIndex, currentSpineHref, chapters } = get();
+    if (!bookDetail) return;
+    const ch = chapters[currentChapterIndex] || { title: `Chapter ${currentChapterIndex + 1}` };
+    const text = selectedText || ch.title || `Chapter ${currentChapterIndex + 1}`;
+    try {
+      const bm = await rpc.call<BookmarkItem>('reader.addBookmark', {
+        bookId: bookDetail.summary.bookId,
+        chapterIndex: currentChapterIndex,
+        spineHref: currentSpineHref,
+        selectedText: text,
+        userNote: note,
+      });
+      if (bm) {
+        set((s) => ({ bookmarks: [...s.bookmarks, bm] }));
+      }
+    } catch (err) {
+      console.error('Failed to add bookmark:', err);
+    }
+  },
+  removeBookmark: async (bookmarkId: string) => {
+    try {
+      await rpc.call('reader.removeBookmark', { bookmarkId });
+      set((s) => ({ bookmarks: s.bookmarks.filter((b) => b.bookmarkId !== bookmarkId) }));
+    } catch (err) {
+      console.error('Failed to remove bookmark:', err);
+    }
+  },
+
+  toggleShortcuts: (force) => {
+    set((s) => ({ isShortcutsOpen: force !== undefined ? force : !s.isShortcutsOpen }));
+  },
+
+  showToast: (message: string) => {
+    set({ toastMessage: message });
+    if ((window as any).__toastTimer) clearTimeout((window as any).__toastTimer);
+    (window as any).__toastTimer = setTimeout(() => {
+      set({ toastMessage: null });
+    }, 1500);
   },
 }));

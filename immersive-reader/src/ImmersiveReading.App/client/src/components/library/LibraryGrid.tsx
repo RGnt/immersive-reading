@@ -3,6 +3,7 @@ import { useLibraryStore } from '../../stores/useLibraryStore';
 import { useReaderStore } from '../../stores/useReaderStore';
 import { useConfigStore } from '../../stores/useConfigStore';
 import { BookCard } from './BookCard';
+import { BulkActionBar } from './BulkActionBar';
 import type { BookRecord } from '../../types/api';
 import {
   ChevronLeft,
@@ -22,7 +23,20 @@ import {
 } from 'lucide-react';
 
 export const LibraryGrid: React.FC = () => {
-  const { books, totalBooks, offset, limit, isLoading, fetchBooks, viewMode, inspectBook } = useLibraryStore();
+  const {
+    books,
+    totalBooks,
+    offset,
+    limit,
+    isLoading,
+    fetchBooks,
+    viewMode,
+    inspectBook,
+    selectedBookIds,
+    toggleSelectBook,
+    selectAllOnPage,
+    clearSelection,
+  } = useLibraryStore();
   const openBook = useReaderStore((s) => s.openBook);
   const { config, updateLibrarySettings, openSettings } = useConfigStore();
 
@@ -233,6 +247,21 @@ export const LibraryGrid: React.FC = () => {
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="border-b border-[var(--border-color)] text-[var(--text-muted)] uppercase text-[10px] tracking-wider bg-[var(--bg-surface)] select-none">
+                <th className="py-2.5 px-3 w-8 text-center">
+                  <input
+                    type="checkbox"
+                    checked={filteredBooks.length > 0 && selectedBookIds.length >= filteredBooks.length}
+                    onChange={() => {
+                      if (selectedBookIds.length >= filteredBooks.length) {
+                        clearSelection();
+                      } else {
+                        selectAllOnPage();
+                      }
+                    }}
+                    className="rounded border-[var(--border-color)] text-[var(--accent-color)] focus:ring-0 cursor-pointer"
+                    title="Select all books"
+                  />
+                </th>
                 <th className="py-2.5 px-3 w-32">Actions</th>
                 <th className="py-2.5 px-3">Title</th>
                 <th className="py-2.5 px-3">Series & Vol</th>
@@ -247,7 +276,7 @@ export const LibraryGrid: React.FC = () => {
                 <React.Fragment key={shelf.id}>
                   {librarySettings.primaryGrouping !== 'none' && (
                     <tr className="bg-black/30 border-y border-[var(--border-color)]">
-                      <td colSpan={7} className="py-2 px-3">
+                      <td colSpan={8} className="py-2 px-3">
                         <div className="flex items-center space-x-2 font-bold text-xs text-[var(--text-primary)]">
                           {renderShelfIcon(shelf.icon)}
                           <span>{shelf.title}</span>
@@ -262,8 +291,18 @@ export const LibraryGrid: React.FC = () => {
                     <tr
                       key={b.bookId}
                       onDoubleClick={() => openBook(b.bookId)}
-                      className="hover:bg-[var(--bg-surface)] transition-colors cursor-pointer group border-b border-[var(--border-color)]/50"
+                      className={`hover:bg-[var(--bg-surface)] transition-colors cursor-pointer group border-b border-[var(--border-color)]/50 ${
+                        selectedBookIds.includes(b.bookId) ? 'bg-[var(--accent-color)]/10' : ''
+                      }`}
                     >
+                      <td className="py-2 px-3 text-center shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedBookIds.includes(b.bookId)}
+                          onChange={() => toggleSelectBook(b.bookId)}
+                          className="rounded border-[var(--border-color)] text-[var(--accent-color)] focus:ring-0 cursor-pointer"
+                        />
+                      </td>
                       <td className="py-2 px-3 shrink-0" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center space-x-1.5">
                           <button
@@ -474,6 +513,9 @@ export const LibraryGrid: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* FLOATING BULK ACTIONS BAR */}
+      <BulkActionBar />
     </div>
   );
 };

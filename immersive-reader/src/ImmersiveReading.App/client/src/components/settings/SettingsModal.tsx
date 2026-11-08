@@ -16,8 +16,11 @@ import {
   RotateCcw,
   Save,
   Zap,
+  Download,
+  RefreshCw,
+  HardDrive,
 } from 'lucide-react';
-import type { AppConfig } from '../../types/api';
+import type { AppConfig, DictionaryItem, DictionaryPreset, PythonDetectInfo } from '../../types/api';
 
 const THEME_PRESETS: Record<string, {
   bgPrimary: string;
@@ -75,12 +78,65 @@ export const SettingsModal: React.FC = () => {
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [ankiTestStatus, setAnkiTestStatus] = useState<{ reachable: boolean; message: string } | null>(null);
+  const [isTestingAnki, setIsTestingAnki] = useState(false);
+
+  // Dictionaries state
+  const [installedDicts, setInstalledDicts] = useState<DictionaryItem[]>([]);
+  const [dictPresets, setDictPresets] = useState<DictionaryPreset[]>([]);
+  const [installingDictId, setInstallingDictId] = useState<string | null>(null);
+  const [dictStatusMessage, setDictStatusMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [customZipInput, setCustomZipInput] = useState('');
+
+  // Python state
+  const [pythonInfo, setPythonInfo] = useState<PythonDetectInfo | null>(null);
+  const [isDetectingPython, setIsDetectingPython] = useState(false);
+  const [isSettingUpPython, setIsSettingUpPython] = useState(false);
+  const [pythonStatusMessage, setPythonStatusMessage] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const loadDictionaries = async () => {
+    try {
+      const [listRes, presetsRes] = await Promise.all([
+        rpc.call<any>('dictionaries.list'),
+        rpc.call<any>('dictionaries.getPresets'),
+      ]);
+      if (listRes?.dictionaries) {
+        setInstalledDicts(listRes.dictionaries);
+      }
+      if (presetsRes?.presets) {
+        setDictPresets(presetsRes.presets);
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
+  const loadPythonInfo = async () => {
+    setIsDetectingPython(true);
+    try {
+      const res = await rpc.call<PythonDetectInfo>('config.detectPython');
+      setPythonInfo(res);
+    } catch {
+      // Ignore
+    } finally {
+      setIsDetectingPython(false);
+    }
+  };
 
   useEffect(() => {
     if (config) {
       setLocalConfig(JSON.parse(JSON.stringify(config)));
     }
   }, [config, isSettingsOpen]);
+
+  useEffect(() => {
+    if (!isSettingsOpen) return;
+    if (activeTab === 'dictionaries') {
+      loadDictionaries();
+    } else if (activeTab === 'general') {
+      loadPythonInfo();
+    }
+  }, [isSettingsOpen, activeTab]);
 
   if (!isSettingsOpen || !localConfig) return null;
 
@@ -181,6 +237,34 @@ export const SettingsModal: React.FC = () => {
     }
   };
 
+  const handleTestAnki = async () => {
+    setIsTestingAnki(true);
+    setAnkiTestStatus(null);
+    try {
+      const res = await rpc.call<any>('anki.ping', {
+        url: localConfig.dictionaries.ankiConnectUrl || 'http://127.0.0.1:8765',
+      });
+      if (res?.reachable) {
+        setAnkiTestStatus({
+          reachable: true,
+          message: `Connected to Anki! (AnkiConnect version ${res.version})`,
+        });
+      } else {
+        setAnkiTestStatus({
+          reachable: false,
+          message: res?.error || 'Could not connect. Is Anki open with AnkiConnect installed?',
+        });
+      }
+    } catch (err: any) {
+      setAnkiTestStatus({
+        reachable: false,
+        message: err.message || 'Failed to ping AnkiConnect.',
+      });
+    } finally {
+      setIsTestingAnki(false);
+    }
+  };
+
   const toggleExcludedFolder = (folderId: string) => {
     const current = localConfig.library?.excludedFolderIds || [];
     const next = current.includes(folderId) ? current.filter((id) => id !== folderId) : [...current, folderId];
@@ -203,6 +287,109 @@ export const SettingsModal: React.FC = () => {
         excludedTagIds: next,
       },
     });
+  };
+
+  const handleInstallDictionary = async (preset: DictionaryPreset) => {
+    setInstallingDictId(preset.id);
+    setDictStatusMessage({ text: `Downloading and installing ${preset.title}...`, ok: true });
+    try {
+      const res = await rpc.call<any>('dictionaries.downloadAndInstall', {
+        presetId: preset.id,
+        priorityOrder: preset.defaultPriority,
+      });
+      if (res?.ok) {
+        setDictStatusMessage({
+          text: `Successfully installed ${res.title} (${(res.termsCount || 0).toLocaleString()} terms, ${(res.kanjiCount || 0).toLocaleString()} kanji)!`,
+          ok: true,
+        });
+        await loadDictionaries();
+      }
+    } catch (err: any) {
+      setDictStatusMessage({ text: `Install failed: ${err.message || String(err)}`, ok: false });
+    } finally {
+      setInstallingDictId(null);
+    }
+  };
+
+  const handleInstallCustomDictionary = async () => {
+    if (!customZipInput.trim()) return;
+    setInstallingDictId('custom');
+    setDictStatusMessage({ text: `Downloading / importing custom Yomitan dictionary...`, ok: true });
+    try {
+      const res = await rpc.call<any>('dictionaries.downloadAndInstall', {
+        url: customZipInput.trim(),
+        priorityOrder: 50,
+      });
+      if (res?.ok) {
+        setDictStatusMessage({
+          text: `Successfully installed ${res.title} (${(res.termsCount || 0).toLocaleString()} terms)!`,
+          ok: true,
+        });
+        setCustomZipInput('');
+        await loadDictionaries();
+      }
+    } catch (err: any) {
+      setDictStatusMessage({ text: `Install failed: ${err.message || String(err)}`, ok: false });
+    } finally {
+      setInstallingDictId(null);
+    }
+  };
+
+  const handleAutoDetectPython = async () => {
+    setIsDetectingPython(true);
+    setPythonStatusMessage(null);
+    try {
+      const res = await rpc.call<PythonDetectInfo>('config.detectPython');
+      setPythonInfo(res);
+      if (res?.found && res.pythonPath) {
+        setLocalConfig({
+          ...localConfig,
+          directories: {
+            ...localConfig.directories,
+            pythonExecutablePath: res.pythonPath,
+          },
+        });
+        setPythonStatusMessage({
+          text: `Detected ${res.version || 'Python'} at ${res.pythonPath}! Click 'Save Changes' to persist.`,
+          ok: true,
+        });
+      } else {
+        setPythonStatusMessage({
+          text: 'No Python 3.12+ installation detected in standard locations.',
+          ok: false,
+        });
+      }
+    } catch (err: any) {
+      setPythonStatusMessage({ text: `Detection error: ${err.message || String(err)}`, ok: false });
+    } finally {
+      setIsDetectingPython(false);
+    }
+  };
+
+  const handleSetupPortablePython = async () => {
+    setIsSettingUpPython(true);
+    setPythonStatusMessage({ text: 'Setting up portable Python runtime...', ok: true });
+    try {
+      const res = await rpc.call<any>('config.setupPortablePython');
+      if (res?.ok) {
+        setLocalConfig({
+          ...localConfig,
+          directories: {
+            ...localConfig.directories,
+            pythonExecutablePath: res.pythonPath,
+          },
+        });
+        setPythonStatusMessage({
+          text: res.message || `Activated portable Python (${res.version})!`,
+          ok: true,
+        });
+        await loadPythonInfo();
+      }
+    } catch (err: any) {
+      setPythonStatusMessage({ text: `Setup failed: ${err.message || String(err)}`, ok: false });
+    } finally {
+      setIsSettingUpPython(false);
+    }
   };
 
   return (
@@ -346,6 +533,62 @@ export const SettingsModal: React.FC = () => {
                   placeholder="Leave blank to use default workspace 'enrichement-extractor'"
                   className="w-full px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
                 />
+              </div>
+
+              {/* 1-Click Portable Python Runtime Card */}
+              <div className="p-3.5 rounded-lg border border-[var(--border-color)] bg-black/25 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <HardDrive className="w-4 h-4 text-[var(--accent-color)]" />
+                    <span className="font-semibold text-xs text-[var(--text-primary)]">Python Runtime Environment (1-Click)</span>
+                  </div>
+                  {pythonInfo?.found ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1">
+                      <Check className="w-3 h-3" />
+                      <span>{pythonInfo.version || 'Python Found'}</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      Not Configured
+                    </span>
+                  )}
+                </div>
+
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  The Python pipeline powers reader enrichment, tokenization, and study pack master sheets.
+                  Use 1-click auto-detect for local environments or set up the portable standalone distribution.
+                </p>
+
+                {pythonStatusMessage && (
+                  <div className={`p-2 rounded text-xs flex items-center space-x-1.5 ${
+                    pythonStatusMessage.ok ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    {pythonStatusMessage.ok ? <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                    <span>{pythonStatusMessage.text}</span>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAutoDetectPython}
+                    disabled={isDetectingPython}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] hover:border-[var(--accent-color)] text-xs text-[var(--text-primary)] disabled:opacity-50"
+                  >
+                    {isDetectingPython ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 text-[var(--accent-color)]" />}
+                    <span>⚡ 1-Click Auto-Detect Python</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSetupPortablePython}
+                    disabled={isSettingUpPython}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 disabled:opacity-50 shadow-sm"
+                  >
+                    {isSettingUpPython ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                    <span>📦 1-Click Setup Portable Runtime</span>
+                  </button>
+                </div>
               </div>
 
               <div>
@@ -1049,7 +1292,162 @@ export const SettingsModal: React.FC = () => {
 
           {/* TAB: DICTIONARIES */}
           {activeTab === 'dictionaries' && (
-            <div className="space-y-4 max-w-2xl">
+            <div className="space-y-5 max-w-2xl">
+              {/* 1-Click Curated Dictionaries Section */}
+              <div className="p-4 rounded-lg border border-[var(--border-color)] bg-black/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Library className="w-4 h-4 text-[var(--accent-color)]" />
+                    <span className="font-semibold text-xs text-[var(--text-primary)]">
+                      Curated Offline Yomitan Dictionaries (1-Click Install)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={loadDictionaries}
+                    className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-primary)]"
+                    title="Refresh Dictionaries"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-[var(--text-muted)]">
+                  Download and import high-quality open-source Japanese dictionaries directly into your local database.
+                  All lookup remains 100% offline and deterministic.
+                </p>
+
+                {dictStatusMessage && (
+                  <div className={`p-2 rounded text-xs flex items-center space-x-1.5 ${
+                    dictStatusMessage.ok ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' : 'bg-red-500/10 text-red-300 border border-red-500/30'
+                  }`}>
+                    {dictStatusMessage.ok ? <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+                    <span>{dictStatusMessage.text}</span>
+                  </div>
+                )}
+
+                <div className="space-y-2 pt-1">
+                  {(dictPresets.length > 0 ? dictPresets : [
+                    { id: 'jmdict_english', title: 'JMdict (English)', description: 'General vocabulary dictionary with parts of speech and senses (EDRDG).', downloadUrl: '', approxSizeMb: 18.5, defaultPriority: 10 },
+                    { id: 'kanjidic2', title: 'KANJIDIC2 (English)', description: 'Kanji characters, stroke counts, Onyomi, Kunyomi, and English meanings.', downloadUrl: '', approxSizeMb: 2.4, defaultPriority: 20 },
+                    { id: 'jmnedict', title: 'JMnedict (Names)', description: 'Japanese names of persons, places, surnames, and company names.', downloadUrl: '', approxSizeMb: 12.0, defaultPriority: 30 },
+                    { id: 'kireicake_accents', title: 'KireiCake (Pitch Accents)', description: 'Pitch accent contours and downstep indicators for standard Japanese.', downloadUrl: '', approxSizeMb: 4.2, defaultPriority: 40 },
+                  ]).map((preset) => {
+                    const isInstalled = installedDicts.some(
+                      (d) =>
+                        d.title.toLowerCase().includes(preset.title.toLowerCase().split(' ')[0]) ||
+                        d.dictionaryId.toLowerCase().includes(preset.id)
+                    );
+                    const isInstalling = installingDictId === preset.id;
+
+                    return (
+                      <div
+                        key={preset.id}
+                        className="p-2.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] flex items-center justify-between hover:border-[var(--accent-color)] transition-colors"
+                      >
+                        <div className="min-w-0 flex-1 pr-3">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-semibold text-xs text-[var(--text-primary)]">{preset.title}</span>
+                            <span className="text-[10px] text-[var(--text-muted)] font-mono">~{preset.approxSizeMb} MB</span>
+                            {isInstalled && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300">
+                                Installed
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-[var(--text-muted)] mt-0.5 truncate">{preset.description}</p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleInstallDictionary(preset)}
+                          disabled={isInstalling}
+                          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-xs font-semibold shrink-0 transition-all ${
+                            isInstalled
+                              ? 'bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--accent-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                              : 'bg-[var(--accent-color)] text-black hover:opacity-90 shadow-sm'
+                          } disabled:opacity-50`}
+                        >
+                          {isInstalling ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Download className="w-3.5 h-3.5" />
+                          )}
+                          <span>{isInstalling ? 'Installing...' : isInstalled ? 'Re-install' : '1-Click Install'}</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Custom Yomitan ZIP / URL input */}
+                <div className="pt-2 border-t border-[var(--border-color)]/60">
+                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase mb-1">
+                    Install Custom Yomitan Archive (URL or Local ZIP path)
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="text"
+                      value={customZipInput}
+                      onChange={(e) => setCustomZipInput(e.target.value)}
+                      placeholder="e.g. https://.../dictionary.zip or C:\Downloads\dictionary.zip"
+                      className="flex-1 px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] font-mono focus:outline-none focus:border-[var(--accent-color)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleInstallCustomDictionary}
+                      disabled={!customZipInput.trim() || installingDictId === 'custom'}
+                      className="flex items-center space-x-1 px-3 py-1.5 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--accent-color)] text-xs font-semibold text-[var(--text-primary)] disabled:opacity-50"
+                    >
+                      {installingDictId === 'custom' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Download className="w-3.5 h-3.5 text-[var(--accent-color)]" />
+                      )}
+                      <span>Import ZIP</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Installed Dictionaries List */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
+                  <span className="font-semibold uppercase tracking-wider text-[11px]">
+                    Installed Dictionaries ({installedDicts.length})
+                  </span>
+                </div>
+
+                {installedDicts.length === 0 ? (
+                  <div className="p-3 rounded bg-black/10 border border-[var(--border-color)] text-center text-xs text-[var(--text-muted)]">
+                    No offline dictionaries currently imported. Click 1-Click Install above for JMdict or KANJIDIC2!
+                  </div>
+                ) : (
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {installedDicts.map((d) => (
+                      <div
+                        key={d.dictionaryId}
+                        className="p-2 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] flex items-center justify-between text-xs"
+                      >
+                        <div className="min-w-0 flex-1 truncate pr-2">
+                          <div className="font-medium text-[var(--text-primary)] truncate">{d.title}</div>
+                          <div className="text-[10px] text-[var(--text-muted)] font-mono">
+                            Revision: {d.revision} • Priority: {d.priorityOrder} • Lang: {d.language}
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">
+                          Active
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-[var(--border-color)] pt-3">
+                <h4 className="text-xs font-bold text-[var(--text-primary)] mb-3">Lookup & Mining Settings</h4>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase mb-1">
@@ -1156,6 +1554,122 @@ export const SettingsModal: React.FC = () => {
                   />
                   <span>Automatically copy Japanese sentence text to clipboard when mining cards</span>
                 </label>
+              </div>
+
+              {/* ANKICONNECT DIRECT SYNC INTEGRATION */}
+              <div className="pt-4 border-t border-[var(--border-color)] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-[var(--text-primary)] flex items-center space-x-1.5">
+                      <Zap className="w-4 h-4 text-amber-400" />
+                      <span>AnkiConnect Direct Sync (Local Port 8765)</span>
+                    </h4>
+                    <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                      Instantly sends mined flashcards into your local Anki installation without manual file imports.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTestAnki}
+                    disabled={isTestingAnki}
+                    className="flex items-center space-x-1 px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] hover:border-[var(--accent-color)] text-xs font-semibold text-[var(--text-primary)] disabled:opacity-50 transition-colors"
+                  >
+                    {isTestingAnki ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-amber-400" />}
+                    <span>Test AnkiConnect</span>
+                  </button>
+                </div>
+
+                {ankiTestStatus && (
+                  <div
+                    className={`p-2.5 rounded text-xs flex items-center space-x-2 ${
+                      ankiTestStatus.reachable
+                        ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
+                        : 'bg-red-500/10 border border-red-500/30 text-red-300'
+                    }`}
+                  >
+                    {ankiTestStatus.reachable ? (
+                      <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                    )}
+                    <span>{ankiTestStatus.message}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase mb-1">
+                      Endpoint URL
+                    </label>
+                    <input
+                      type="text"
+                      value={localConfig.dictionaries.ankiConnectUrl || 'http://127.0.0.1:8765'}
+                      onChange={(e) =>
+                        setLocalConfig({
+                          ...localConfig,
+                          dictionaries: { ...localConfig.dictionaries, ankiConnectUrl: e.target.value },
+                        })
+                      }
+                      placeholder="http://127.0.0.1:8765"
+                      className="w-full px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] font-mono focus:outline-none focus:border-[var(--accent-color)]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase mb-1">
+                      Target Deck Name
+                    </label>
+                    <input
+                      type="text"
+                      value={localConfig.dictionaries.ankiDeckName || 'Japanese::ImmersiveReading'}
+                      onChange={(e) =>
+                        setLocalConfig({
+                          ...localConfig,
+                          dictionaries: { ...localConfig.dictionaries, ankiDeckName: e.target.value },
+                        })
+                      }
+                      placeholder="Japanese::ImmersiveReading"
+                      className="w-full px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase mb-1">
+                      Note Type / Model
+                    </label>
+                    <input
+                      type="text"
+                      value={localConfig.dictionaries.ankiModelName || 'Japanese (Recognition)'}
+                      onChange={(e) =>
+                        setLocalConfig({
+                          ...localConfig,
+                          dictionaries: { ...localConfig.dictionaries, ankiModelName: e.target.value },
+                        })
+                      }
+                      placeholder="Japanese (Recognition)"
+                      className="w-full px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-1">
+                  <label className="flex items-center space-x-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={localConfig.dictionaries.autoSyncAnki || false}
+                      onChange={(e) =>
+                        setLocalConfig({
+                          ...localConfig,
+                          dictionaries: { ...localConfig.dictionaries, autoSyncAnki: e.target.checked },
+                        })
+                      }
+                      className="rounded border-[var(--border-color)]"
+                    />
+                    <span className="text-xs">
+                      ⚡ Automatically sync flashcard directly to Anki whenever "+ Mine Card" is clicked
+                    </span>
+                  </label>
+                </div>
               </div>
             </div>
           )}

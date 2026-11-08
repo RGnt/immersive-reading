@@ -336,6 +336,8 @@ public sealed class JitenRpcModule(LibraryManager library, JitenMoeService? jite
             bookId,
             deckId,
             destinationPath = destFile,
+            fileName = "deck.csv",
+            hasDeckCsv = true,
             fileSizeBytes = csvBytes.Length
         };
     }

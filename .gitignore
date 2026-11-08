@@ -117,9 +117,9 @@ node_modules/
 # ==========================================
 # Input Material (Books, EPUBs, Decks, User CSVs)
 # ==========================================
-books/
-**/books/
+/books/
 enrichement-extractor/books/
+immersive-reader/books/
 *.epub
 *.mobi
 *.azw3

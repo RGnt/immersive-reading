@@ -16,10 +16,10 @@ public sealed class PythonStudyPackBridge : IStudyPackCatalog
 
     public string OutputRoot => _outputRoot;
 
-    public PythonStudyPackBridge(string outputRoot, string? extractorRoot = null, IStudyPackBuilder? builder = null)
+    public PythonStudyPackBridge(string outputRoot, string? extractorRoot = null, IStudyPackBuilder? builder = null, string? configuredPythonExe = null)
     {
         _outputRoot = Path.GetFullPath(outputRoot);
-        _builder = builder ?? new PythonBuildRunner(_outputRoot, extractorRoot);
+        _builder = builder ?? new PythonBuildRunner(_outputRoot, extractorRoot, configuredPythonExe);
     }
 
     public (string? Generation, string? ManifestPath, JsonDocument? ManifestDoc) TryReadActivePublication()

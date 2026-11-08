@@ -127,3 +127,21 @@ img, svg {
   object-fit: contain;
 }
 
+/* In-Reader Search Highlights */
+.ir-search-match {
+  background-color: rgba(250, 204, 21, 0.45) !important;
+  color: #fff !important;
+  border-radius: 2px !important;
+  outline: 1px solid rgba(250, 204, 21, 0.7) !important;
+  transition: all 0.15s ease;
+}
+
+.ir-search-current {
+  background-color: #f59e0b !important;
+  color: #000 !important;
+  font-weight: bold !important;
+  border-radius: 3px !important;
+  outline: 2px solid #fbbf24 !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.8) !important;
+}
+

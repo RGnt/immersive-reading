@@ -265,4 +265,97 @@ public sealed class RpcContractTests : IDisposable
         Assert.Equal(0, result.GetProperty("plugins").GetArrayLength());
         Assert.Equal(0, result.GetProperty("uiPanels").GetArrayLength());
     }
+
+    [Fact]
+    public async Task AnkiPing_GracefullyHandlesOfflineAnki()
+    {
+        var result = await CallOkAsync("anki.ping", """{"url":"http://127.0.0.1:59999"}""");
+        Assert.False(result.GetProperty("reachable").GetBoolean());
+        Assert.Equal(0, result.GetProperty("version").GetInt32());
+        Assert.False(string.IsNullOrEmpty(result.GetProperty("error").GetString()));
+    }
+
+    [Fact]
+    public async Task Bookmarks_Lifecycle_AddGetRemove()
+    {
+        const string bookId = "b-test-123";
+        using (var conn = _db.OpenConnection())
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO books (
+                    book_id, epub_sha256, folder_id, title, sort_title,
+                    series_name, series_index, custom_sort_order, authors, author_sort,
+                    isbn, publisher, imprint, published_date, language, description,
+                    is_metadata_edited, folder_path, epub_file_name, file_size_bytes,
+                    cover_cache_path, chapter_count, total_char_count, stats_computed,
+                    writing_mode, added_at_utc, updated_at_utc, has_study_pack
+                ) VALUES (
+                    $id, 'sha256', NULL, 'Test Book', 'Test Book',
+                    '', NULL, 0, 'Author', 'Author',
+                    '', '', '', '2025-01-01', 'ja', '',
+                    0, 'C:\\Books', 'book.epub', 1000,
+                    NULL, 1, 100, 1,
+                    'vertical-rl', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 0
+                );
+            """;
+            cmd.Parameters.AddWithValue("$id", bookId);
+            cmd.ExecuteNonQuery();
+        }
+
+        // 1. Add Bookmark
+        var addRes = await CallOkAsync("reader.addBookmark", $$"""
+        {
+            "bookId": "{{bookId}}",
+            "chapterIndex": 1,
+            "spineHref": "chapter-01.xhtml",
+            "selectedText": "冒頭の一文",
+            "userNote": "Important note"
+        }
+        """);
+
+        Assert.True(addRes.TryGetProperty("bookmarkId", out var bIdProp));
+        string bookmarkId = bIdProp.GetString()!;
+        Assert.Equal("冒頭の一文", addRes.GetProperty("selectedText").GetString());
+        Assert.Equal("Important note", addRes.GetProperty("userNote").GetString());
+
+        // 2. Get Bookmarks
+        var getRes = await CallOkAsync("reader.getBookmarks", $$"""{"bookId":"{{bookId}}"}""");
+        Assert.Equal(1, getRes.GetProperty("count").GetInt32());
+        var bms = getRes.GetProperty("bookmarks");
+        Assert.Equal(1, bms.GetArrayLength());
+        Assert.Equal(bookmarkId, bms[0].GetProperty("bookmarkId").GetString());
+
+        // 3. Remove Bookmark
+        var rmRes = await CallOkAsync("reader.removeBookmark", $$"""{"bookmarkId":"{{bookmarkId}}"}""");
+        Assert.True(rmRes.GetProperty("ok").GetBoolean());
+
+        // 4. Verify Empty
+        var getRes2 = await CallOkAsync("reader.getBookmarks", $$"""{"bookId":"{{bookId}}"}""");
+        Assert.Equal(0, getRes2.GetProperty("count").GetInt32());
+    }
+
+    [Fact]
+    public async Task Dictionaries_GetPresets_ReturnsCuratedPresets()
+    {
+        var result = await CallOkAsync("dictionaries.getPresets");
+        Assert.True(result.TryGetProperty("presets", out var presetsProp));
+        var presets = presetsProp.EnumerateArray().ToList();
+        Assert.True(presets.Count >= 4);
+
+        var ids = presets.Select(p => p.GetProperty("id").GetString()).ToList();
+        Assert.Contains("jmdict_english", ids);
+        Assert.Contains("kanjidic2", ids);
+        Assert.Contains("jmnedict", ids);
+        Assert.Contains("kireicake_accents", ids);
+    }
+
+    [Fact]
+    public async Task Config_DetectPython_ReturnsValidSchema()
+    {
+        var result = await CallOkAsync("config.detectPython");
+        Assert.True(result.TryGetProperty("found", out _));
+        Assert.True(result.TryGetProperty("isConfigured", out _));
+        Assert.True(result.TryGetProperty("portableZipExists", out _));
+    }
 }

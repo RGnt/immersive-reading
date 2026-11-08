@@ -21,6 +21,9 @@ public sealed class ReaderRpcModule(
             yield return ("reader.getChapterContent", (req, _) => Task.FromResult<object?>(GetChapterContent(req)));
             yield return ("reader.saveProgress", (req, _) => Task.FromResult<object?>(SaveProgress(req)));
             yield return ("reader.setEnrichmentOptions", (req, _) => Task.FromResult<object?>(SetEnrichmentOptions(req)));
+            yield return ("reader.addBookmark", (req, _) => Task.FromResult<object?>(AddBookmark(req)));
+            yield return ("reader.getBookmarks", (req, _) => Task.FromResult<object?>(GetBookmarks(req)));
+            yield return ("reader.removeBookmark", (req, _) => Task.FromResult<object?>(RemoveBookmark(req)));
             yield return ("lookup.query", QueryLookupAsync);
             yield return ("vocab.setStatus", (req, _) => Task.FromResult<object?>(SetVocabStatus(req)));
         }
@@ -213,5 +216,124 @@ public sealed class ReaderRpcModule(
         events?.Emit("vocab.statusChanged", new { language = lang, lemma, reading, status = statusInt });
         return new { ok = true, lemma, status = statusInt };
     }
+
+    private object? AddBookmark(RpcRequest req)
+    {
+        if (db is null) throw new InvalidOperationException("Database not available.");
+        string bookId = req.RequiredString("bookId");
+        string spineHref = req.RequiredString("spineHref");
+        int chIdx = req.OptionalInt("chapterIndex") ?? 0;
+        int? startTokenId = req.OptionalInt("startTokenId");
+        int? endTokenId = req.OptionalInt("endTokenId");
+        int startOffset = req.OptionalInt("startCharOffset") ?? 0;
+        int endOffset = req.OptionalInt("endCharOffset") ?? 0;
+        string text = req.OptionalString("selectedText") ?? "Bookmark";
+        string note = req.OptionalString("userNote") ?? "";
+        string? color = req.OptionalString("highlightColor") ?? "#38bdf8";
+        string bookmarkId = Guid.NewGuid().ToString("N");
+        string now = DateTime.UtcNow.ToString("o");
+
+        using var conn = db.OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO bookmarks (
+                bookmark_id, book_id, chapter_index, spine_href,
+                start_token_id, end_token_id, start_char_offset, end_char_offset,
+                selected_text, user_note, highlight_color, created_at_utc
+            ) VALUES (
+                $bId, $bookId, $chIdx, $href,
+                $startTok, $endTok, $startOffset, $endOffset,
+                $text, $note, $color, $now
+            );
+        """;
+        cmd.Parameters.AddWithValue("$bId", bookmarkId);
+        cmd.Parameters.AddWithValue("$bookId", bookId);
+        cmd.Parameters.AddWithValue("$chIdx", chIdx);
+        cmd.Parameters.AddWithValue("$href", spineHref);
+        cmd.Parameters.AddWithValue("$startTok", (object?)startTokenId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$endTok", (object?)endTokenId ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$startOffset", startOffset);
+        cmd.Parameters.AddWithValue("$endOffset", endOffset);
+        cmd.Parameters.AddWithValue("$text", text);
+        cmd.Parameters.AddWithValue("$note", note);
+        cmd.Parameters.AddWithValue("$color", (object?)color ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$now", now);
+        cmd.ExecuteNonQuery();
+
+        var item = new BookmarkItem(
+            bookmarkId, bookId, chIdx, spineHref,
+            startTokenId, endTokenId, startOffset, endOffset,
+            text, note, color, now
+        );
+
+        events?.Emit("reader.bookmarkAdded", item);
+        return item;
+    }
+
+    private object? GetBookmarks(RpcRequest req)
+    {
+        if (db is null) return new { bookmarks = Array.Empty<BookmarkItem>() };
+        string bookId = req.RequiredString("bookId");
+        using var conn = db.OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT bookmark_id, book_id, chapter_index, spine_href,
+                   start_token_id, end_token_id, start_char_offset, end_char_offset,
+                   selected_text, user_note, highlight_color, created_at_utc
+            FROM bookmarks
+            WHERE book_id = $bookId
+            ORDER BY chapter_index ASC, start_char_offset ASC, created_at_utc ASC;
+        """;
+        cmd.Parameters.AddWithValue("$bookId", bookId);
+
+        var list = new List<BookmarkItem>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            list.Add(new BookmarkItem(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetInt32(2),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                reader.IsDBNull(5) ? null : reader.GetInt32(5),
+                reader.GetInt32(6),
+                reader.GetInt32(7),
+                reader.GetString(8),
+                reader.GetString(9),
+                reader.IsDBNull(10) ? null : reader.GetString(10),
+                reader.GetString(11)
+            ));
+        }
+        return new { bookId, bookmarks = list, count = list.Count };
+    }
+
+    private object? RemoveBookmark(RpcRequest req)
+    {
+        if (db is null) throw new InvalidOperationException("Database not available.");
+        string bookmarkId = req.RequiredString("bookmarkId");
+        using var conn = db.OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "DELETE FROM bookmarks WHERE bookmark_id = $bId;";
+        cmd.Parameters.AddWithValue("$bId", bookmarkId);
+        int affected = cmd.ExecuteNonQuery();
+        events?.Emit("reader.bookmarkRemoved", new { bookmarkId });
+        return new { ok = affected > 0, bookmarkId };
+    }
 }
+
+public sealed record BookmarkItem(
+    string BookmarkId,
+    string BookId,
+    int ChapterIndex,
+    string SpineHref,
+    int? StartTokenId,
+    int? EndTokenId,
+    int StartCharOffset,
+    int EndCharOffset,
+    string SelectedText,
+    string UserNote,
+    string? HighlightColor,
+    string CreatedAtUtc
+);
 

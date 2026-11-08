@@ -44,8 +44,29 @@ public sealed class LibraryRpcModule(LibraryManager library, IRpcEventSink? even
     private object? GetBookDetail(RpcRequest req)
     {
         string bookId = req.RequiredString("bookId");
-        return library.GetBookDetail(bookId)
+        var detail = library.GetBookDetail(bookId)
             ?? throw new KeyNotFoundException($"Book '{bookId}' not found.");
+
+        string? foundCsvName = null;
+        if (!string.IsNullOrWhiteSpace(detail.Summary.FolderPath) && Directory.Exists(detail.Summary.FolderPath))
+        {
+            var csv = Directory.EnumerateFiles(detail.Summary.FolderPath, "*.csv").FirstOrDefault();
+            if (csv is not null)
+            {
+                foundCsvName = Path.GetFileName(csv);
+            }
+        }
+
+        return new
+        {
+            detail.Summary,
+            detail.OpfOriginal,
+            detail.Chapters,
+            detail.EffectiveCustomFields,
+            detail.DirectBookCustomFields,
+            hasDeckCsv = foundCsvName is not null,
+            deckCsvFileName = foundCsvName
+        };
     }
 
     private async Task<object?> ImportBookAsync(RpcRequest req, CancellationToken ct)

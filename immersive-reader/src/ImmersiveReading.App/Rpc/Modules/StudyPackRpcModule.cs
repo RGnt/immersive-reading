@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using ImmersiveReading.Core.Config;
 using ImmersiveReading.Core.Library;
 using ImmersiveReading.Library;
+using ImmersiveReading.Library.Flashcards;
 
 namespace ImmersiveReading.App.Rpc.Modules;
 
@@ -8,9 +10,11 @@ public sealed class StudyPackRpcModule(
     LibraryManager library,
     PythonStudyPackBridge? studyPackBridge = null,
     FlashcardMiningService? flashcardService = null,
-    IRpcEventSink? events = null) : IRpcModule, IDisposable
+    IRpcEventSink? events = null,
+    IConfigurationManager? configManager = null) : IRpcModule, IDisposable
 {
     private StudyPackLease? _activeStudyLease;
+    private readonly AnkiConnectClient _ankiClient = new();
 
     public IEnumerable<(string Method, RpcHandler Handler)> Handlers
     {
@@ -19,8 +23,12 @@ public sealed class StudyPackRpcModule(
             yield return ("studypack.getOverview", (req, _) => Task.FromResult<object?>(GetOverview(req)));
             yield return ("studypack.build", BuildAsync);
             yield return ("studypack.openPdf", (req, _) => Task.FromResult<object?>(OpenPdf(req)));
-            yield return ("flashcards.mine", (req, _) => Task.FromResult<object?>(MineFlashcard(req)));
+            yield return ("flashcards.mine", MineFlashcardAsync);
             yield return ("flashcards.list", (req, _) => Task.FromResult<object?>(ListFlashcards(req)));
+            yield return ("anki.ping", PingAnkiAsync);
+            yield return ("anki.getDecks", GetAnkiDecksAsync);
+            yield return ("anki.getModels", GetAnkiModelsAsync);
+            yield return ("anki.sync", SyncAnkiNotesAsync);
         }
     }
 
@@ -106,7 +114,7 @@ public sealed class StudyPackRpcModule(
         return new { ok = true, fullPath };
     }
 
-    private object? MineFlashcard(RpcRequest req)
+    private async Task<object?> MineFlashcardAsync(RpcRequest req, CancellationToken ct)
     {
         if (flashcardService is null) throw new InvalidOperationException("Flashcard mining service not configured.");
         string bookId = req.RequiredString("bookId");
@@ -131,7 +139,115 @@ public sealed class StudyPackRpcModule(
             SentenceText: sentenceText));
 
         events?.Emit("flashcards.mined", new { bookId, card = mined.Card, totalBookCards = mined.TotalBookCards });
-        return mined;
+
+        var dictConfig = configManager?.GetConfig().Dictionaries ?? new DictionarySettings();
+        bool shouldSyncAnki = req.OptionalBool("syncToAnki") ?? dictConfig.AutoSyncAnki;
+
+        AnkiSyncResult? ankiSync = null;
+        if (shouldSyncAnki)
+        {
+            ankiSync = await _ankiClient.SyncNotesAsync(
+                endpointUrl: req.OptionalString("ankiUrl") ?? dictConfig.AnkiConnectUrl,
+                deckName: req.OptionalString("ankiDeck") ?? dictConfig.AnkiDeckName,
+                modelName: req.OptionalString("ankiModel") ?? dictConfig.AnkiModelName,
+                notes:
+                [
+                    new AnkiConnectNoteRequest(
+                        Expression: word,
+                        Reading: reading,
+                        Meaning: meaningGloss,
+                        Sentence: sentenceText,
+                        Source: $"{bookTitle} - {chapterTitle}",
+                        Tags: ["ImmersiveReading", bookId]
+                    )
+                ],
+                ct: ct
+            ).ConfigureAwait(false);
+        }
+
+        return new
+        {
+            mined.CardId,
+            mined.LibraryJsonPath,
+            mined.AnkiTsvPath,
+            mined.TotalBookCards,
+            mined.Card,
+            Anki = ankiSync
+        };
+    }
+
+    private async Task<object?> PingAnkiAsync(RpcRequest req, CancellationToken ct)
+    {
+        var dictConfig = configManager?.GetConfig().Dictionaries ?? new DictionarySettings();
+        string url = req.OptionalString("url") ?? dictConfig.AnkiConnectUrl;
+        var (reachable, version, error) = await _ankiClient.PingAsync(url, ct).ConfigureAwait(false);
+        return new { reachable, version, error, url };
+    }
+
+    private async Task<object?> GetAnkiDecksAsync(RpcRequest req, CancellationToken ct)
+    {
+        var dictConfig = configManager?.GetConfig().Dictionaries ?? new DictionarySettings();
+        string url = req.OptionalString("url") ?? dictConfig.AnkiConnectUrl;
+        var decks = await _ankiClient.GetDeckNamesAsync(url, ct).ConfigureAwait(false);
+        return new { decks };
+    }
+
+    private async Task<object?> GetAnkiModelsAsync(RpcRequest req, CancellationToken ct)
+    {
+        var dictConfig = configManager?.GetConfig().Dictionaries ?? new DictionarySettings();
+        string url = req.OptionalString("url") ?? dictConfig.AnkiConnectUrl;
+        var models = await _ankiClient.GetModelNamesAsync(url, ct).ConfigureAwait(false);
+        return new { models };
+    }
+
+    private async Task<object?> SyncAnkiNotesAsync(RpcRequest req, CancellationToken ct)
+    {
+        var dictConfig = configManager?.GetConfig().Dictionaries ?? new DictionarySettings();
+        string url = req.OptionalString("url") ?? dictConfig.AnkiConnectUrl;
+        string deck = req.OptionalString("deck") ?? dictConfig.AnkiDeckName;
+        string model = req.OptionalString("model") ?? dictConfig.AnkiModelName;
+
+        var noteList = new List<AnkiConnectNoteRequest>();
+
+        // 1. Single card payload
+        string? expr = req.OptionalString("expression") ?? req.OptionalString("word");
+        if (!string.IsNullOrWhiteSpace(expr))
+        {
+            noteList.Add(new AnkiConnectNoteRequest(
+                Expression: expr,
+                Reading: req.OptionalString("reading") ?? "",
+                Meaning: req.OptionalString("meaning") ?? req.OptionalString("meaningGloss") ?? "",
+                Sentence: req.OptionalString("sentence") ?? req.OptionalString("sentenceText") ?? "",
+                Source: req.OptionalString("source"),
+                Tags: ["ImmersiveReading"]
+            ));
+        }
+
+        // 2. BookId cards (sync all mined cards for book)
+        string? bookId = req.OptionalString("bookId");
+        if (!string.IsNullOrWhiteSpace(bookId) && flashcardService != null)
+        {
+            var bookCards = flashcardService.ListBookCards(bookId);
+            foreach (var bc in bookCards)
+            {
+                noteList.Add(new AnkiConnectNoteRequest(
+                    Expression: bc.Prompt,
+                    Reading: bc.Reading,
+                    Meaning: bc.Meaning,
+                    Sentence: bc.Example,
+                    Source: $"{bc.ChapterTitle}",
+                    Tags: ["ImmersiveReading", bookId]
+                ));
+            }
+        }
+
+        if (noteList.Count == 0)
+        {
+            return new AnkiSyncResult(true, 0, 0, 0, "No notes found to sync.");
+        }
+
+        var res = await _ankiClient.SyncNotesAsync(url, deck, model, noteList, ct).ConfigureAwait(false);
+        return res;
     }
 
     private object? ListFlashcards(RpcRequest req)

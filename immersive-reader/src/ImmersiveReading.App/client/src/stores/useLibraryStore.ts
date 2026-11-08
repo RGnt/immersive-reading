@@ -18,6 +18,9 @@ interface LibraryState {
   activeBookDetail: BookDetail | null;
   isInspectorOpen: boolean;
 
+  // Multi-selection state
+  selectedBookIds: string[];
+
   // Actions
   loadBootstrap: () => Promise<void>;
   fetchBooks: (newOffset?: number) => Promise<void>;
@@ -27,6 +30,24 @@ interface LibraryState {
   setViewMode: (mode: 'grid' | 'table' | 'series') => void;
   inspectBook: (bookId: string) => Promise<void>;
   closeInspector: () => void;
+
+  // Bulk actions
+  toggleSelectBook: (bookId: string) => void;
+  selectAllOnPage: () => void;
+  clearSelection: () => void;
+  bulkMoveBooks: (targetFolderId: string | null) => Promise<void>;
+  bulkAddTags: (tagIds: string[]) => Promise<void>;
+  bulkDeleteSelected: () => Promise<void>;
+  bulkUpdateBooks: (patch: {
+    folderId?: string | null;
+    clearFolderId?: boolean;
+    seriesName?: string;
+    autoNumberVolumes?: boolean;
+    authors?: string;
+    publisher?: string;
+    addTagIds?: string[];
+    removeTagIds?: string[];
+  }) => Promise<void>;
 }
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
@@ -44,6 +65,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   isLoading: false,
   activeBookDetail: null,
   isInspectorOpen: false,
+  selectedBookIds: [],
 
   loadBootstrap: async () => {
     set({ isLoading: true });
@@ -90,19 +112,19 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   },
 
   selectFolder: (folderId: string | null) => {
-    set({ activeFolderId: folderId, offset: 0 });
+    set({ activeFolderId: folderId, offset: 0, selectedBookIds: [] });
     get().fetchBooks(0);
   },
 
   toggleTag: (tagId: string) => {
     const current = get().selectedTagIds;
     const next = current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId];
-    set({ selectedTagIds: next, offset: 0 });
+    set({ selectedTagIds: next, offset: 0, selectedBookIds: [] });
     get().fetchBooks(0);
   },
 
   setSearchQuery: (query: string) => {
-    set({ searchQuery: query, offset: 0 });
+    set({ searchQuery: query, offset: 0, selectedBookIds: [] });
     get().fetchBooks(0);
   },
 
@@ -121,5 +143,93 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   closeInspector: () => {
     set({ activeBookDetail: null, isInspectorOpen: false });
+  },
+
+  toggleSelectBook: (bookId: string) => {
+    const current = get().selectedBookIds;
+    const next = current.includes(bookId) ? current.filter((id) => id !== bookId) : [...current, bookId];
+    set({ selectedBookIds: next });
+  },
+
+  selectAllOnPage: () => {
+    const pageBookIds = get().books.map((b) => b.bookId);
+    const current = get().selectedBookIds;
+    const allSelected = pageBookIds.every((id) => current.includes(id));
+    if (allSelected) {
+      set({ selectedBookIds: current.filter((id) => !pageBookIds.includes(id)) });
+    } else {
+      const combined = Array.from(new Set([...current, ...pageBookIds]));
+      set({ selectedBookIds: combined });
+    }
+  },
+
+  clearSelection: () => {
+    set({ selectedBookIds: [] });
+  },
+
+  bulkMoveBooks: async (targetFolderId: string | null) => {
+    const ids = get().selectedBookIds;
+    if (ids.length === 0) return;
+
+    try {
+      await rpc.call('library.bulkUpdateBooks', {
+        bookIds: ids,
+        folderId: targetFolderId || null,
+        clearFolderId: !targetFolderId,
+      });
+      set({ selectedBookIds: [] });
+      await get().loadBootstrap();
+    } catch (err) {
+      console.error('Failed to bulk move books:', err);
+      throw err;
+    }
+  },
+
+  bulkAddTags: async (tagIds: string[]) => {
+    const ids = get().selectedBookIds;
+    if (ids.length === 0 || tagIds.length === 0) return;
+
+    try {
+      await rpc.call('library.bulkUpdateBooks', {
+        bookIds: ids,
+        addTagIds: tagIds,
+      });
+      set({ selectedBookIds: [] });
+      await get().fetchBooks();
+    } catch (err) {
+      console.error('Failed to bulk add tags:', err);
+      throw err;
+    }
+  },
+
+  bulkDeleteSelected: async () => {
+    const ids = get().selectedBookIds;
+    if (ids.length === 0) return;
+
+    try {
+      await rpc.call('library.bulkDeleteBooks', { bookIds: ids });
+      set({ selectedBookIds: [] });
+      await get().loadBootstrap();
+    } catch (err) {
+      console.error('Failed to bulk delete books:', err);
+      throw err;
+    }
+  },
+
+  bulkUpdateBooks: async (patch) => {
+    const ids = get().selectedBookIds;
+    if (ids.length === 0) return;
+
+    try {
+      await rpc.call('library.bulkUpdateBooks', {
+        bookIds: ids,
+        ...patch,
+      });
+      set({ selectedBookIds: [] });
+      await get().loadBootstrap();
+    } catch (err) {
+      console.error('Failed to bulk update books:', err);
+      throw err;
+    }
   },
 }));

@@ -33,6 +33,11 @@ export const ChapterIframe: React.FC = () => {
         if (spineHref) {
           loadChapter(spineHref);
         }
+      } else if (e.data.type === 'ir-search-results') {
+        const { count, current } = e.data;
+        useReaderStore.getState().setSearchResults(count || 0, current || 0);
+      } else if (e.data.type === 'ir-open-search') {
+        useReaderStore.getState().openSearch();
       }
     };
 
