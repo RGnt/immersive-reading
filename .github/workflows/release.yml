@@ -15,7 +15,7 @@ jobs:
       matrix:
         include:
           - target: linux-x64
-            os: ubuntu-latest
+            os: ubuntu-24.04
             archive_ext: tar.gz
           - target: win-x64
             os: windows-latest
@@ -29,6 +29,19 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+
+      - name: Setup Node.js (Latest LTS)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: 'immersive-reader/src/ImmersiveReading.App/client/package-lock.json'
+
+      - name: Install Frontend Dependencies & Build
+        working-directory: immersive-reader/src/ImmersiveReading.App/client
+        run: |
+          npm ci
+          npm run build
 
       - name: Set Release Date
         id: date
@@ -81,7 +94,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Set Release Date & Tag
         id: release_meta
