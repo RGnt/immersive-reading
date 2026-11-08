@@ -1328,10 +1328,11 @@ export const SettingsModal: React.FC = () => {
 
                 <div className="space-y-2 pt-1">
                   {(dictPresets.length > 0 ? dictPresets : [
-                    { id: 'jmdict_english', title: 'JMdict (English)', description: 'General vocabulary dictionary with parts of speech and senses (EDRDG).', downloadUrl: '', approxSizeMb: 18.5, defaultPriority: 10 },
-                    { id: 'kanjidic2', title: 'KANJIDIC2 (English)', description: 'Kanji characters, stroke counts, Onyomi, Kunyomi, and English meanings.', downloadUrl: '', approxSizeMb: 2.4, defaultPriority: 20 },
-                    { id: 'jmnedict', title: 'JMnedict (Names)', description: 'Japanese names of persons, places, surnames, and company names.', downloadUrl: '', approxSizeMb: 12.0, defaultPriority: 30 },
-                    { id: 'kireicake_accents', title: 'KireiCake (Pitch Accents)', description: 'Pitch accent contours and downstep indicators for standard Japanese.', downloadUrl: '', approxSizeMb: 4.2, defaultPriority: 40 },
+                    { id: 'jmdict_english', title: 'JMdict (English)', description: 'General vocabulary dictionary with parts of speech and senses (EDRDG).', downloadUrl: '', approxSizeMb: 15.6, defaultPriority: 10 },
+                    { id: 'kanjidic2', title: 'KANJIDIC2 (English)', description: 'Kanji characters, stroke counts, Onyomi, Kunyomi, and English meanings.', downloadUrl: '', approxSizeMb: 0.7, defaultPriority: 20 },
+                    { id: 'jmnedict', title: 'JMnedict (Names)', description: 'Japanese names of persons, places, surnames, and company names.', downloadUrl: '', approxSizeMb: 11.4, defaultPriority: 30 },
+                    { id: 'kireicake_accents', title: 'KireiCake (Slang & Manga)', description: 'Supplemental Japanese slang, colloquialisms, and manga vocabulary.', downloadUrl: '', approxSizeMb: 6.1, defaultPriority: 40 },
+                    { id: 'kanjium_accents', title: 'Kanjium (Pitch Accents)', description: 'Pitch accent contours and downstep indicators for standard Japanese.', downloadUrl: '', approxSizeMb: 1.1, defaultPriority: 50 },
                   ]).map((preset) => {
                     const isInstalled = installedDicts.some(
                       (d) =>

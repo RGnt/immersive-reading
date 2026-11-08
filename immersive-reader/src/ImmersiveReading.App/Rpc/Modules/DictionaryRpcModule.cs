@@ -24,30 +24,37 @@ public sealed class DictionaryRpcModule : IRpcModule
             "jmdict_english",
             "JMdict (English)",
             "Comprehensive Japanese-English general vocabulary dictionary with word classes, meanings, and tags (EDRDG CC BY-SA 4.0).",
-            "https://github.com/themoeway/yomitan-bikun/releases/latest/download/JMdict_english.zip",
-            18.5,
+            "https://github.com/yomidevs/jmdict-yomitan/releases/latest/download/JMdict_english.zip",
+            15.6,
             10),
         new(
             "kanjidic2",
             "KANJIDIC2 (English)",
             "Kanji dictionary providing Onyomi, Kunyomi, meanings, radicals, and stroke numbers for all Joyo & Jinmeiyo kanji (EDRDG).",
-            "https://github.com/themoeway/yomitan-bikun/releases/latest/download/Kanjidic_english.zip",
-            2.4,
+            "https://github.com/yomidevs/jmdict-yomitan/releases/latest/download/KANJIDIC_english.zip",
+            0.7,
             20),
         new(
             "jmnedict",
             "JMnedict (Names)",
             "Japanese named entities dictionary covering persons, places, surnames, company and product names.",
-            "https://github.com/themoeway/yomitan-bikun/releases/latest/download/JMnedict.zip",
-            12.0,
+            "https://github.com/yomidevs/jmdict-yomitan/releases/latest/download/JMnedict.zip",
+            11.4,
             30),
         new(
             "kireicake_accents",
-            "KireiCake (Pitch Accents)",
+            "KireiCake (Slang & Manga)",
+            "Supplemental Japanese slang, colloquialisms, and manga-specific vocabulary glossary.",
+            "https://raw.githubusercontent.com/yomidevs/yomitan/dictionaries/kireicake.zip",
+            6.1,
+            40),
+        new(
+            "kanjium_accents",
+            "Kanjium (Pitch Accents)",
             "Detailed pitch accent contours and downstep indicators for standard Japanese vocabulary.",
-            "https://github.com/themoeway/yomitan-bikun/releases/latest/download/accents.zip",
-            4.2,
-            40)
+            "https://raw.githubusercontent.com/yomidevs/yomitan/dictionaries/kanjium_pitch_accents.zip",
+            1.1,
+            50)
     ];
 
     public DictionaryRpcModule(
@@ -128,7 +135,9 @@ public sealed class DictionaryRpcModule : IRpcModule
         string title = "Dictionary";
         if (!string.IsNullOrWhiteSpace(presetId))
         {
-            var preset = Presets.FirstOrDefault(p => string.Equals(p.Id, presetId, StringComparison.OrdinalIgnoreCase))
+            var preset = Presets.FirstOrDefault(p =>
+                string.Equals(p.Id, presetId, StringComparison.OrdinalIgnoreCase) ||
+                (presetId.StartsWith("kirei", StringComparison.OrdinalIgnoreCase) && p.Id.StartsWith("kirei", StringComparison.OrdinalIgnoreCase)))
                 ?? throw new ArgumentException($"Unknown dictionary preset '{presetId}'.");
             url = preset.DownloadUrl;
             title = preset.Title;
