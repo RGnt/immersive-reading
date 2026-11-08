@@ -4,18 +4,25 @@
     <ProjectReference Include="..\ImmersiveReading.Core\ImmersiveReading.Core.csproj" />
     <ProjectReference Include="..\ImmersiveReading.Library\ImmersiveReading.Library.csproj" />
     <ProjectReference Include="..\ImmersiveReading.Enrichment\ImmersiveReading.Enrichment.csproj" />
+    <!-- Concrete plugin references below are consumed exclusively by Composition/PluginCatalog.cs -->
     <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.Japanese\ImmersiveReading.Plugins.Japanese.csproj" />
     <ProjectReference Include="..\ImmersiveReading.Dictionaries\ImmersiveReading.Dictionaries.csproj" />
     <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.AiCompanion\ImmersiveReading.Plugins.AiCompanion.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.14" />
     <PackageReference Include="Photino.NET" Version="4.0.16" />
   </ItemGroup>
 
   <ItemGroup>
     <None Include="wwwroot\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <Target Name="BuildReactClient" BeforeTargets="BeforeBuild" Condition="!Exists('wwwroot\dist\index.html')">
+    <Message Importance="high" Text="Building React frontend with Vite..." />
+    <Exec Command="npm run build" WorkingDirectory="client" />
+  </Target>
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>

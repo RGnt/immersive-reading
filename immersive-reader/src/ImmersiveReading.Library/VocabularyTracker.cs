@@ -1,10 +1,12 @@
+using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Library;
 using ImmersiveReading.Core.Plugins;
+using ImmersiveReading.Core.Vocabulary;
 using Microsoft.Data.Sqlite;
 
 namespace ImmersiveReading.Library;
 
-public sealed class VocabularyTracker
+public sealed class VocabularyTracker : IVocabularyService
 {
     private readonly LibraryDatabase _db;
 

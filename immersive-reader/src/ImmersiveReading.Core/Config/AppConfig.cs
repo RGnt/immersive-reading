@@ -5,15 +5,19 @@ public sealed record AppConfig(
     AppearanceSettings Appearance,
     ReaderSettings Reader,
     LlmSettings Llm,
-    DictionarySettings Dictionaries
+    DictionarySettings Dictionaries,
+    LibrarySettings? Library = null
 )
 {
+    public LibrarySettings Library { get; init; } = Library ?? new LibrarySettings();
+
     public static AppConfig CreateDefault() => new(
         Directories: new DirectorySettings(),
         Appearance: new AppearanceSettings(),
         Reader: new ReaderSettings(),
         Llm: new LlmSettings(),
-        Dictionaries: new DictionarySettings()
+        Dictionaries: new DictionarySettings(),
+        Library: new LibrarySettings()
     );
 }
 
@@ -64,4 +68,14 @@ public sealed record DictionarySettings(
     int MaxResults = 12,
     string CardExportFormat = "both",
     bool AutoClipboard = true
+);
+
+public sealed record LibrarySettings(
+    string PrimaryGrouping = "series",
+    string SortWithinGrouping = "series_and_volume",
+    bool EnableShelves = true,
+    IReadOnlyList<string>? ExcludedFolderIds = null,
+    IReadOnlyList<string>? ExcludedTagIds = null,
+    bool HideCompleted = false,
+    string DefaultViewMode = "grid"
 );

@@ -1,9 +1,9 @@
 using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
+using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Epub;
 using ImmersiveReading.Core.Plugins;
-using ImmersiveReading.Library;
 
 namespace ImmersiveReading.Enrichment;
 
@@ -13,15 +13,15 @@ public sealed class BookSchemeHandler
         @"url\(\s*(?:""(?<url>[^""]+)""|'(?<url>[^']+)'|(?<url>[^)'""\s]+))\s*\)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    private readonly LibraryManager _library;
-    private readonly LanguagePluginRegistry _pluginRegistry;
+    private readonly IBookCatalog _library;
+    private readonly ILanguagePluginResolver _pluginRegistry;
     private readonly ChapterEnrichmentCache _cache;
     private readonly Func<string, string, WordStatus>? _getWordStatus;
     private EnrichmentOptions _enrichmentOptions;
 
     public BookSchemeHandler(
-        LibraryManager library,
-        LanguagePluginRegistry pluginRegistry,
+        IBookCatalog library,
+        ILanguagePluginResolver pluginRegistry,
         ChapterEnrichmentCache cache,
         EnrichmentOptions? initialOptions = null,
         Func<string, string, WordStatus>? getWordStatus = null)

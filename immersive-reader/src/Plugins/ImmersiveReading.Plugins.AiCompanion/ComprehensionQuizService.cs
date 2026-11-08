@@ -1,6 +1,8 @@
 using System.Text.Json;
+using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Extensions;
-using ImmersiveReading.Library;
+using Microsoft.Data.Sqlite;
+using ImmersiveReading.Plugins.AiCompanion.Prompts;
 
 namespace ImmersiveReading.Plugins.AiCompanion;
 
@@ -68,7 +70,7 @@ internal sealed record GradedFreeFormDto(
 
 public sealed class ComprehensionQuizService
 {
-    private readonly LibraryDatabase _db;
+    private readonly IDbConnectionFactory _db;
     private readonly IReaderContextService _readerContext;
     private readonly ISnippetEnricher _snippetEnricher;
     private readonly ILlmProvider _llmProvider;
@@ -80,7 +82,7 @@ public sealed class ComprehensionQuizService
     };
 
     public ComprehensionQuizService(
-        LibraryDatabase db,
+        IDbConnectionFactory db,
         IReaderContextService readerContext,
         ISnippetEnricher snippetEnricher,
         ILlmProvider llmProvider)
@@ -203,33 +205,17 @@ public sealed class ComprehensionQuizService
             _ => "quiz.generate.freeform"
         };
 
-        string systemPrompt = """
-            You are a Japanese reading comprehension tutor.
-            Generate a comprehension question strictly grounded in the provided PASSAGE.
-            NEVER reference events outside the PASSAGE.
-            Respond with JSON:
-            {
-              "questionPrompt": "...",
-              "options": ["...", "...", "...", "..."],
-              "correctOptionIndex": 0,
-              "evidenceQuote": "Exact Japanese sentence from the passage",
-              "paragraphId": 0,
-              "explanation": "...",
-              "modelAnswer": "..."
-            }
-            """;
+        string systemPrompt = QuizPrompts.SystemPrompt;
 
-        string userPrompt = $"TASK: Generate a {modeStr} comprehension question.\nPASSAGE:\n{slice.PlainText}";
-        var llmResp = await _llmProvider.CompleteStructuredAsync<GeneratedQuestionDto>(
-            new LlmRequest(
-                Messages:
-                [
-                    new LlmMessage("system", systemPrompt),
-                    new LlmMessage("user", userPrompt)
-                ],
-                Temperature: 0.2,
-                TaskKind: taskKind),
-            ct).ConfigureAwait(false);
+        string userPrompt = QuizPrompts.BuildUserPrompt(modeStr, slice.PlainText);
+        var request = LlmRequestBuilder.Create()
+            .WithSystemPrompt(systemPrompt)
+            .WithUserPrompt(userPrompt)
+            .WithTemperature(0.2)
+            .WithTaskKind(taskKind)
+            .Build();
+
+        var llmResp = await _llmProvider.CompleteStructuredAsync<GeneratedQuestionDto>(request, ct).ConfigureAwait(false);
 
         var dto = llmResp.Value;
         var enrichedPrompt = _snippetEnricher.EnrichSnippet(bookId, dto.QuestionPrompt);
@@ -385,34 +371,17 @@ public sealed class ComprehensionQuizService
         }
         else
         {
-            string gradeSystemPrompt = """
-                You are grading a reader's comprehension answer against the Japanese passage.
-                Return JSON:
-                {
-                  "comprehensionScore": 0..100,
-                  "evidenceQuote": "Exact Japanese sentence from the passage supporting the answer",
-                  "missingOrMisunderstood": "Any key plot/character nuance missed",
-                  "modelAnswer": "Clear Japanese model answer"
-                }
-                """;
-            string gradeUserPrompt = $"""
-                QUESTION: {promptText}
-                USER_ANSWER: {userAnswer}
-                EXPECTED_EVIDENCE: {evidenceQuote}
-                PASSAGE:
-                {passageText}
-                """;
+            string gradeSystemPrompt = GradingPrompts.SystemPrompt;
+            string gradeUserPrompt = GradingPrompts.BuildUserPrompt(promptText, userAnswer, evidenceQuote, passageText);
 
-            var gradeResp = await _llmProvider.CompleteStructuredAsync<GradedFreeFormDto>(
-                new LlmRequest(
-                    Messages:
-                    [
-                        new LlmMessage("system", gradeSystemPrompt),
-                        new LlmMessage("user", gradeUserPrompt)
-                    ],
-                    Temperature: 0.1,
-                    TaskKind: "quiz.grade.freeform"),
-                ct).ConfigureAwait(false);
+            var gradeRequest = LlmRequestBuilder.Create()
+                .WithSystemPrompt(gradeSystemPrompt)
+                .WithUserPrompt(gradeUserPrompt)
+                .WithTemperature(0.1)
+                .WithTaskKind("quiz.grade.freeform")
+                .Build();
+
+            var gradeResp = await _llmProvider.CompleteStructuredAsync<GradedFreeFormDto>(gradeRequest, ct).ConfigureAwait(false);
 
             var g = gradeResp.Value;
             score100 = Math.Clamp(g.ComprehensionScore, 0, 100);

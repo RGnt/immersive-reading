@@ -3,7 +3,8 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using ImmersiveReading.Plugins.Japanese;
+using ImmersiveReading.Core.Plugins;
+using ImmersiveReading.Dictionaries.Abstractions;
 using Microsoft.Data.Sqlite;
 
 namespace ImmersiveReading.Dictionaries;
@@ -17,10 +18,21 @@ public sealed record YomitanImportResult(
     int KanjiCount
 );
 
-public sealed class YomitanSqliteImporter
+public sealed class YomitanSqliteImporter : IDictionaryImporter
 {
     private static readonly Regex BankRegex = new(@"^(term|kanji|term_meta|kanji_meta|tag)_bank_([1-9][0-9]*)\.json$", RegexOptions.Compiled);
     private readonly DictionaryDatabase _db;
+
+    public string FormatName => "yomitan-zip";
+
+    public bool CanHandle(string filePath) =>
+        !string.IsNullOrEmpty(filePath) && filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+
+    public DictionaryImportResult Import(string filePath, int priorityOrder = 100, CancellationToken ct = default)
+    {
+        var res = ImportZip(filePath, priorityOrder, ct);
+        return new DictionaryImportResult(true, res.Title, res.TermsCount, res.KanjiCount, $"Imported {res.Title}");
+    }
 
     public YomitanSqliteImporter(DictionaryDatabase db)
     {

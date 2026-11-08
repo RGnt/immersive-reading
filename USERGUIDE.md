@@ -89,6 +89,16 @@ The library interface utilizes a clean 2-column layout:
 Toggle between views anytime using the view buttons in the library toolbar:
 - **Table View (Default)**: A high-density data grid displaying Cover Thumbnail, Title, Series, Author, Progress Bar, Difficulty, and Actions (`📖 Read` and `ℹ️ Info`). Click any column header to sort ascending or descending.
 - **Grid View**: A visual bookshelf gallery showcasing high-resolution cover art with subtle hover cards and quick action overlays.
+- **📚 Series Grouping Toggle**: Enabled by default in the toolbar. When active, all books belonging to a multi-volume series are folded together into a single series entry. Toggle off anytime to view all books as a flat list.
+
+### Multi-Volume Series Grouping & Drill-Down
+To keep large libraries clean and uncluttered, Immersive Reading automatically groups multi-volume book series:
+- **Folded Series Cards & Rows**: Multi-volume series (2 or more volumes) appear as stacked cards (in Grid View) or highlighted series rows (in Table View) displaying:
+  - The cover artwork and bibliographic details of the **1st volume**.
+  - A prominent volume count badge (e.g. `📚 15 Vols`).
+  - Quick action buttons: `📚 View All (N)` and `⚡ Jiten`.
+- **Standalone Display**: Single-volume books or books without a series name are displayed individually as regular books.
+- **Series Drill-Down View**: Clicking any series card or row opens the series view, displaying all volumes ordered by volume number (`#1`, `#2`, `#3`...). A top banner provides one-click navigation back to the library, as well as series-wide batch actions (`⚡ 1-Press Match on jiten.moe` and `📥 Download All Decks (.csv)`).
 
 ### Scanning & Importing Books
 You can add books to your library in two ways:
@@ -122,18 +132,52 @@ Next to every `📖 Read` button in Table and Grid views, you will find an `ℹ�
 - **Study Pack**: Check whether an offline Python study bundle exists for this book, view vocabulary counts, and access printable PDFs.
 - **Raw OPF**: Inspect the raw EPUB package metadata, spine items, and manifest.
 
-### 1-Click jiten.moe Lookup & Difficulty Ratings
-[jiten.moe](https://jiten.moe) is a popular community index for Japanese media difficulty ratings and vocabulary frequency decks. Immersive Reading integrates with jiten.moe via an **explicit, user-initiated action** (preserving your privacy and offline guarantees):
+### 1-Click jiten.moe Lookup & Deep Vocabulary Intelligence
+[jiten.moe](https://jiten.moe) is a popular community index for Japanese media difficulty ratings and vocabulary frequency decks. Immersive Reading integrates directly with the [jiten.moe API](https://api.jiten.moe/index.html) via an **explicit, user-initiated action** (preserving your privacy and offline guarantees):
 
 1. Click `ℹ️ Info` on any book in your library.
 2. Switch to the **jiten.moe & Custom Fields** tab.
-3. The search box automatically populates with the book's title (or you can edit the query).
-4. Click `🔍 Search jiten.moe`. The .NET backend queries the jiten API and displays:
-   - Media title and cover preview.
-   - Overall community difficulty score (e.g., `Level 24` or `Intermediate`).
-   - Total character and vocabulary count.
-   - Volume-specific sub-decks (if part of a multi-volume series).
-5. Click `⚡ Apply to Book`. The difficulty level and official jiten deck URL are immediately saved to the book's metadata and displayed on your library table and cards.
+3. The search box automatically populates with the book's series or title. You can also filter by media format (**Novels / Light Novels**, **Web Novels**, **Manga**, **Visual Novels**, or **Anime**).
+4. Click `🔍 Search`. The .NET backend queries the jiten API and presents rich media cards:
+   - **Cover Artwork & Titles**: High-resolution cover thumbnails, original Japanese title, Romaji title, and English title.
+   - **Difficulty Rating**: Community difficulty rating out of 10 with color coding (Green: Beginner, Amber: Intermediate, Orange: Advanced, Red: Master).
+   - **Metrics & Corpus Stats**: Total characters, word count, unique words, unique kanji, and volume count.
+   - **Genres & Community Tags**: Badges for genres (Fantasy, Sci-Fi, Slice of Life) and community tags with consensus percentages (e.g. `Magic 88%`, `Military 95%`).
+   - **External Links**: Direct links to AniList, Bookmeter, Kakuyomu, Syosetsu, VNDB, MyAnimeList, and Amazon.
+5. **Interactive Deep Intelligence Drawers**:
+   - `▼ View Volumes (N)`: Expand all volume sub-decks to inspect individual book volumes and bind metadata specifically to Volume 1, Volume 2, etc.
+   - `📊 Difficulty Curve`: View percentile difficulty deciles (P10 to P90) and the book's progression curve segment-by-segment.
+   - `📈 Milestones`: Inspect vocabulary coverage milestones (e.g. how many unique words needed to achieve 80%, 85%, 90%, 95%, 98%, or 99% text comprehension).
+   - `📖 Vocab Preview`: Preview the top 15 most notable vocabulary words before reading, complete with interactive HTML furigana ruby tags, English definitions, frequency ranks, and occurrence counts.
+6. Click `⚡ Apply to Book` (or `⚡ Apply Vol` on a specific volume): The official jiten URL and difficulty score are stored in the book's custom fields, matching tags and genres are associated with the book, and the synopsis is populated if currently blank.
+
+### ⚡ 1-Press Match Series on jiten.moe
+When you have a multi-volume franchise, you don't need to look up and match each volume one by one:
+1. In the Library or Series View, click the **`⚡ Jiten`** or **`⚡ 1-Press Match on jiten.moe`** button.
+2. The system searches jiten.moe for the series title, identifies the parent franchise, and intelligently correlates each local volume against Jiten's sub-decks (e.g. mapping Volume 1 to sub-deck #1, Volume 15 to sub-deck #15).
+3. A confirmation modal displays:
+   - Franchise details, difficulty rating, and volume coverage.
+   - An exact mapping table of local books to Jiten sub-decks with volume difficulty ratings.
+   - **Community Tags**: Top tags and genres from the community (e.g. `Fantasy`, `School Life`, `Romance`) are pre-selected for import into your library tags.
+   - **Auto-Download CSVs**: A checked option to download the official vocabulary `.csv` for all matched volumes at once.
+4. Click **`⚡ Confirm & Apply All`**. In one press, all volumes receive their Jiten URLs, difficulties, synopses, library tags, and offline CSV decks!
+
+### 📥 Direct Vocabulary Deck (.csv) Downloads
+[jiten.moe](https://jiten.moe) generates comprehensive vocabulary lists for books. Immersive Reading can fetch these directly:
+- **Per-Book Download**: Open any book's `ℹ️ Info` modal, switch to the **Study Pack & Flashcards** tab, and click **`Download deck.csv`**.
+- **Batch Series Download**: Click **`📥 Download All Decks (.csv)`** from any Series View or during 1-Press Series Matching.
+- **Where are they stored?** The downloaded CSV is saved directly as `deck.csv` inside that book's EPUB directory (`book.FolderPath`).
+- **Offline Integration**: The Python enrichment engine automatically detects this file and uses it to construct offline Study Packs, 20-word learning sets, and printable Master PDFs without requiring re-parsing!
+
+### 🔑 jiten.moe API Key Configuration (`.env`)
+Most public queries work without an API key, but if you have a registered jiten.moe account or reach rate limits:
+1. Open the project root folder (`k:\immersive-reading`).
+2. Open or create the **`.env`** file (guarded by `.gitignore`, so your key is never committed).
+3. Set your API key:
+   ```env
+   JITEN_API_KEY=your_jiten_api_key_here
+   ```
+4. Immersive Reading automatically detects and applies this key for all subsequent searches and deck downloads.
 
 ---
 

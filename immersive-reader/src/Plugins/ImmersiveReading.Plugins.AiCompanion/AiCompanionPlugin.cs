@@ -1,36 +1,47 @@
 using System.Text.Json;
+using ImmersiveReading.Core.Abstractions;
+using ImmersiveReading.Core.Database;
 using ImmersiveReading.Core.Extensions;
 using ImmersiveReading.Core.Plugins;
-using ImmersiveReading.Library;
 using ImmersiveReading.Plugins.AiCompanion.Providers;
+using ImmersiveReading.Plugins.AiCompanion.Schema;
 
 namespace ImmersiveReading.Plugins.AiCompanion;
 
 public sealed class AiCompanionPlugin : IFeaturePlugin
 {
-    public string PluginId => "aiCompanion";
+    public const string PluginIdValue = "aiCompanion";
+
+    public string PluginId => PluginIdValue;
     public string DisplayName => "AI Reading Comprehension & n+1 Persona Companion";
     public string Version => "1.0.0";
 
+    private readonly IDbConnectionFactory _db;
     public ComprehensionQuizService QuizService { get; }
     public PersonaChatService PersonaChatService { get; }
     public ILlmProvider LlmProvider { get; }
 
     public AiCompanionPlugin(
-        LibraryDatabase db,
+        IDbConnectionFactory db,
         IReaderContextService readerContext,
         IVocabularyBudgetService vocabBudget,
         ISnippetEnricher snippetEnricher,
-        ILanguagePlugin japanesePlugin,
+        ILanguagePluginResolver languages,
         ILlmProvider? llmProvider = null)
     {
+        _db = db;
         LlmProvider = llmProvider ?? new OpenAiCompatibleLlmProvider();
         QuizService = new ComprehensionQuizService(db, readerContext, snippetEnricher, LlmProvider);
-        PersonaChatService = new PersonaChatService(db, readerContext, vocabBudget, snippetEnricher, japanesePlugin, LlmProvider);
+        PersonaChatService = new PersonaChatService(db, readerContext, vocabBudget, snippetEnricher, languages, LlmProvider);
     }
 
     public ValueTask InitializeAsync(IFeaturePluginContext context, CancellationToken ct = default)
     {
+        using (var conn = _db.OpenConnection())
+        {
+            MigrationRunner.ApplyMigrations(conn, AiCompanionMigrations.ModuleId, AiCompanionMigrations.All);
+        }
+
         context.RegisterUiPanel(new ReaderUiPanelDescriptor(
             PanelId: "ai-companion-drawer",
             Title: "AI Comprehension & n+1 Persona Chat",

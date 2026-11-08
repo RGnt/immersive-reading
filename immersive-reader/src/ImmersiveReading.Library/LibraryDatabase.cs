@@ -1,8 +1,10 @@
+using System.Data.Common;
+using ImmersiveReading.Core.Abstractions;
 using Microsoft.Data.Sqlite;
 
 namespace ImmersiveReading.Library;
 
-public sealed class LibraryDatabase : IDisposable
+public sealed class LibraryDatabase : IDbConnectionFactory, IDisposable
 {
     private readonly string _connectionString;
 
@@ -44,6 +46,8 @@ public sealed class LibraryDatabase : IDisposable
         pragmaCmd.ExecuteNonQuery();
         return conn;
     }
+
+    DbConnection IDbConnectionFactory.OpenConnection() => OpenConnection();
 
     public void InitializeSchema()
     {

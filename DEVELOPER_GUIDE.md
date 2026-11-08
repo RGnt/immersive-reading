@@ -13,14 +13,14 @@ Use this table to jump directly to the files responsible for the area you want t
 
 | What You Want to Work On | Primary Entry Files | Key Classes / Functions | Tests to Run |
 | :--- | :--- | :--- | :--- |
-| **Desktop UI (Library Grid, Reader Controls, Popover, Drawers)** | [`index.html`](immersive-reader/src/ImmersiveReading.App/wwwroot/index.html)<br>[`app.js`](immersive-reader/src/ImmersiveReading.App/wwwroot/app.js)<br>[`styles.css`](immersive-reader/src/ImmersiveReading.App/wwwroot/styles.css) | `rpcCall()`, `openBookInReader()`, `showDictPopover()`, `openStudyPackDrawer()`, `openAiDrawer()` | `dotnet run --project immersive-reader/src/ImmersiveReading.App -- --verify-ui` |
-| **JSON-RPC Bridge (Adding/Changing Frontend $\leftrightarrow$ C# APIs)** | [`LibraryRpcDispatcher.cs`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs)<br>[`Program.cs`](immersive-reader/src/ImmersiveReading.App/Program.cs) | [`LibraryRpcDispatcher.HandleMethodAsync`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs#L93-L550) | [`Phase1LibrarySpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Core.Tests/Phase1LibrarySpecsTests.cs) |
-| **EPUB Library, 24k+ Scanner, Folders, Tags & Custom Fields** | [`LibraryManager.cs`](immersive-reader/src/ImmersiveReading.Library/LibraryManager.cs)<br>[`LibraryDatabase.cs`](immersive-reader/src/ImmersiveReading.Library/LibraryDatabase.cs)<br>[`EpubMetadataExtractor.cs`](immersive-reader/src/ImmersiveReading.Core/Epub/EpubMetadataExtractor.cs) | [`LibraryManager.ScanDirectoryAsync`](immersive-reader/src/ImmersiveReading.Library/LibraryManager.cs), [`LibraryManager.ListBooks`](immersive-reader/src/ImmersiveReading.Library/LibraryManager.cs), [`LibraryDatabase.InitializeSchema`](immersive-reader/src/ImmersiveReading.Library/LibraryDatabase.cs) | [`Phase1LibrarySpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Core.Tests/Phase1LibrarySpecsTests.cs) |
-| **EPUB Chapter Rendering, `<ruby>` Furigana & Token Spans** | [`BookSchemeHandler.cs`](immersive-reader/src/ImmersiveReading.Enrichment/BookSchemeHandler.cs)<br>[`AngleSharpDomEnricher.cs`](immersive-reader/src/ImmersiveReading.Enrichment/AngleSharpDomEnricher.cs)<br>[`ChapterEnrichmentCache.cs`](immersive-reader/src/ImmersiveReading.Enrichment/ChapterEnrichmentCache.cs) | [`BookSchemeHandler.ResolveAsync`](immersive-reader/src/ImmersiveReading.Enrichment/BookSchemeHandler.cs), [`AngleSharpDomEnricher.EnrichChapterAsync`](immersive-reader/src/ImmersiveReading.Enrichment/AngleSharpDomEnricher.cs) | [`Phase2EnrichmentSpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Enrichment.Tests/Phase2EnrichmentSpecsTests.cs) |
-| **Japanese Morphological Analysis (`MeCab.DotNet`) or Adding a Language** | [`LanguagePluginContracts.cs`](immersive-reader/src/ImmersiveReading.Core/Plugins/LanguagePluginContracts.cs)<br>[`JapaneseLanguagePlugin.cs`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.Japanese/JapaneseLanguagePlugin.cs) | [`ILanguagePlugin`](immersive-reader/src/ImmersiveReading.Core/Plugins/LanguagePluginContracts.cs), [`JapaneseLanguagePlugin.AnalyzeParagraphsAsync`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.Japanese/JapaneseLanguagePlugin.cs) | [`Phase2EnrichmentSpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Enrichment.Tests/Phase2EnrichmentSpecsTests.cs) |
-| **Instant Dictionary Lookup, Deinflection & Word Status (`Known`/`Learning`)** | [`DictionaryLookupEngine.cs`](immersive-reader/src/ImmersiveReading.Dictionaries/DictionaryLookupEngine.cs)<br>[`JapaneseDeinflector.cs`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.Japanese/JapaneseDeinflector.cs)<br>[`YomitanSqliteImporter.cs`](immersive-reader/src/ImmersiveReading.Dictionaries/YomitanSqliteImporter.cs)<br>[`VocabularyTracker.cs`](immersive-reader/src/ImmersiveReading.Library/VocabularyTracker.cs) | [`DictionaryLookupEngine.LookupAsync`](immersive-reader/src/ImmersiveReading.Dictionaries/DictionaryLookupEngine.cs), [`JapaneseDeinflector.Deinflect`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.Japanese/JapaneseDeinflector.cs) | [`Phase3DictionarySpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Dictionaries.Tests/Phase3DictionarySpecsTests.cs) |
-| **1-Click Sentence Flashcards & Python Study Pack Bridge** | [`FlashcardMiningService.cs`](immersive-reader/src/ImmersiveReading.Library/FlashcardMiningService.cs)<br>[`PythonStudyPackBridge.cs`](immersive-reader/src/ImmersiveReading.Library/PythonStudyPackBridge.cs) | [`FlashcardMiningService.MineCard`](immersive-reader/src/ImmersiveReading.Library/FlashcardMiningService.cs), [`PythonStudyPackBridge.AcquireSnapshotLease`](immersive-reader/src/ImmersiveReading.Library/PythonStudyPackBridge.cs) | [`Phase4StudyPackSpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Core.Tests/Phase4StudyPackSpecsTests.cs) |
-| **AI Comprehension Quizzes, $n+1$ Persona Chat & Feature Plugins** | [`FeaturePluginContracts.cs`](immersive-reader/src/ImmersiveReading.Core/Extensions/FeaturePluginContracts.cs)<br>[`ReaderContextService.cs`](immersive-reader/src/ImmersiveReading.Enrichment/ReaderContextService.cs)<br>[`SnippetEnricher.cs`](immersive-reader/src/ImmersiveReading.Enrichment/SnippetEnricher.cs)<br>[`AiCompanionPlugin.cs`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.AiCompanion/AiCompanionPlugin.cs)<br>[`ComprehensionQuizService.cs`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.AiCompanion/ComprehensionQuizService.cs)<br>[`PersonaChatService.cs`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.AiCompanion/PersonaChatService.cs) | [`IFeaturePlugin`](immersive-reader/src/ImmersiveReading.Core/Extensions/FeaturePluginContracts.cs), [`ReaderContextService.GetJustReadPassageAsync`](immersive-reader/src/ImmersiveReading.Enrichment/ReaderContextService.cs), [`PersonaChatService.SendMessageAsync`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.AiCompanion/PersonaChatService.cs) | [`Phase5AiCompanionSpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Enrichment.Tests/Phase5AiCompanionSpecsTests.cs) |
+| **Desktop UI (Library Grid, Reader Controls, Popover, Drawers)** | [`client/src/`](immersive-reader/src/ImmersiveReading.App/client/) (React 19 + TS + Vite)<br>[`MainWindowHost.cs`](immersive-reader/src/ImmersiveReading.App/Hosting/MainWindowHost.cs)<br>[`AppSchemeHandler.cs`](immersive-reader/src/ImmersiveReading.App/Hosting/AppSchemeHandler.cs) | `useLibraryStore`, `useReaderStore`, `useCompanionStore`, `useStudyPackStore`, `useConfigStore` | `dotnet run --project immersive-reader/src/ImmersiveReading.App -- --verify-ui` |
+| **JSON-RPC Bridge (Adding/Changing Frontend $\leftrightarrow$ C# APIs)** | [`LibraryRpcDispatcher.cs`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs)<br>[`src/ImmersiveReading.App/Rpc/Modules/`](immersive-reader/src/ImmersiveReading.App/Rpc/Modules/)<br>[`Program.cs`](immersive-reader/src/ImmersiveReading.App/Program.cs) | [`IRpcModule`](immersive-reader/src/ImmersiveReading.App/Rpc/IRpcModule.cs), [`LibraryRpcDispatcher.DispatchJsonAsync`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs) | [`Phase1LibrarySpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Core.Tests/Phase1LibrarySpecsTests.cs) |
+| **EPUB Library, 24k+ Scanner, Folders, Tags & Custom Fields** | [`LibraryManager.cs`](immersive-reader/src/ImmersiveReading.Library/LibraryManager.cs)<br>[`Library/Books/`](immersive-reader/src/ImmersiveReading.Library/Books/)<br>[`Library/Folders/`](immersive-reader/src/ImmersiveReading.Library/Folders/)<br>[`Library/Tags/`](immersive-reader/src/ImmersiveReading.Library/Tags/)<br>[`Library/CustomFields/`](immersive-reader/src/ImmersiveReading.Library/CustomFields/)<br>[`LibraryDatabase.cs`](immersive-reader/src/ImmersiveReading.Library/LibraryDatabase.cs)<br>[`EpubMetadataExtractor.cs`](immersive-reader/src/ImmersiveReading.Core/Epub/EpubMetadataExtractor.cs) | [`BookImportService`](immersive-reader/src/ImmersiveReading.Library/Books/BookImportService.cs), [`BookQueryService`](immersive-reader/src/ImmersiveReading.Library/Books/BookQueryService.cs), [`FolderService`](immersive-reader/src/ImmersiveReading.Library/Folders/FolderService.cs), [`TagService`](immersive-reader/src/ImmersiveReading.Library/Tags/TagService.cs), [`CustomFieldService`](immersive-reader/src/ImmersiveReading.Library/CustomFields/CustomFieldService.cs), [`MigrationRunner`](immersive-reader/src/ImmersiveReading.Core/Database/MigrationRunner.cs) | [`Phase1LibrarySpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Core.Tests/Phase1LibrarySpecsTests.cs) |
+| **EPUB Chapter Rendering, `<ruby>` Furigana & Token Spans** | [`BookSchemeHandler.cs`](immersive-reader/src/ImmersiveReading.Enrichment/BookSchemeHandler.cs)<br>[`AngleSharpDomEnricher.cs`](immersive-reader/src/ImmersiveReading.Enrichment/AngleSharpDomEnricher.cs)<br>[`Enrichment/Dom/`](immersive-reader/src/ImmersiveReading.Enrichment/Dom/)<br>[`ChapterEnrichmentCache.cs`](immersive-reader/src/ImmersiveReading.Enrichment/ChapterEnrichmentCache.cs) | [`BookSchemeHandler.ResolveAsync`](immersive-reader/src/ImmersiveReading.Enrichment/BookSchemeHandler.cs), [`AngleSharpDomEnricher.EnrichChapterAsync`](immersive-reader/src/ImmersiveReading.Enrichment/AngleSharpDomEnricher.cs), [`TokenDomApplier`](immersive-reader/src/ImmersiveReading.Enrichment/Dom/TokenDomApplier.cs), [`BlockDiscovery`](immersive-reader/src/ImmersiveReading.Enrichment/Dom/BlockDiscovery.cs) | [`Phase2EnrichmentSpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Enrichment.Tests/Phase2EnrichmentSpecsTests.cs) |
+| **Japanese Morphological Analysis (`MeCab.DotNet`) or Adding a Language** | [`ILanguagePlugin.cs`](immersive-reader/src/ImmersiveReading.Core/Plugins/ILanguagePlugin.cs)<br>[`JapaneseLanguagePlugin.cs`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.Japanese/JapaneseLanguagePlugin.cs)<br>[`IDeinflectionRuleProvider.cs`](immersive-reader/src/ImmersiveReading.Core/Plugins/IDeinflectionRuleProvider.cs) | [`ILanguagePlugin`](immersive-reader/src/ImmersiveReading.Core/Plugins/ILanguagePlugin.cs), [`JapaneseLanguagePlugin.AnalyzeParagraphsAsync`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.Japanese/JapaneseLanguagePlugin.cs), [`IDeinflectionRuleProvider`](immersive-reader/src/ImmersiveReading.Core/Plugins/IDeinflectionRuleProvider.cs) | [`Phase2EnrichmentSpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Enrichment.Tests/Phase2EnrichmentSpecsTests.cs) |
+| **Instant Dictionary Lookup, Deinflection & Word Status (`Known`/`Learning`)** | [`DictionaryLookupEngine.cs`](immersive-reader/src/ImmersiveReading.Dictionaries/DictionaryLookupEngine.cs)<br>[`Dictionaries/Lookup/`](immersive-reader/src/ImmersiveReading.Dictionaries/Lookup/)<br>[`JapaneseDeinflector.cs`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.Japanese/JapaneseDeinflector.cs)<br>[`IDictionaryImporter.cs`](immersive-reader/src/ImmersiveReading.Dictionaries/Abstractions/IDictionaryImporter.cs)<br>[`DictionaryImporterRegistry.cs`](immersive-reader/src/ImmersiveReading.Dictionaries/Abstractions/DictionaryImporterRegistry.cs)<br>[`VocabularyTracker.cs`](immersive-reader/src/ImmersiveReading.Dictionaries/VocabularyTracker.cs) | [`DictionaryLookupEngine.LookupAsync`](immersive-reader/src/ImmersiveReading.Dictionaries/DictionaryLookupEngine.cs), [`JapaneseDeinflector.Deinflect`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.Japanese/JapaneseDeinflector.cs), [`IDictionaryImporter`](immersive-reader/src/ImmersiveReading.Dictionaries/Abstractions/IDictionaryImporter.cs), [`TermRanker`](immersive-reader/src/ImmersiveReading.Dictionaries/Lookup/TermRanker.cs) | [`Phase3DictionarySpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Dictionaries.Tests/Phase3DictionarySpecsTests.cs) |
+| **1-Click Sentence Flashcards & Python Study Pack Bridge** | [`FlashcardMiningService.cs`](immersive-reader/src/ImmersiveReading.Library/FlashcardMiningService.cs)<br>[`Library/Flashcards/`](immersive-reader/src/ImmersiveReading.Library/Flashcards/)<br>[`PythonStudyPackBridge.cs`](immersive-reader/src/ImmersiveReading.Library/PythonStudyPackBridge.cs)<br>[`Library/StudyPack/`](immersive-reader/src/ImmersiveReading.Library/StudyPack/) | [`FlashcardMiningService.MineCard`](immersive-reader/src/ImmersiveReading.Library/FlashcardMiningService.cs), [`PythonStudyPackBridge.AcquireSnapshotLease`](immersive-reader/src/ImmersiveReading.Library/PythonStudyPackBridge.cs), [`SnapshotLeaseManager`](immersive-reader/src/ImmersiveReading.Library/StudyPack/SnapshotLeaseManager.cs) | [`Phase4StudyPackSpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Core.Tests/Phase4StudyPackSpecsTests.cs) |
+| **AI Comprehension Quizzes, $n+1$ Persona Chat & Feature Plugins** | [`IFeaturePlugin.cs`](immersive-reader/src/ImmersiveReading.Core/Extensions/IFeaturePlugin.cs)<br>[`IPluginModule.cs`](immersive-reader/src/ImmersiveReading.Core/Extensions/IPluginModule.cs)<br>[`ILlmProviderFactory.cs`](immersive-reader/src/ImmersiveReading.Core/Extensions/LlmContracts.cs)<br>[`LlmRequestBuilder.cs`](immersive-reader/src/ImmersiveReading.Core/Extensions/LlmRequestBuilder.cs)<br>[`ReaderContextService.cs`](immersive-reader/src/ImmersiveReading.Enrichment/ReaderContextService.cs)<br>[`SnippetEnricher.cs`](immersive-reader/src/ImmersiveReading.Enrichment/SnippetEnricher.cs)<br>[`AiCompanionPlugin.cs`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.AiCompanion/AiCompanionPlugin.cs) | [`IFeaturePlugin`](immersive-reader/src/ImmersiveReading.Core/Extensions/IFeaturePlugin.cs), [`IPluginModule`](immersive-reader/src/ImmersiveReading.Core/Extensions/IPluginModule.cs), [`LlmRequestBuilder`](immersive-reader/src/ImmersiveReading.Core/Extensions/LlmRequestBuilder.cs), [`ReaderContextService.GetJustReadPassageAsync`](immersive-reader/src/ImmersiveReading.Enrichment/ReaderContextService.cs) | [`Phase5AiCompanionSpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Enrichment.Tests/Phase5AiCompanionSpecsTests.cs) |
 | **Global Configuration (Directories, Colors, Typography, LLM, Dictionaries)** | [`ConfigurationManager.cs`](immersive-reader/src/ImmersiveReading.Library/ConfigurationManager.cs)<br>[`AppConfig.cs`](immersive-reader/src/ImmersiveReading.Core/Config/AppConfig.cs)<br>[`LibraryDatabase.cs`](immersive-reader/src/ImmersiveReading.Library/LibraryDatabase.cs)<br>[`LibraryRpcDispatcher.cs`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs)<br>[`index.html`](immersive-reader/src/ImmersiveReading.App/wwwroot/index.html) | `config.*` RPC methods, `app_settings` table, dynamic CSS variables | [`GlobalConfigurationSpecsTests.cs`](immersive-reader/tests/ImmersiveReading.Core.Tests/GlobalConfigurationSpecsTests.cs) |
 | **Offline Python Study Pack & Printable A4 PDF Pipeline** | [`enrichment.py`](enrichement-extractor/immersive/enrichment.py)<br>[`build.py`](enrichement-extractor/immersive/build.py)<br>[`study_data.py`](enrichement-extractor/immersive/study_data.py)<br>[`kanji_pdf.py`](enrichement-extractor/immersive/kanji_pdf.py)<br>[`publication.py`](enrichement-extractor/immersive/publication.py) | [`enrich_book()`](enrichement-extractor/immersive/enrichment.py#L22-L70), [`build_data()`](enrichement-extractor/immersive/build.py#L79-L351), [`prepare_study_data()`](enrichement-extractor/immersive/study_data.py#L51-L77) | `cd enrichement-extractor && .venv\Scripts\python.exe -m unittest discover -s tests -v` |
 
@@ -39,7 +39,7 @@ The workspace is split into two top-level directories that cooperate seamlessly 
 ```mermaid
 flowchart TB
     subgraph Desktop["immersive-reader/ (.NET 10 + Photino.NET Desktop App)"]
-        UI["Photino WebView UI\n(wwwroot/index.html, app.js, styles.css)"]
+        UI["Photino WebView UI\n(React 19 + TS + Vite SPA: wwwroot/dist/)"]
         RPC["LibraryRpcDispatcher\n(JSON-RPC 2.0 over Photino IPC)"]
         SCHEME["ir-book:// Scheme Interceptor\n(BookSchemeHandler + AngleSharpDomEnricher)"]
         MECAB["JapaneseLanguagePlugin\n(MeCab.DotNet + Katakana->Hiragana)"]
@@ -85,7 +85,7 @@ flowchart TB
 
 ## 3. Solution Layout (`immersive-reader/`)
 
-Inside [`immersive-reader/ImmersiveReading.sln`](immersive-reader/ImmersiveReading.sln), dependencies flow strictly downward (no circular references):
+Inside [`immersive-reader/ImmersiveReading.sln`](immersive-reader/ImmersiveReading.sln), dependencies flow strictly downward (no circular references). Notably, `Enrichment`, `Dictionaries`, and `Plugins` depend **only on Core**:
 
 ```text
 immersive-reader/
@@ -96,44 +96,63 @@ immersive-reader/
 │   └── covers/                                       # Extracted EPUB cover thumbnails (<book-id>.jpg)
 ├── src/
 │   ├── ImmersiveReading.Core/                        # Zero-dependency contracts & domain records
-│   │   ├── Library/                                  # BookRecord, FolderNode, CustomFieldDefinition, etc.
-│   │   ├── Plugins/LanguagePluginContracts.cs        # ILanguagePlugin, RichToken, EnrichedParagraph
-│   │   └── Extensions/FeaturePluginContracts.cs      # IFeaturePlugin, FeaturePluginHost, ILlmProvider
-│   ├── ImmersiveReading.Library/                     # SQLite library, EPUB parser, Python bridge, mining
-│   │   ├── LibraryDatabase.cs                        # SQLite WAL schema & migrations
-│   │   ├── LibraryManager.cs                         # CRUD, 2-stage batch scanner, FTS5 search, custom fields
-│   │   ├── EpubArchiveReader.cs                      # ZIP/OPF/NCX/Navigation & cover parser
-│   │   ├── PythonStudyPackBridge.cs                  # .publication/active.json reader, OS lease lock, CLI runner
-│   │   └── FlashcardMiningService.cs                 # Atomic library.json + mined-anki.tsv card exporter
-│   ├── ImmersiveReading.Enrichment/                  # Real-time AngleSharp XHTML enrichment & context slicing
-│   │   ├── AngleSharpDomEnricher.cs                  # Ruby-aware DOM walker, <span class="ir-tok"> injector
+│   │   ├── Database/                                 # IDbConnectionFactory, IDbMigration, MigrationRunner
+│   │   ├── Library/                                  # Modular BookModels, OrganizationModels, CustomFieldModels, etc.
+│   │   ├── Books/ & Study/                           # IBookCatalog, IStudyPackCatalog, IVocabularyService
+│   │   ├── Epub/                                     # EpubMetadataExtractor, BookIdentity, EpubArchiveReader
+│   │   ├── Plugins/                                  # ILanguagePlugin, IDeinflectionRuleProvider, RichToken, EnrichedParagraph
+│   │   └── Extensions/                               # IFeaturePlugin, IPluginModule, ILlmProvider, ILlmProviderFactory, LlmRequestBuilder
+│   ├── ImmersiveReading.Library/                     # SQLite library, EPUB scanner, Python bridge, mining
+│   │   ├── LibraryDatabase.cs                        # IDbConnectionFactory implementation + WAL mode
+│   │   ├── Schema/LibraryMigrations.cs               # Versioned migrations (v1 Core Tables, v2 Legacy AI Tables)
+│   │   ├── LibraryManager.cs                         # Lean facade coordinator delegating to sub-services (<150 lines)
+│   │   ├── Books/                                    # BookQueryService, BookMetadataService, BookImportService, BookListSqlBuilder
+│   │   ├── Folders/ & Tags/ & CustomFields/          # FolderService, TagService, CustomFieldService
+│   │   ├── Jiten/                                    # JitenMoeService, JitenModels, JitenResponseParser, IJitenApiKeyProvider
+│   │   ├── StudyPack/                                # PythonStudyPackBridge, SnapshotLeaseManager, PublicationReader, PythonBuildRunner
+│   │   └── Flashcards/                               # FlashcardMiningService, FlashcardLibraryStore, AnkiTsvWriter
+│   ├── ImmersiveReading.Enrichment/                  # Real-time AngleSharp XHTML enrichment & context slicing (Depends ONLY on Core)
+│   │   ├── AngleSharpDomEnricher.cs                  # Lean orchestrator (<130 lines) delegating to Dom/ components
+│   │   ├── Dom/                                      # TokenDomApplier, BlockDiscovery, PolyglotXhtmlMarkupFormatter, EpubUrlRewriter, ReaderHeadInjector
 │   │   ├── BookSchemeHandler.cs                      # Resolves ir-book://{bookId}/{path} requests
-│   │   ├── ChapterEnrichmentCache.cs                 # LRU cache of enriched chapters & synthetic snippets
+│   │   ├── ChapterEnrichmentCache.cs                 # Thread-safe bounded LRU cache of enriched chapters & snippets
 │   │   ├── ReaderContextService.cs                   # Zero-spoiler text/token slicer up to current progress
 │   │   └── SnippetEnricher.cs                        # Enriches AI quiz/chat HTML snippets for 1-click lookup
-│   ├── ImmersiveReading.Dictionaries/                # Sub-5ms dictionary lookup & deinflection
-│   │   ├── DictionaryDatabase.cs                     # dictionaries.db schema & connection manager
+│   ├── ImmersiveReading.Dictionaries/                # Sub-5ms dictionary lookup & deinflection (Depends ONLY on Core)
+│   │   ├── Abstractions/                             # IDictionaryImporter strategy & DictionaryImporterRegistry
+│   │   ├── DictionaryDatabase.cs                     # dictionaries.db schema with MigrationRunner
+│   │   ├── Schema/DictionaryMigrations.cs            # Versioned dictionary table migrations (v1 Dictionaries & Kanji)
 │   │   ├── YomitanSqliteImporter.cs                  # Imports Yomitan format-3 .zip dictionaries
 │   │   ├── KanjidicImporter.cs                       # Imports kanjidic2.xml.gz, ka_data.csv, KanjiVG SVGs
-│   │   ├── JapaneseDeinflector.cs                    # Breadth-first rule deinflector (45+ conjugation rules)
-│   │   ├── DictionaryLookupEngine.cs                 # Longest-prefix + ruby-priority + deinflection lookup
-│   │   └── VocabularyTracker.cs                      # Reads/writes user_vocabulary in library.db
+│   │   ├── DictionaryLookupEngine.cs                 # Lean coordinator (<130 lines) delegating to Lookup/ components
+│   │   ├── Lookup/                                   # TermRanker, LookupCandidateGenerator, SentenceExtractor, PitchFrequencyParser, TermRepository
+│   │   └── VocabularyTracker.cs                      # Reads/writes user_vocabulary status
 │   ├── Plugins/
-│   │   ├── ImmersiveReading.Plugins.Japanese/        # MeCab.DotNet Japanese tokenizer & furigana aligner
-│   │   └── ImmersiveReading.Plugins.AiCompanion/     # Progressive Quiz, n+1 Persona Chat & LLM provider
+│   │   ├── ImmersiveReading.Plugins.Japanese/        # MeCab.DotNet tokenizer, StandardJapaneseDeinflectionRules, JapaneseDeinflector
+│   │   └── ImmersiveReading.Plugins.AiCompanion/     # AiCompanionModule (DI registration), DefaultLlmProviderFactory, Prompts/
 │   └── ImmersiveReading.App/                         # Photino.NET Desktop Host, Local Asset Server & Web UI
-│       ├── Program.cs                                # Composition root, Photino window, local HTTP server
-│       ├── Rpc/LibraryRpcDispatcher.cs               # JSON-RPC 2.0 router for all UI commands
-│       └── wwwroot/                                  # Vanilla HTML/CSS/JS frontend (zero build step required)
-│           ├── index.html                            # Library shell, Reader shell, Modals, Drawers
-│           ├── app.js                                # Frontend state, RPC client, Popover, Study & AI UI
-│           ├── reader-frame.js                       # Injected into every EPUB chapter iframe
-│           ├── reader-injected.css                   # Injected into every EPUB chapter iframe
-│           └── styles.css                            # Application theme & layout styles
-└── tests/
-    ├── ImmersiveReading.Core.Tests/                  # Phase 1 (Library) & Phase 4 (Study Pack/Mining) tests
-    ├── ImmersiveReading.Enrichment.Tests/            # Phase 2 (AngleSharp/MeCab) & Phase 5 (AI/n+1) tests
-    └── ImmersiveReading.Dictionaries.Tests/          # Phase 3 (Deinflection, Yomitan, Lookup) tests
+│       ├── Program.cs                                # Lean composition root (~40 lines)
+│       ├── Composition/                              # AppPaths, AppServices (Microsoft.Extensions.DependencyInjection), PluginCatalog
+│       ├── Hosting/                                  # MainWindowHost, AppSchemeHandler
+│       ├── Cli/                                      # SmokeTest, ReaderVerification
+│       ├── Rpc/                                      # LibraryRpcDispatcher router & IRpcModule
+│       │   └── Modules/                              # BootstrapRpcModule, LibraryRpcModule, JitenRpcModule, ReaderRpcModule, DictionaryRpcModule, StudyPackRpcModule, ConfigRpcModule, ExtensionsRpcModule
+│       ├── client/                                   # Modern React 19 + TypeScript + Vite SPA
+│       │   ├── src/
+│       │   │   ├── components/                       # Header, Sidebar, LibraryGrid, BookCard, ReaderView, DictionaryPopover, Drawers, Modals
+│       │   │   ├── stores/                           # Zustand stores: useLibraryStore, useReaderStore, useCompanionStore, useStudyPackStore, useConfigStore
+│       │   │   ├── services/                         # rpc.ts (Photino IPC bridge), selfTestRunner.ts
+│       │   │   └── types/api.ts                      # Strongly typed TypeScript contracts matching C# DTOs
+│       │   ├── public/assets/                        # Assets copied to wwwroot/dist/assets
+│       │   └── vite.config.ts                        # Outputs to wwwroot/dist/ with relative base path ('./')
+│       └── wwwroot/
+│           ├── dist/                                 # Production Vite bundle loaded by Photino MainWindowHost (index.html, assets/index-*.js, index-*.css)
+│           └── assets/                               # Standalone scripts: ir-reader-bridge.js, ir-reader-injected.css (injected into chapter iframes)
+│   └── tests/
+│       ├── ImmersiveReading.Core.Tests/              # Phase 1 (Library, Books, SQL Builder) & Phase 4 (Study Pack/Mining) tests
+│       ├── ImmersiveReading.Enrichment.Tests/        # Phase 2 (AngleSharp/MeCab, LRU Cache) & Phase 5 (AI/n+1) tests
+│       ├── ImmersiveReading.Dictionaries.Tests/      # Phase 3 (Deinflection, Yomitan, Lookup) tests
+│       └── ImmersiveReading.App.Tests/               # RPC dispatching, local asset server, and integration tests
 ```
 
 ---
@@ -143,26 +162,33 @@ immersive-reader/
 Understanding these 5 flows will explain 95% of what happens at runtime.
 
 ### Flow 1: Frontend Button Click $\rightarrow$ C# Backend (`JSON-RPC 2.0`)
-1. **Frontend ([`app.js`](immersive-reader/src/ImmersiveReading.App/wwwroot/app.js#L62-L87))**:
-   Any UI action calls `await rpcCall("domain.methodName", { ...params })`.
-   - Under the hood, `rpcCall` generates a request ID (`req-1`, `req-2`, ...), stores a Promise in `pendingRpc`, and calls `window.external.sendMessage(JSON.stringify({ id, method, params }))`.
-2. **Photino Bridge ([`Program.cs`](immersive-reader/src/ImmersiveReading.App/Program.cs#L156-L169))**:
-   `window.RegisterWebMessageReceivedHandler` receives the JSON string on a background task and passes it to [`LibraryRpcDispatcher.DispatchJsonAsync`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs#L64-L91).
-3. **Router ([`LibraryRpcDispatcher.cs`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs#L93-L550))**:
-   - Built-in routes (`library.*`, `reader.*`, `lookup.*`, `vocab.*`, `dicts.*`, `studyPack.*`, `flashcards.*`, `plugins.*`) are matched in the `switch (method)` block.
-   - Plugin routes (such as `ai.quiz.*`, `ai.chat.*`, `ai.persona.*`, `ai.settings.*`) fall through to `default:` where [`_featurePluginHost.TryHandleRpcAsync(method, p, ct)`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs#L533-L541) dispatches them to the registered [`IFeaturePlugin`](immersive-reader/src/ImmersiveReading.Core/Extensions/FeaturePluginContracts.cs#L15-L21).
+1. **Frontend ([`client/src/services/rpc.ts`](immersive-reader/src/ImmersiveReading.App/client/src/services/rpc.ts))**:
+   Any UI action calls `await rpc.call("domain.methodName", { ...params })`.
+   - Under the hood, `rpc.call` generates a request ID (`req-1`, `req-2`, ...), stores a Promise in `pendingCalls`, and calls `window.external.sendMessage(JSON.stringify({ id, method, params }))`.
+2. **Photino Bridge ([`MainWindowHost.cs`](immersive-reader/src/ImmersiveReading.App/Hosting/MainWindowHost.cs))**:
+   `window.RegisterWebMessageReceivedHandler` receives the JSON string on a background task and passes it to [`LibraryRpcDispatcher.DispatchJsonAsync`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs).
+3. **Router ([`LibraryRpcDispatcher.cs`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs))**:
+   - Built-in routes are organized into modular [`IRpcModule`](immersive-reader/src/ImmersiveReading.App/Rpc/IRpcModule.cs) implementations in [`src/ImmersiveReading.App/Rpc/Modules/`](immersive-reader/src/ImmersiveReading.App/Rpc/Modules/):
+     - `BootstrapRpcModule`: `library.getBootstrapState`, `app.shutdown`
+     - `LibraryRpcModule`: `library.listBooks`, `library.getBookDetail`, `library.scanDirectory`, `library.importEpub`, `library.mineFlashcard`
+     - `JitenRpcModule`: `jiten.searchFranchises`, `jiten.syncBook`
+     - `ReaderRpcModule`: `reader.openBook`, `reader.getChapterContent`, `reader.saveProgress`, `lookup.query`, `vocab.setStatus`
+     - `DictionaryRpcModule`: `dictionaries.list`, `dictionaries.import`
+     - `StudyPackRpcModule`: `studypack.getOverview`, `studypack.build`
+     - `ConfigRpcModule`: `config.getAll`, `config.saveAll`, `config.testLlmEndpoint`
+     - `ExtensionsRpcModule`: `extensions.list`
+   - Plugin routes (such as `ext.aiCompanion.*`) fall through to the fallback router where [`_featurePluginHost.TryHandleRpcAsync(method, p, ct)`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs) dispatches them to the registered [`IFeaturePlugin`](immersive-reader/src/ImmersiveReading.Core/Extensions/IFeaturePlugin.cs).
 4. **Response**:
-   `DispatchJsonAsync` serializes `{ id, result, error }` and calls `window.SendWebMessage(responseJson)`, resolving the Promise in `app.js`.
+   `DispatchJsonAsync` serializes `{ id, result, error }` and calls `window.SendWebMessage(responseJson)`, resolving the Promise in `rpc.call`.
 
 ---
 
 ### Flow 2: Opening a Book & Pre-Render Chapter Enrichment (`ir-book://`)
 When a user clicks **Read** on a book card:
-1. **Session Load ([`app.js`](immersive-reader/src/ImmersiveReading.App/wwwroot/app.js))**:
-   Calls `rpcCall("reader.openBook", { bookId })`, which returns the book's spine chapters, TOC, saved `reading_progress` (`chapterIndex`, `tokenId`, `readingMode`), and the initial chapter's URL (`ir-book://book-4e0541b184c4ace9/item/xhtml/p-001.xhtml`).
-2. **Custom Scheme Interception ([`Program.cs`](immersive-reader/src/ImmersiveReading.App/Program.cs#L140-L154) $\rightarrow$ [`BookSchemeHandler.cs`](immersive-reader/src/ImmersiveReading.Enrichment/BookSchemeHandler.cs))**:
-   - The reader sets `<iframe id="reader-iframe" src="ir-book://...">` (or fetches via `reader.getChapterContent` fallback).
-   - `RegisterCustomSchemeHandler("ir-book", ...)` calls [`BookSchemeHandler.ResolveAsync(uri)`](immersive-reader/src/ImmersiveReading.Enrichment/BookSchemeHandler.cs#L43-L108).
+1. **Session Load ([`useReaderStore.ts`](immersive-reader/src/ImmersiveReading.App/client/src/stores/useReaderStore.ts))**:
+   Calls `rpc.call("reader.openBook", { bookId })`, which returns the book's spine chapters, TOC, saved `reading_progress` (`chapterIndex`, `tokenId`, `writingMode`), and the initial chapter's pre-rendered HTML (`initialChapterHtml`).
+2. **Custom Scheme Interception ([`Program.cs`](immersive-reader/src/ImmersiveReading.App/Program.cs) $\rightarrow$ [`BookSchemeHandler.cs`](immersive-reader/src/ImmersiveReading.Enrichment/BookSchemeHandler.cs))**:
+   - The reader sets `<iframe id="reader-frame" srcDoc={chapterHtml}>` (with direct `ir-book://` assets resolution for relative images/fonts).
    - If the path is an image, font, or CSS file inside the EPUB ZIP, `BookSchemeHandler` streams the raw bytes directly from the `.epub` archive with the appropriate MIME type.
    - If the path is an `.xhtml` / `.html` spine document, `BookSchemeHandler` passes the raw XHTML to [`AngleSharpDomEnricher.EnrichChapterAsync`](immersive-reader/src/ImmersiveReading.Enrichment/AngleSharpDomEnricher.cs).
 3. **Ruby-Aware DOM Walking & MeCab Tokenization ([`AngleSharpDomEnricher.cs`](immersive-reader/src/ImmersiveReading.Enrichment/AngleSharpDomEnricher.cs))**:
@@ -176,15 +202,15 @@ When a user clicks **Read** on a book card:
        <ruby class="ir-ruby" data-ruby-src="epub"><rb>魔</rb><rt>ま</rt><rb>法</rb><rt>ほう</rt></ruby>
      </span>
      ```
-   - Injects `/reader-injected.css` and `/reader-frame.js` into `<head>`/`<body>` and caches the `EnrichedChapterResult` (including the `IReadOnlyDictionary<int, RichToken>` map) inside [`ChapterEnrichmentCache`](immersive-reader/src/ImmersiveReading.Enrichment/ChapterEnrichmentCache.cs).
+   - Injects `ir-app://assets/ir-reader-injected.css` and `ir-app://assets/ir-reader-bridge.js` into `<head>`/`<body>` and caches the `EnrichedChapterResult` (including the `IReadOnlyDictionary<int, RichToken>` map) inside [`ChapterEnrichmentCache`](immersive-reader/src/ImmersiveReading.Enrichment/ChapterEnrichmentCache.cs).
 
 ---
 
 ### Flow 3: Clicking a Word $\rightarrow$ Sub-5ms Dictionary Popover & Sentence Mining
-1. **Click Inside Chapter or AI Snippet ([`app.js`](immersive-reader/src/ImmersiveReading.App/wwwroot/app.js))**:
-   - Clicking any `.ir-tok` span reads its `data-tid` (`tokenId`), `data-sid` (`sentenceId`), and surface text, then notifies `app.js` via `window.parent.postMessage({ type: "ir:tokenClick", ... })`.
+1. **Click Inside Chapter ([`ChapterIframe.tsx`](immersive-reader/src/ImmersiveReading.App/client/src/components/reader/ChapterIframe.tsx))**:
+   - Clicking any `.ir-tok` span inside the iframe triggers `ir-reader-bridge.js`, which notifies the React parent window via `window.parent.postMessage({ type: "ir-token-click", tokenId, clientRect })`.
 2. **Lookup RPC (`lookup.query`)**:
-   - `app.js` calls `rpcCall("lookup.query", { bookId, chapterHref, tokenId, surfaceOverride, readingOverride, lemmaOverride })`.
+   - [`useReaderStore.ts`](immersive-reader/src/ImmersiveReading.App/client/src/stores/useReaderStore.ts) calls `rpc.call("lookup.query", { bookId, chapterHref, tokenId })`.
    - [`DictionaryLookupEngine.LookupAsync`](immersive-reader/src/ImmersiveReading.Dictionaries/DictionaryLookupEngine.cs) fetches the cached chapter from `ChapterEnrichmentCache`, locates the clicked `RichToken` and its containing sentence, and extracts up to 16 characters of surface text starting at the clicked token's start offset.
    - Generates candidate substrings (longest first) and runs [`JapaneseDeinflector.Deinflect`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.Japanese/JapaneseDeinflector.cs) (e.g., `食べさせられなかった` $\rightarrow$ `食べる`).
    - Queries `dictionaries.db` (`terms` table by `expression` and `reading_hira`) and ranks matches by:
@@ -195,13 +221,13 @@ When a user clicks **Read** on a book card:
      5. Dictionary priority & frequency rank
    - Also queries `kanji_characters` in `dictionaries.db` for every kanji character in the matched headword (meanings, on/kun readings, JLPT, stroke count, KanjiVG SVG).
 3. **Mining a Sentence Flashcard (`flashcards.mine`)**:
-   - Clicking **🃏 Mine Sentence to Anki** in the popover calls `rpcCall("flashcards.mine", { ... })` $\rightarrow$ [`FlashcardMiningService.MineCard`](immersive-reader/src/ImmersiveReading.Library/FlashcardMiningService.cs).
+   - Clicking **+ Mine Card** in [`DictionaryPopover.tsx`](immersive-reader/src/ImmersiveReading.App/client/src/components/reader/DictionaryPopover.tsx) calls `rpc.call("flashcards.mine", { ... })` $\rightarrow$ [`FlashcardMiningService.MineCard`](immersive-reader/src/ImmersiveReading.Library/FlashcardMiningService.cs).
    - Writes atomically to `enrichement-extractor/output/data/flashcards/library.json` and `mined-anki.tsv` with `<ruby>` furigana and `<mark>` around the target word. **Story sentences are never translated into English.**
 
 ---
 
 ### Flow 4: Study Pack Bridge & Printable PDFs (`studyPack.*`)
-1. When the user clicks **📚 Study Pack** in the Reader topbar, `app.js` calls `rpcCall("studyPack.get", { bookId })`.
+1. When the user clicks **Study** in the Reader topbar, [`useStudyPackStore.ts`](immersive-reader/src/ImmersiveReading.App/client/src/stores/useStudyPackStore.ts) calls `rpc.call("studypack.getOverview", { bookId })`.
 2. [`PythonStudyPackBridge`](immersive-reader/src/ImmersiveReading.Library/PythonStudyPackBridge.cs) checks `enrichement-extractor/output/.publication/active.json`, acquires an OS byte-range lease (`AcquireSnapshotLease`), and inspects `output/pdf/<book-id>/` and `output/data/<book-id>/vocabulary-sets.json`.
 3. Master and chapter PDFs are served to the frontend via the local asset server in [`Program.cs`](immersive-reader/src/ImmersiveReading.App/Program.cs#L244-L320) (`/ir-local-pdf/<book-id>/<filename>.pdf`), so they open directly inside the embedded PDF viewer modal or external viewer.
 4. If a book does not yet have a prebuilt study pack, clicking **⚡ Build Study Pack** invokes `enrichement-extractor\.venv\Scripts\python.exe -m immersive.cli build|enrich` asynchronously.
@@ -210,7 +236,7 @@ When a user clicks **Read** on a book card:
 
 ### Flow 5: AI Companion Plugin (Zero-Spoiler Quiz & $n+1$ Persona Chat)
 1. **Extension Bus Registration**:
-   At startup in [`Program.cs`](immersive-reader/src/ImmersiveReading.App/Program.cs#L62-L70), [`AiCompanionPlugin`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.AiCompanion/AiCompanionPlugin.cs) is registered with [`FeaturePluginHost`](immersive-reader/src/ImmersiveReading.Core/Extensions/FeaturePluginContracts.cs#L65-L120).
+   At startup in [`Program.cs`](immersive-reader/src/ImmersiveReading.App/Program.cs), modules listed in [`PluginCatalog.cs`](immersive-reader/src/ImmersiveReading.App/Composition/PluginCatalog.cs) are resolved, and [`AiCompanionPlugin`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.AiCompanion/AiCompanionPlugin.cs) is registered with [`FeaturePluginHost`](immersive-reader/src/ImmersiveReading.Core/Extensions/FeaturePluginContracts.cs).
 2. **Zero-Spoiler Context Slicing ([`ReaderContextService.cs`](immersive-reader/src/ImmersiveReading.Enrichment/ReaderContextService.cs))**:
    - Before generating a quiz or persona reply, `ReaderContextService` fetches the user's current `(CurrentChapterIndex, CurrentTokenOffset)` and filters chapters/sentences so **only tokens with `ChapterIndex < CurrentChapterIndex` or `(ChapterIndex == CurrentChapterIndex && TokenId <= CurrentTokenOffset)`** are included. Unread text in the current chapter or later chapters is physically excluded from the slice.
 3. **Progressive Comprehension Quiz ([`ComprehensionQuizService.cs`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.AiCompanion/ComprehensionQuizService.cs))**:
@@ -229,20 +255,22 @@ When a user clicks **Read** on a book card:
 ### Recipe A: Adding a New RPC Endpoint & UI Button in the Desktop App
 1. **Backend Method**: Add your domain logic to the relevant service (e.g., [`LibraryManager.cs`](immersive-reader/src/ImmersiveReading.Library/LibraryManager.cs) or a plugin).
 2. **Expose via JSON-RPC**:
-   - For core features: Add a `case "myDomain.myAction":` in [`LibraryRpcDispatcher.HandleMethodAsync`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs#L93-L550).
-   - For plugin features: Handle the method inside your [`IFeaturePlugin.HandleRpcAsync`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.AiCompanion/AiCompanionPlugin.cs#L82-L195) implementation.
+   - For core features: Register a handler in the appropriate [`IRpcModule`](immersive-reader/src/ImmersiveReading.App/Rpc/IRpcModule.cs) in [`src/ImmersiveReading.App/Rpc/Modules/`](immersive-reader/src/ImmersiveReading.App/Rpc/Modules/) (or create a new module implementing `IRpcModule`).
+   - For plugin features: Handle the method inside your [`IFeaturePlugin.HandleRpcAsync`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.AiCompanion/AiCompanionPlugin.cs) implementation.
 3. **Call from Frontend**:
-   In [`wwwroot/app.js`](immersive-reader/src/ImmersiveReading.App/wwwroot/app.js), call:
-   ```javascript
-   const data = await rpcCall("myDomain.myAction", { bookId: currentBookId });
+   In your React component or Zustand store:
+   ```typescript
+   import { rpc } from '../services/rpc';
+   const data = await rpc.call<MyResponseType>("myDomain.myAction", { bookId: currentBookId });
    ```
-   *(Note: `wwwroot/` uses plain ES2022 JavaScript and CSS—no bundler or npm build step is required. Just edit and run!)*
+   *(Run `npm run dev` in `client/` for instant HMR during development, or `npm run build` to compile production assets to `wwwroot/dist/`)*
 
-### Recipe B: Adding a New Table or Column to `library.db`
-1. Open [`LibraryDatabase.cs`](immersive-reader/src/ImmersiveReading.Library/LibraryDatabase.cs) and locate `InitializeSchema()`.
-2. Add your `CREATE TABLE IF NOT EXISTS ...` or idempotent column migration in `EnsureColumnExists(...)`.
-3. Add strongly-typed query/command methods on [`LibraryManager`](immersive-reader/src/ImmersiveReading.Library/LibraryManager.cs) or your service using `using var conn = _db.OpenConnection();`.
-4. Write an xUnit test in [`immersive-reader/tests/`](immersive-reader/tests) using a temporary directory (`Path.Combine(Path.GetTempPath(), ...)`).
+### Recipe B: Adding a New Table or Column via `MigrationRunner`
+1. Define a new `IDbMigration` implementation (e.g. in [`LibraryMigrations.cs`](immersive-reader/src/ImmersiveReading.Library/Schema/LibraryMigrations.cs) for `library.db` or [`DictionaryMigrations.cs`](immersive-reader/src/ImmersiveReading.Dictionaries/Schema/DictionaryMigrations.cs) for `dictionaries.db`).
+2. Specify `Module` (e.g. `"core"`), `Version` (e.g. `3`), and `Description`. Implement `Up(DbConnection conn, DbTransaction? tx)`.
+3. Register your migration in the database's `MigrationRunner.RunMigrations(...)` call.
+4. Add strongly-typed query/command methods on the appropriate sub-service (e.g. `BookQueryService`, `TagService`, etc.) using `using var conn = _db.CreateConnection();`.
+5. Write an xUnit test in [`immersive-reader/tests/`](immersive-reader/tests) using a temporary directory (`Path.Combine(Path.GetTempPath(), ...)`).
 
 ### Recipe C: Creating a New `IFeaturePlugin`
 1. Create a class implementing [`IFeaturePlugin`](immersive-reader/src/ImmersiveReading.Core/Extensions/FeaturePluginContracts.cs#L15-L21) (see [`AiCompanionPlugin.cs`](immersive-reader/src/Plugins/ImmersiveReading.Plugins.AiCompanion/AiCompanionPlugin.cs) as a template).
@@ -250,7 +278,7 @@ When a user clicks **Read** on a book card:
    - `context.ReaderContext` ([`IReaderContextService`](immersive-reader/src/ImmersiveReading.Core/Extensions/FeaturePluginContracts.cs#L37-L44)) for zero-spoiler text slicing.
    - `context.VocabularyBudget` ([`IVocabularyBudgetService`](immersive-reader/src/ImmersiveReading.Core/Extensions/FeaturePluginContracts.cs#L53-L57)) for querying the user's `Known` and `Learning` vocabulary.
    - `context.SnippetEnricher` ([`ISnippetEnricher`](immersive-reader/src/ImmersiveReading.Core/Extensions/FeaturePluginContracts.cs#L46-L51)) for turning plain Japanese strings into interactive `<ruby>` + `.ir-tok` HTML.
-3. Register your plugin in [`Program.cs`](immersive-reader/src/ImmersiveReading.App/Program.cs#L62-L70) via `featurePluginHost.RegisterPluginAsync(myPlugin)`.
+3. Register your module in [`PluginCatalog.cs`](immersive-reader/src/ImmersiveReading.App/Composition/PluginCatalog.cs) implementing [`IPluginModule`](immersive-reader/src/ImmersiveReading.Core/Extensions/IPluginModule.cs).
 
 ### Recipe D: Modifying Offline Python Enrichment or PDF Layout (`enrichement-extractor/`)
 1. Consult [`LLM-WIKI.md`](LLM-WIKI.md) and the modular pages in [`wiki/`](wiki/index.md):
@@ -287,7 +315,7 @@ dotnet run --project src\ImmersiveReading.App -- --verify-ui
 
 ### Run Unit & Specification Test Suites
 ```powershell
-# Run all 48 .NET 10 xUnit tests (Phases 1-5 Gherkin specs)
+# Run all 167 .NET 10 xUnit tests (Core, Enrichment, Dictionaries, App Specs)
 cd k:\immersive-reading\immersive-reader
 dotnet test ImmersiveReading.sln
 

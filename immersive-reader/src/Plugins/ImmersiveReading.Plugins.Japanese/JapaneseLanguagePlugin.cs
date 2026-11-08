@@ -9,7 +9,7 @@ public sealed class JapaneseLanguagePlugin : ILanguagePlugin
 
     private readonly JapaneseDeinflector _deinflector = new();
 
-    public string LanguageCode => "ja";
+    public string LanguageCode => LanguageCodes.Japanese;
     public string DisplayName => "Japanese (MeCab.DotNet + Okurigana Aligner)";
     public LanguageCapabilities Capabilities =>
         LanguageCapabilities.MorphologicalTokenizer |

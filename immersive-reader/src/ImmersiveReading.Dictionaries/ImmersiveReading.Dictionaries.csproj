@@ -2,9 +2,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ImmersiveReading.Core\ImmersiveReading.Core.csproj" />
-    <ProjectReference Include="..\ImmersiveReading.Library\ImmersiveReading.Library.csproj" />
-    <ProjectReference Include="..\ImmersiveReading.Enrichment\ImmersiveReading.Enrichment.csproj" />
-    <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.Japanese\ImmersiveReading.Plugins.Japanese.csproj" />
   </ItemGroup>
 
   <ItemGroup>

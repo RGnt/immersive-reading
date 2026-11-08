@@ -207,7 +207,7 @@ public sealed class Phase5AiCompanionSpecsTests : IDisposable
             _readerContext,
             _vocabBudget,
             _snippetEnricher,
-            _jaPlugin,
+            _pluginRegistry,
             mockLlm);
 
         // Scenario 4: Create BookPersona for "クーク" from highlighted dialogue
@@ -313,6 +313,72 @@ public sealed class Phase5AiCompanionSpecsTests : IDisposable
             T val = JsonSerializer.Deserialize<T>(json, JsonOpts)!;
             return Task.FromResult(new LlmStructuredResponse<T>(val, json, "mock-model"));
         }
+    }
+
+    private sealed class TestFeaturePlugin(
+        string pluginId,
+        Action<IFeaturePluginContext>? onInit = null,
+        bool throwOnInit = false) : IFeaturePlugin
+    {
+        public string PluginId => pluginId;
+        public string DisplayName => $"Test Plugin {pluginId}";
+        public string Version => "1.0.0";
+
+        public ValueTask InitializeAsync(IFeaturePluginContext context, CancellationToken ct = default)
+        {
+            if (throwOnInit)
+            {
+                throw new InvalidOperationException("Failed to initialize test plugin");
+            }
+
+            onInit?.Invoke(context);
+            return ValueTask.CompletedTask;
+        }
+
+        public void Dispose() { }
+    }
+
+    [Fact]
+    public async Task FeaturePluginHost_PrefixesRpcAction_WithPluginId()
+    {
+        using var host = new FeaturePluginHost(_readerContext, _vocabBudget, _snippetEnricher);
+        var plugin = new TestFeaturePlugin("samplePlugin", ctx =>
+        {
+            ctx.RegisterRpcAction("ping", (p, ct) => Task.FromResult<object?>("pong"));
+        });
+
+        await host.RegisterPluginAsync(plugin);
+
+        Assert.Single(host.Plugins);
+        Assert.True(host.TryGetRpcHandler("ext.samplePlugin.ping", out var handler));
+        Assert.NotNull(handler);
+        var result = await handler!(default, default);
+        Assert.Equal("pong", result);
+    }
+
+    [Fact]
+    public async Task FeaturePluginHost_RegisterRpcAction_ThrowsOnDuplicateKey()
+    {
+        using var host = new FeaturePluginHost(_readerContext, _vocabBudget, _snippetEnricher);
+        var plugin = new TestFeaturePlugin("dupPlugin", ctx =>
+        {
+            ctx.RegisterRpcAction("action1", (p, ct) => Task.FromResult<object?>(null));
+            ctx.RegisterRpcAction("action1", (p, ct) => Task.FromResult<object?>(null));
+        });
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => host.RegisterPluginAsync(plugin).AsTask());
+        Assert.Contains("action1", ex.Message);
+    }
+
+    [Fact]
+    public async Task FeaturePluginHost_FailingPlugin_IsNotAddedToPlugins()
+    {
+        using var host = new FeaturePluginHost(_readerContext, _vocabBudget, _snippetEnricher);
+        var failingPlugin = new TestFeaturePlugin("failingPlugin", throwOnInit: true);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.RegisterPluginAsync(failingPlugin).AsTask());
+
+        Assert.Empty(host.Plugins);
     }
 }
 

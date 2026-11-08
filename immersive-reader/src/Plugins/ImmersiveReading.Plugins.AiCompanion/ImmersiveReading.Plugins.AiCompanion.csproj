@@ -2,9 +2,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\ImmersiveReading.Core\ImmersiveReading.Core.csproj" />
-    <ProjectReference Include="..\..\ImmersiveReading.Library\ImmersiveReading.Library.csproj" />
-    <ProjectReference Include="..\..\ImmersiveReading.Enrichment\ImmersiveReading.Enrichment.csproj" />
-    <ProjectReference Include="..\ImmersiveReading.Plugins.Japanese\ImmersiveReading.Plugins.Japanese.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
   </ItemGroup>
 
   <PropertyGroup>

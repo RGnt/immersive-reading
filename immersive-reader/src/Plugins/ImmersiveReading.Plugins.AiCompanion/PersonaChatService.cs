@@ -1,7 +1,9 @@
 using System.Text.Json;
+using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Extensions;
 using ImmersiveReading.Core.Plugins;
-using ImmersiveReading.Library;
+using Microsoft.Data.Sqlite;
+using ImmersiveReading.Plugins.AiCompanion.Prompts;
 
 namespace ImmersiveReading.Plugins.AiCompanion;
 
@@ -48,11 +50,11 @@ internal sealed record PersonaReplyDto(
 
 public sealed class PersonaChatService
 {
-    private readonly LibraryDatabase _db;
+    private readonly IDbConnectionFactory _db;
     private readonly IReaderContextService _readerContext;
     private readonly IVocabularyBudgetService _vocabBudget;
     private readonly ISnippetEnricher _snippetEnricher;
-    private readonly ILanguagePlugin _languagePlugin;
+    private readonly ILanguagePluginResolver _languages;
     private readonly ILlmProvider _llmProvider;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -62,18 +64,18 @@ public sealed class PersonaChatService
     };
 
     public PersonaChatService(
-        LibraryDatabase db,
+        IDbConnectionFactory db,
         IReaderContextService readerContext,
         IVocabularyBudgetService vocabBudget,
         ISnippetEnricher snippetEnricher,
-        ILanguagePlugin languagePlugin,
+        ILanguagePluginResolver languages,
         ILlmProvider llmProvider)
     {
         _db = db;
         _readerContext = readerContext;
         _vocabBudget = vocabBudget;
         _snippetEnricher = snippetEnricher;
-        _languagePlugin = languagePlugin;
+        _languages = languages;
         _llmProvider = llmProvider;
     }
 
@@ -295,38 +297,24 @@ public sealed class PersonaChatService
             : "（自然な会話口調）";
         string targetPlusOneList = string.Join(", ", vocabProfile.SelectedTurnTargets);
 
-        string systemPrompt = $$"""
-            You are roleplaying as the book character "{{persona.Name}}" ({{persona.RoleSummary}}).
-            SPEECH_STYLE: {{persona.SpeechStyle}}
-            VOICE_SAMPLES:
-            {{voiceSamplesBlock}}
-            SPOILER_BOUNDARY: Chapter {{cappedChapterIndex}}, Token {{cappedTokenId}}. Never mention events beyond this point.
-            Respond in JSON: {"reply": "..."}
-            """;
+        string systemPrompt = PersonaPrompts.BuildSystemPrompt(persona.Name, persona.RoleSummary, persona.SpeechStyle, voiceSamplesBlock, cappedChapterIndex, cappedTokenId);
 
-        string userPrompt = $$"""
-            STORY_CONTEXT_UP_TO_PROGRESS:
-            {{storyContextSummary}}
-            TARGET_PLUS_ONE: {{targetPlusOneList}}
-            USER_MESSAGE: {{userMessage}}
-            """;
+        string userPrompt = PersonaPrompts.BuildUserPrompt(storyContextSummary, targetPlusOneList, userMessage);
 
         // 3. Initial Candidate Reply from LLM
-        var initialResp = await _llmProvider.CompleteStructuredAsync<PersonaReplyDto>(
-            new LlmRequest(
-                Messages:
-                [
-                    new LlmMessage("system", systemPrompt),
-                    new LlmMessage("user", userPrompt)
-                ],
-                Temperature: 0.4,
-                TaskKind: "persona.chat.initial"),
-            ct).ConfigureAwait(false);
+        var initialRequest = LlmRequestBuilder.Create()
+            .WithSystemPrompt(systemPrompt)
+            .WithUserPrompt(userPrompt)
+            .WithTemperature(0.4)
+            .WithTaskKind("persona.chat.initial")
+            .Build();
+
+        var initialResp = await _llmProvider.CompleteStructuredAsync<PersonaReplyDto>(initialRequest, ct).ConfigureAwait(false);
 
         string candidateReply = initialResp.Value.Reply ?? "";
 
         // 4. Closed-Loop MeCab.DotNet n+1 Verification
-        using var tokenizer = _languagePlugin.CreateTokenizer();
+        using var tokenizer = _languages.Resolve("ja").CreateTokenizer();
         var initialTokens = tokenizer.TokenizeParagraph(candidateReply, []);
         var initialAudit = _vocabBudget.AuditReplyTokens(initialTokens, vocabProfile);
 
@@ -338,26 +326,16 @@ public sealed class PersonaChatService
         {
             triggeredRewrite = true;
             string outOfBudgetList = string.Join(", ", initialAudit.OutOfBudgetLemmas);
-            string rewritePrompt = $$"""
-                Your candidate reply used out-of-budget advanced words that the learner does not know yet: [{{outOfBudgetList}}].
-                Rewrite the reply in character as "{{persona.Name}}" ({{persona.SpeechStyle}}):
-                1. Replace [{{outOfBudgetList}}] with simple everyday Known words.
-                2. Naturally include at least one "+1" target word from: [{{targetPlusOneList}}].
-                TARGET_PLUS_ONE: {{targetPlusOneList}}
-                CANDIDATE_REPLY: {{candidateReply}}
-                Respond in JSON: {"reply": "..."}
-                """;
+            string rewritePrompt = PersonaPrompts.BuildRewritePrompt(persona.Name, persona.SpeechStyle, outOfBudgetList, targetPlusOneList, candidateReply);
 
-            var rewriteResp = await _llmProvider.CompleteStructuredAsync<PersonaReplyDto>(
-                new LlmRequest(
-                    Messages:
-                    [
-                        new LlmMessage("system", systemPrompt),
-                        new LlmMessage("user", rewritePrompt)
-                    ],
-                    Temperature: 0.2,
-                    TaskKind: "persona.chat.rewrite"),
-                ct).ConfigureAwait(false);
+            var rewriteRequest = LlmRequestBuilder.Create()
+                .WithSystemPrompt(systemPrompt)
+                .WithUserPrompt(rewritePrompt)
+                .WithTemperature(0.2)
+                .WithTaskKind("persona.chat.rewrite")
+                .Build();
+
+            var rewriteResp = await _llmProvider.CompleteStructuredAsync<PersonaReplyDto>(rewriteRequest, ct).ConfigureAwait(false);
 
             finalReply = rewriteResp.Value.Reply ?? candidateReply;
             var rewrittenTokens = tokenizer.TokenizeParagraph(finalReply, []);
@@ -435,7 +413,7 @@ public sealed class PersonaChatService
             CreatedAtUtc: now);
     }
 
-    private static BookPersonaRecord ReadPersonaRow(Microsoft.Data.Sqlite.SqliteDataReader r)
+    private static BookPersonaRecord ReadPersonaRow(System.Data.Common.DbDataReader r)
     {
         var samples = JsonSerializer.Deserialize<List<string>>(r.GetString(5), JsonOpts) ?? [];
         return new BookPersonaRecord(

@@ -35,7 +35,7 @@ public class Phase3DictionarySpecsTests : IDisposable
         _vocabTracker = new VocabularyTracker(_libraryDb);
 
         _cache = new ChapterEnrichmentCache();
-        _lookupEngine = new DictionaryLookupEngine(_dictDb, _cache, _vocabTracker);
+        _lookupEngine = new DictionaryLookupEngine(_dictDb, _cache, _vocabTracker, new JapaneseDeinflector());
 
         SeedSampleDictionary();
     }

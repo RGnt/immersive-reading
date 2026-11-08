@@ -8,7 +8,7 @@ When working in this workspace (`k:/immersive-reading`), **always read [`LLM-WIK
 
 | Task Type | Read This Wiki Page First | Primary Source Files |
 | :--- | :--- | :--- |
-| **Developer onboarding & how `.NET` + `Python` connect** | [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) | [`Program.cs`](immersive-reader/src/ImmersiveReading.App/Program.cs), [`LibraryRpcDispatcher.cs`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs), [`app.js`](immersive-reader/src/ImmersiveReading.App/wwwroot/app.js) |
+| **Developer onboarding & how `.NET` + `Python` connect** | [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) | [`Program.cs`](immersive-reader/src/ImmersiveReading.App/Program.cs), [`LibraryRpcDispatcher.cs`](immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs), [`App.tsx`](immersive-reader/src/ImmersiveReading.App/client/src/App.tsx) |
 | **General orientation / architecture** | [LLM-WIKI.md](LLM-WIKI.md), [wiki/architecture-and-dataflow.md](wiki/architecture-and-dataflow.md) | [`orchestration.py`](enrichement-extractor/immersive/orchestration.py), [`cli.py`](enrichement-extractor/immersive/cli.py), [`pipeline.py`](enrichement-extractor/immersive/pipeline.py) |
 | **Finding a function, class, or file** | [wiki/module-reference.md](wiki/module-reference.md) | `enrichement-extractor/immersive/*.py` |
 | **JSON schemas, offsets, or reader integration** | [wiki/data-contracts-and-schemas.md](wiki/data-contracts-and-schemas.md) | [`reader.schema.json`](enrichement-extractor/immersive/reader.schema.json), [`config.schema.json`](enrichement-extractor/immersive/config.schema.json), [`enrichment.py`](enrichement-extractor/immersive/enrichment.py) |

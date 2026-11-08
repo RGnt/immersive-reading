@@ -1,8 +1,7 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\ImmersiveReading.Core\ImmersiveReading.Core.csproj" />
-    <ProjectReference Include="..\ImmersiveReading.Library\ImmersiveReading.Library.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

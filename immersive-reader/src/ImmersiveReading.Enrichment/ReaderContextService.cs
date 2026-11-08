@@ -1,20 +1,22 @@
+using System.Data.Common;
 using System.Text;
+using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Extensions;
-using ImmersiveReading.Library;
+using ImmersiveReading.Core.Plugins;
 
 namespace ImmersiveReading.Enrichment;
 
 public sealed class ReaderContextService : IReaderContextService
 {
-    private readonly LibraryManager _library;
-    private readonly LibraryDatabase? _db;
+    private readonly IBookCatalog _library;
+    private readonly IDbConnectionFactory? _db;
     private readonly ChapterEnrichmentCache _cache;
     private readonly BookSchemeHandler? _bookSchemeHandler;
 
     public ReaderContextService(
-        LibraryManager library,
+        IBookCatalog library,
         ChapterEnrichmentCache cache,
-        LibraryDatabase? db = null,
+        IDbConnectionFactory? db = null,
         BookSchemeHandler? bookSchemeHandler = null)
     {
         _library = library;
@@ -213,7 +215,10 @@ public sealed class ReaderContextService : IReaderContextService
             using var conn = _db.OpenConnection();
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT current_chapter_index, current_spine_href, locator_token_id FROM reading_progress WHERE book_id = $id;";
-            cmd.Parameters.AddWithValue("$id", bookId);
+            var param = cmd.CreateParameter();
+            param.ParameterName = "$id";
+            param.Value = bookId;
+            cmd.Parameters.Add(param);
             using var r = cmd.ExecuteReader();
             if (r.Read())
             {

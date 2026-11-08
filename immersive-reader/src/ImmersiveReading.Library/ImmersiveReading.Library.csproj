@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\ImmersiveReading.Core\ImmersiveReading.Core.csproj" />
@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <InternalsVisibleTo Include="ImmersiveReading.Core.Tests" />
   </ItemGroup>
 
   <PropertyGroup>

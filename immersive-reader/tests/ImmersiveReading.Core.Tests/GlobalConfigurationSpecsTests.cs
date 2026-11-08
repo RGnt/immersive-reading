@@ -37,6 +37,7 @@ public sealed class GlobalConfigurationSpecsTests : IDisposable
         Assert.NotNull(config.Reader);
         Assert.NotNull(config.Llm);
         Assert.NotNull(config.Dictionaries);
+        Assert.NotNull(config.Library);
 
         Assert.Equal("C:\\DefaultBooks", config.Directories.DefaultScanDirectory);
         Assert.Equal("slate", config.Appearance.ThemePreset);
@@ -44,6 +45,9 @@ public sealed class GlobalConfigurationSpecsTests : IDisposable
         Assert.Equal("AllKanji", config.Reader.FuriganaMode);
         Assert.Equal("ollama", config.Llm.Preset);
         Assert.Equal(16, config.Dictionaries.MaxScanLength);
+        Assert.Equal("series", config.Library.PrimaryGrouping);
+        Assert.Equal("series_and_volume", config.Library.SortWithinGrouping);
+        Assert.True(config.Library.EnableShelves);
     }
 
     [Fact]

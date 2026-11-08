@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
+using ImmersiveReading.Dictionaries.Abstractions;
 using Microsoft.Data.Sqlite;
 
 namespace ImmersiveReading.Dictionaries;
@@ -13,8 +14,18 @@ public sealed record KanjiImportResult(
     int KanjiVgStrokesEnriched
 );
 
-public sealed class KanjidicImporter
+public sealed class KanjidicImporter : IDictionaryImporter
 {
+    public string FormatName => "kanjidic2";
+
+    public bool CanHandle(string filePath) =>
+        !string.IsNullOrEmpty(filePath) && (filePath.EndsWith(".xml.gz", StringComparison.OrdinalIgnoreCase) || filePath.EndsWith(".xml", StringComparison.OrdinalIgnoreCase));
+
+    public DictionaryImportResult Import(string filePath, int priorityOrder = 100, CancellationToken ct = default)
+    {
+        var res = Import(filePath, kaDataCsvPath: null, kanjivgZipPath: null, ct: ct);
+        return new DictionaryImportResult(true, "KANJIDIC2", 0, res.CharactersImported, $"Imported {res.CharactersImported} kanji characters");
+    }
     private static readonly XNamespace SvgNs = "http://www.w3.org/2000/svg";
     private readonly DictionaryDatabase _db;
 

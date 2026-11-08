@@ -4,16 +4,6 @@ using Microsoft.Data.Sqlite;
 
 namespace ImmersiveReading.Library;
 
-public interface IConfigurationManager
-{
-    AppConfig CurrentConfig { get; }
-    AppConfig GetConfig();
-    Task<AppConfig> UpdateConfigAsync(AppConfig newConfig, CancellationToken ct = default);
-    Task<AppConfig> UpdateCategoryJsonAsync(string category, string categoryJson, CancellationToken ct = default);
-    Task<AppConfig> ResetDefaultsAsync(string? category = null, CancellationToken ct = default);
-    event EventHandler<AppConfig>? ConfigChanged;
-}
-
 public sealed class ConfigurationManager : IConfigurationManager
 {
     private readonly LibraryDatabase _db;
@@ -58,7 +48,8 @@ public sealed class ConfigurationManager : IConfigurationManager
                 Appearance = newConfig.Appearance ?? _currentConfig.Appearance,
                 Reader = newConfig.Reader ?? _currentConfig.Reader,
                 Llm = newConfig.Llm ?? _currentConfig.Llm,
-                Dictionaries = newConfig.Dictionaries ?? _currentConfig.Dictionaries
+                Dictionaries = newConfig.Dictionaries ?? _currentConfig.Dictionaries,
+                Library = newConfig.Library ?? _currentConfig.Library
             };
 
             using var conn = _db.OpenConnection();
@@ -69,6 +60,7 @@ public sealed class ConfigurationManager : IConfigurationManager
             SaveCategory(conn, tx, "reader", merged.Reader);
             SaveCategory(conn, tx, "llm", merged.Llm);
             SaveCategory(conn, tx, "dictionaries", merged.Dictionaries);
+            SaveCategory(conn, tx, "library", merged.Library);
 
             tx.Commit();
 
@@ -114,6 +106,10 @@ public sealed class ConfigurationManager : IConfigurationManager
                     {
                         Dictionaries = JsonSerializer.Deserialize<DictionarySettings>(categoryJson, JsonOpts) ?? current.Dictionaries
                     },
+                    "library" => current with
+                    {
+                        Library = JsonSerializer.Deserialize<LibrarySettings>(categoryJson, JsonOpts) ?? current.Library
+                    },
                     _ => throw new ArgumentException($"Unknown configuration category '{category}'.")
                 };
             }
@@ -129,6 +125,7 @@ public sealed class ConfigurationManager : IConfigurationManager
                 "reader" => updated.Reader,
                 "llm" => updated.Llm,
                 "dictionaries" => updated.Dictionaries,
+                "library" => updated.Library,
                 _ => throw new InvalidOperationException()
             });
 
@@ -158,6 +155,7 @@ public sealed class ConfigurationManager : IConfigurationManager
                 SaveCategory(conn, tx, "reader", defaults.Reader);
                 SaveCategory(conn, tx, "llm", defaults.Llm);
                 SaveCategory(conn, tx, "dictionaries", defaults.Dictionaries);
+                SaveCategory(conn, tx, "library", defaults.Library);
                 _currentConfig = defaults;
             }
             else
@@ -169,6 +167,7 @@ public sealed class ConfigurationManager : IConfigurationManager
                     "reader" => current with { Reader = defaults.Reader },
                     "llm" => current with { Llm = defaults.Llm },
                     "dictionaries" => current with { Dictionaries = defaults.Dictionaries },
+                    "library" => current with { Library = defaults.Library },
                     _ => throw new ArgumentException($"Unknown configuration category '{category}'.")
                 };
 
@@ -179,6 +178,7 @@ public sealed class ConfigurationManager : IConfigurationManager
                     "reader" => defaults.Reader,
                     "llm" => defaults.Llm,
                     "dictionaries" => defaults.Dictionaries,
+                    "library" => defaults.Library,
                     _ => throw new InvalidOperationException()
                 });
 
@@ -275,12 +275,23 @@ public sealed class ConfigurationManager : IConfigurationManager
             changed = true;
         }
 
+        LibrarySettings libSettings = defaults.Library;
+        if (categories.TryGetValue("library", out var libJson))
+        {
+            libSettings = JsonSerializer.Deserialize<LibrarySettings>(libJson, JsonOpts) ?? defaults.Library;
+        }
+        else
+        {
+            SaveCategory(conn, tx, "library", libSettings);
+            changed = true;
+        }
+
         if (changed)
         {
             tx.Commit();
         }
 
-        return new AppConfig(dirSettings, appSettings, rdrSettings, llmSettings, dictSettings);
+        return new AppConfig(dirSettings, appSettings, rdrSettings, llmSettings, dictSettings, libSettings);
     }
 
     private static void SaveCategory(SqliteConnection conn, SqliteTransaction tx, string category, object data)

@@ -82,6 +82,13 @@ share/python-wheels/
 *.egg
 MANIFEST
 
+# ==========================================
+# Environment & Secrets
+# ==========================================
+.env
+.env.*
+!.env.example
+
 # Virtual Environments
 .venv/
 venv/
@@ -101,6 +108,11 @@ nosetests.xml
 coverage.xml
 *.cover
 *.pyo
+
+# Node.js / Frontend
+node_modules/
+**/node_modules/
+.npm/
 
 # ==========================================
 # Input Material (Books, EPUBs, Decks, User CSVs)
