@@ -97,6 +97,7 @@ public sealed class MeCabTokenizerAdapter : ITextTokenizer
             string baseLemma = node.Lemma;
             string dictReading = node.Reading;
             string primaryPos = node.Pos;
+            string primaryPosSub = node.PosSub1;
             string conjType = node.ConjType;
             string conjForm = node.ConjForm;
 
@@ -153,7 +154,8 @@ public sealed class MeCabTokenizerAdapter : ITextTokenizer
                 ConjugationType: conjType,
                 ConjugationForm: conjForm,
                 ReadingSource: rubySource,
-                IsContentWord: isContentWord));
+                IsContentWord: isContentWord,
+                PartOfSpeechSub: primaryPosSub));
 
             i++;
         }

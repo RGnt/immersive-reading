@@ -8,6 +8,7 @@
     <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.Japanese\ImmersiveReading.Plugins.Japanese.csproj" />
     <ProjectReference Include="..\ImmersiveReading.Dictionaries\ImmersiveReading.Dictionaries.csproj" />
     <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.AiCompanion\ImmersiveReading.Plugins.AiCompanion.csproj" />
+    <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.PosHighlighter\ImmersiveReading.Plugins.PosHighlighter.csproj" />
   </ItemGroup>
 
   <ItemGroup>

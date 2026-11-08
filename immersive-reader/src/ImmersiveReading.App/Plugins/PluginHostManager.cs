@@ -51,6 +51,17 @@ public sealed class PluginHostManager : IPythonStageRegistryProvider, IAsyncDisp
         _enabledStateFilePath = Path.Combine(_dataRootDir, "config", "plugins-state.json");
     }
 
+    public IReadOnlyList<IDomEnrichmentStage> ActiveDomStages
+    {
+        get
+        {
+            lock (_domStages)
+            {
+                return _domStages.ToList();
+            }
+        }
+    }
+
     public sealed class PluginEntry
     {
         public required IImmersivePlugin Instance { get; init; }

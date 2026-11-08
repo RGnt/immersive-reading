@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Epub;
+using ImmersiveReading.Core.Extensions;
 using ImmersiveReading.Core.Plugins;
 
 namespace ImmersiveReading.Enrichment;
@@ -19,18 +20,22 @@ public sealed class BookSchemeHandler
     private readonly Func<string, string, WordStatus>? _getWordStatus;
     private EnrichmentOptions _enrichmentOptions;
 
+    public Func<IReadOnlyList<IDomEnrichmentStage>>? DomStagesProvider { get; set; }
+
     public BookSchemeHandler(
         IBookCatalog library,
         ILanguagePluginResolver pluginRegistry,
         ChapterEnrichmentCache cache,
         EnrichmentOptions? initialOptions = null,
-        Func<string, string, WordStatus>? getWordStatus = null)
+        Func<string, string, WordStatus>? getWordStatus = null,
+        Func<IReadOnlyList<IDomEnrichmentStage>>? domStagesProvider = null)
     {
         _library = library;
         _pluginRegistry = pluginRegistry;
         _cache = cache;
         _enrichmentOptions = initialOptions ?? new EnrichmentOptions();
         _getWordStatus = getWordStatus;
+        DomStagesProvider = domStagesProvider;
     }
 
     public void UpdateEnrichmentOptions(EnrichmentOptions options)
@@ -89,13 +94,15 @@ public sealed class BookSchemeHandler
         }
 
         var plugin = _pluginRegistry.Resolve(bookDetail.Summary.Language);
+        var domStages = DomStagesProvider?.Invoke();
         var enriched = AngleSharpDomEnricher.EnrichChapter(
             rawXhtml,
             bookId,
             relativePath,
             plugin,
             _enrichmentOptions,
-            getWordStatus: _getWordStatus);
+            getWordStatus: _getWordStatus,
+            domStages: domStages);
 
         _cache.Set(enriched.TokenMap);
         return enriched;

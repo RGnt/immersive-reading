@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "highlightStyle": "text-color",
+  "colorAdjI": "#fb923c",
+  "colorAdjNa": "#f472b6",
+  "colorVerbGodan": "#38bdf8",
+  "colorVerbIchidan": "#818cf8",
+  "colorVerbIrregular": "#c084fc",
+  "colorSuffix": "#facc15",
+  "colorParticleSingle": "#34d399",
+  "colorParticleMulti": "#2dd4bf",
+  "colorAdverb": "#a3e635"
+}

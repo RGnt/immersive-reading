@@ -1,11 +1,20 @@
+using AngleSharp.Dom;
 using ImmersiveReading.Core.Plugins;
 
 namespace ImmersiveReading.Core.Extensions;
+
+public sealed record DomEnrichmentContext(
+    string BookId,
+    string ChapterHref,
+    IReadOnlyList<EnrichedTokenEntry> Tokens,
+    EnrichmentOptions Options
+);
 
 public interface IDomEnrichmentStage
 {
     string StageId { get; }
     int Order { get; }
+    void Enrich(IDocument document, DomEnrichmentContext context);
 }
 
 public interface IReaderContextService

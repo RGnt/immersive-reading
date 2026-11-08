@@ -1,0 +1,74 @@
+{
+  "type": "object",
+  "title": "Part-of-Speech Highlighter Configuration",
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "title": "Enable Part-of-Speech Highlighting",
+      "description": "Highlight Japanese parts of speech with distinct grammar colors in the reader.",
+      "default": true
+    },
+    "highlightStyle": {
+      "type": "string",
+      "title": "Highlight Visual Style",
+      "description": "Choose between colored text, subtle colored underlines, or soft background tint.",
+      "enum": ["text-color", "underline", "background"],
+      "enumLabels": ["Colored Text", "Colored Underline", "Background Tint"],
+      "default": "text-color"
+    },
+    "colorAdjI": {
+      "type": "string",
+      "title": "i-Adjectives (形容詞)",
+      "description": "Color for i-adjectives (e.g. 美味しい, 楽しい, 暑い)",
+      "default": "#fb923c"
+    },
+    "colorAdjNa": {
+      "type": "string",
+      "title": "na-Adjectives (形容動詞 / 形状詞)",
+      "description": "Color for na-adjectives (e.g. 静か, 綺麗, 変)",
+      "default": "#f472b6"
+    },
+    "colorVerbGodan": {
+      "type": "string",
+      "title": "u-Verbs / Godan (五段動詞)",
+      "description": "Color for Godan verbs ending in u, ku, su, mu, etc. (e.g. 行く, 話す, 読む)",
+      "default": "#38bdf8"
+    },
+    "colorVerbIchidan": {
+      "type": "string",
+      "title": "ru-Verbs / Ichidan (一段動詞)",
+      "description": "Color for Ichidan verbs ending in iru/eru (e.g. 食べる, 見る, 答える)",
+      "default": "#818cf8"
+    },
+    "colorVerbIrregular": {
+      "type": "string",
+      "title": "Irregular Verbs (サ変・カ変)",
+      "description": "Color for irregular verbs (e.g. する, 来る)",
+      "default": "#c084fc"
+    },
+    "colorSuffix": {
+      "type": "string",
+      "title": "Suffixes (接尾辞)",
+      "description": "Color for grammatical suffixes distinct from particles (e.g. さん, 様, 的, たち, 目)",
+      "default": "#facc15"
+    },
+    "colorParticleSingle": {
+      "type": "string",
+      "title": "Single-Kana Particles (助詞)",
+      "description": "Color for single-kana grammatical particles (e.g. は, が, を, に, で, と, も, へ, か, ね, よ, の)",
+      "default": "#34d399"
+    },
+    "colorParticleMulti": {
+      "type": "string",
+      "title": "Multi-Kana / Compound Particles",
+      "description": "Color for multi-kana particles (e.g. から, まで, より, など, ほど)",
+      "default": "#2dd4bf"
+    },
+    "colorAdverb": {
+      "type": "string",
+      "title": "Adverbs (副詞)",
+      "description": "Color for adverbs (e.g. ゆっくり, たくさん)",
+      "default": "#a3e635"
+    }
+  }
+}

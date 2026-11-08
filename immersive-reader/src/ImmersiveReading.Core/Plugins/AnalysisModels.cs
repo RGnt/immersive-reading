@@ -26,7 +26,8 @@ public readonly record struct AnalyzedToken(
     string ConjugationType,
     string ConjugationForm,
     RubySource ReadingSource,
-    bool IsContentWord
+    bool IsContentWord,
+    string PartOfSpeechSub = ""
 );
 
 public readonly record struct DeinflectionCandidate(

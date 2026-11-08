@@ -224,8 +224,12 @@ public sealed class AppServices : IDisposable
                 unifiedPlugins.Add(ip);
             }
         }
+        unifiedPlugins.Add(new ImmersiveReading.Plugins.PosHighlighter.PosHighlighterPlugin());
 
         pluginHostManager.InitializePluginsAsync(unifiedPlugins).GetAwaiter().GetResult();
+
+        var bookSchemeHandler = provider.GetRequiredService<BookSchemeHandler>();
+        bookSchemeHandler.DomStagesProvider = () => pluginHostManager.ActiveDomStages;
 
         var studyPackBridge = provider.GetRequiredService<PythonStudyPackBridge>();
         studyPackBridge.StageRegistry = pluginHostManager;
@@ -238,7 +242,7 @@ public sealed class AppServices : IDisposable
             languages: languages,
             enrichmentCache: provider.GetRequiredService<ChapterEnrichmentCache>(),
             vocabTracker: provider.GetRequiredService<VocabularyTracker>(),
-            bookScheme: provider.GetRequiredService<BookSchemeHandler>(),
+            bookScheme: bookSchemeHandler,
             dictDb: dictDb,
             lookupEngine: provider.GetRequiredService<DictionaryLookupEngine>(),
             studyPackBridge: provider.GetRequiredService<PythonStudyPackBridge>(),

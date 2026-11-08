@@ -21,7 +21,7 @@
 | **[wiki/playbooks-and-invariants.md](wiki/playbooks-and-invariants.md)** | Non-negotiable system invariants, step-by-step recipes for common tasks, and verification commands |
 | **[wiki/testing-and-fixtures.md](wiki/testing-and-fixtures.md)** | Synthetic `fixture()` helper, subprocess `NoPrint`/socket guards, and test matrix across all 19 test files |
 | **[wiki/roadmap-and-open-work.md](wiki/roadmap-and-open-work.md)** | Refactoring status matrix, DOM source mapping & lookup design notes, and known real-book edge cases |
-| **[specs/00-master-architecture-and-roadmap.md](specs/00-master-architecture-and-roadmap.md)** | .NET 10 + Photino.NET + AngleSharp + MeCab.DotNet EPUB Library, Reader, AI Companion, Global Settings & Pluggable Pipeline specifications (`00`–`08`) |
+| **[specs/00-master-architecture-and-roadmap.md](specs/00-master-architecture-and-roadmap.md)** | .NET 10 + Photino.NET + AngleSharp + MeCab.DotNet EPUB Library, Reader, AI Companion, Global Settings, Pluggable Pipeline & POS Highlighter specifications (`00`–`09`) |
 
 ---
 

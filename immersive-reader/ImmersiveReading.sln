@@ -21,6 +21,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Plugins", "Plugins", "{58D3
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImmersiveReading.Plugins.Japanese", "src\Plugins\ImmersiveReading.Plugins.Japanese\ImmersiveReading.Plugins.Japanese.csproj", "{600436B1-07A9-47D6-84C9-51F0350D3A99}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImmersiveReading.Plugins.AiCompanion", "src\Plugins\ImmersiveReading.Plugins.AiCompanion\ImmersiveReading.Plugins.AiCompanion.csproj", "{71EA89F2-C54D-4E3F-8C9B-983C30D35F6A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImmersiveReading.Plugins.PosHighlighter", "src\Plugins\ImmersiveReading.Plugins.PosHighlighter\ImmersiveReading.Plugins.PosHighlighter.csproj", "{B9206A81-93A1-4F2A-8513-8AC77D164560}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImmersiveReading.Enrichment.Tests", "tests\ImmersiveReading.Enrichment.Tests\ImmersiveReading.Enrichment.Tests.csproj", "{64AEF168-2330-4FC9-8E64-2DDD26D3EFFC}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ImmersiveReading.Dictionaries", "src\ImmersiveReading.Dictionaries\ImmersiveReading.Dictionaries.csproj", "{8CC5FF0E-FD49-4F57-AAE4-09368EF520BB}"
@@ -159,6 +163,14 @@ Global
 		{2A4F096F-3BC8-44F3-8B74-E30BCCA72237}.Release|x64.Build.0 = Release|Any CPU
 		{2A4F096F-3BC8-44F3-8B74-E30BCCA72237}.Release|x86.ActiveCfg = Release|Any CPU
 		{2A4F096F-3BC8-44F3-8B74-E30BCCA72237}.Release|x86.Build.0 = Release|Any CPU
+		{71EA89F2-C54D-4E3F-8C9B-983C30D35F6A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{71EA89F2-C54D-4E3F-8C9B-983C30D35F6A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{71EA89F2-C54D-4E3F-8C9B-983C30D35F6A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{71EA89F2-C54D-4E3F-8C9B-983C30D35F6A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B9206A81-93A1-4F2A-8513-8AC77D164560}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9206A81-93A1-4F2A-8513-8AC77D164560}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9206A81-93A1-4F2A-8513-8AC77D164560}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B9206A81-93A1-4F2A-8513-8AC77D164560}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -171,6 +183,8 @@ Global
 		{ADEC9BF1-9893-4DBF-9AD4-3085ABF87E65} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{58D3A2C3-F96F-5E57-2C6B-ECE59D6A18FC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{600436B1-07A9-47D6-84C9-51F0350D3A99} = {58D3A2C3-F96F-5E57-2C6B-ECE59D6A18FC}
+		{71EA89F2-C54D-4E3F-8C9B-983C30D35F6A} = {58D3A2C3-F96F-5E57-2C6B-ECE59D6A18FC}
+		{B9206A81-93A1-4F2A-8513-8AC77D164560} = {58D3A2C3-F96F-5E57-2C6B-ECE59D6A18FC}
 		{64AEF168-2330-4FC9-8E64-2DDD26D3EFFC} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{8CC5FF0E-FD49-4F57-AAE4-09368EF520BB} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{D976A1F5-3B58-4F0E-909B-513A5D4FE456} = {0AB3BF05-4346-4AA6-1389-037BE0695223}

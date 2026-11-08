@@ -2,6 +2,7 @@ using System.Text;
 using AngleSharp;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using ImmersiveReading.Core.Extensions;
 using ImmersiveReading.Core.Plugins;
 using ImmersiveReading.Enrichment.Dom;
 
@@ -27,7 +28,8 @@ public static class AngleSharpDomEnricher
         ILanguagePlugin languagePlugin,
         EnrichmentOptions options,
         Func<string, string, WordStatus>? getWordStatus = null,
-        Func<string, bool>? isWordInDeck = null)
+        Func<string, bool>? isWordInDeck = null,
+        IReadOnlyList<IDomEnrichmentStage>? domStages = null)
     {
         var parser = new HtmlParser(new HtmlParserOptions
         {
@@ -98,6 +100,15 @@ public static class AngleSharpDomEnricher
 
             // Mutate DOM nodes in this block
             TokenDomApplier.ApplyTokensToBlock(document, blockEl, segments, tokenEntriesForBlock);
+        }
+
+        if (domStages != null && domStages.Count > 0)
+        {
+            var domContext = new DomEnrichmentContext(bookId, chapterHref, chapterTokens, options);
+            foreach (var stage in domStages)
+            {
+                stage.Enrich(document, domContext);
+            }
         }
 
         var tokenMap = new ChapterTokenMap(bookId, chapterHref, chapterTokens, paragraphTexts);
