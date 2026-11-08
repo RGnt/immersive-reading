@@ -358,4 +358,15 @@ public sealed class RpcContractTests : IDisposable
         Assert.True(result.TryGetProperty("isConfigured", out _));
         Assert.True(result.TryGetProperty("portableZipExists", out _));
     }
+
+    [Fact]
+    public async Task Library_ClearLibrary_ExecutesAndReturnsCounts()
+    {
+        var result = await CallOkAsync("library.clearLibrary", """{"removeFolders": true, "resetVocabulary": false}""");
+        Assert.True(result.GetProperty("ok").GetBoolean());
+        Assert.True(result.TryGetProperty("result", out var resObj));
+        Assert.True(resObj.TryGetProperty("booksDeleted", out _));
+        Assert.True(resObj.TryGetProperty("foldersDeleted", out _));
+        Assert.True(resObj.TryGetProperty("coversDeleted", out _));
+    }
 }

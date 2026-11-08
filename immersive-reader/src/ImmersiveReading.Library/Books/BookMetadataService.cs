@@ -344,5 +344,140 @@ public sealed class BookMetadataService
 
         tx.Commit();
     }
+
+    public ClearLibraryResult ClearLibrary(ClearLibraryOptions? options = null)
+    {
+        var opt = options ?? new ClearLibraryOptions();
+        using var conn = _db.OpenConnection();
+        using var tx = conn.BeginTransaction();
+
+        int booksCount;
+        using (var countCmd = conn.CreateCommand())
+        {
+            countCmd.Transaction = tx;
+            countCmd.CommandText = "SELECT COUNT(*) FROM books;";
+            booksCount = Convert.ToInt32(countCmd.ExecuteScalar());
+        }
+
+        using (var delFts = conn.CreateCommand())
+        {
+            delFts.Transaction = tx;
+            delFts.CommandText = "DELETE FROM books_fts;";
+            delFts.ExecuteNonQuery();
+        }
+
+        using (var delCf = conn.CreateCommand())
+        {
+            delCf.Transaction = tx;
+            delCf.CommandText = "DELETE FROM custom_field_values WHERE entity_type = 'book';";
+            delCf.ExecuteNonQuery();
+        }
+
+        using (var delCompQ = conn.CreateCommand())
+        {
+            delCompQ.Transaction = tx;
+            delCompQ.CommandText = "DELETE FROM comprehension_questions;";
+            delCompQ.ExecuteNonQuery();
+        }
+
+        using (var delCompS = conn.CreateCommand())
+        {
+            delCompS.Transaction = tx;
+            delCompS.CommandText = "DELETE FROM comprehension_sessions;";
+            delCompS.ExecuteNonQuery();
+        }
+
+        using (var delChatMsg = conn.CreateCommand())
+        {
+            delChatMsg.Transaction = tx;
+            delChatMsg.CommandText = "DELETE FROM persona_chat_messages;";
+            delChatMsg.ExecuteNonQuery();
+        }
+
+        using (var delChatSess = conn.CreateCommand())
+        {
+            delChatSess.Transaction = tx;
+            delChatSess.CommandText = "DELETE FROM persona_chat_sessions;";
+            delChatSess.ExecuteNonQuery();
+        }
+
+        using (var delPersonas = conn.CreateCommand())
+        {
+            delPersonas.Transaction = tx;
+            delPersonas.CommandText = "DELETE FROM book_personas;";
+            delPersonas.ExecuteNonQuery();
+        }
+
+        using (var delBooks = conn.CreateCommand())
+        {
+            delBooks.Transaction = tx;
+            delBooks.CommandText = "DELETE FROM books;";
+            delBooks.ExecuteNonQuery();
+        }
+
+        int foldersCount = 0;
+        if (opt.RemoveFolders)
+        {
+            using (var countFCmd = conn.CreateCommand())
+            {
+                countFCmd.Transaction = tx;
+                countFCmd.CommandText = "SELECT COUNT(*) FROM library_folders;";
+                foldersCount = Convert.ToInt32(countFCmd.ExecuteScalar());
+            }
+
+            using (var delFolderCf = conn.CreateCommand())
+            {
+                delFolderCf.Transaction = tx;
+                delFolderCf.CommandText = "DELETE FROM custom_field_values WHERE entity_type = 'folder';";
+                delFolderCf.ExecuteNonQuery();
+            }
+
+            using (var delFolderTags = conn.CreateCommand())
+            {
+                delFolderTags.Transaction = tx;
+                delFolderTags.CommandText = "DELETE FROM folder_tags;";
+                delFolderTags.ExecuteNonQuery();
+            }
+
+            using (var delFolders = conn.CreateCommand())
+            {
+                delFolders.Transaction = tx;
+                delFolders.CommandText = "DELETE FROM library_folders;";
+                delFolders.ExecuteNonQuery();
+            }
+        }
+
+        if (opt.ResetVocabulary)
+        {
+            using (var delVocab = conn.CreateCommand())
+            {
+                delVocab.Transaction = tx;
+                delVocab.CommandText = "DELETE FROM vocabulary_state;";
+                delVocab.ExecuteNonQuery();
+            }
+        }
+
+        tx.Commit();
+
+        int coversDeleted = 0;
+        if (Directory.Exists(_db.CoversCacheDirectory))
+        {
+            try
+            {
+                foreach (var file in Directory.EnumerateFiles(_db.CoversCacheDirectory))
+                {
+                    try
+                    {
+                        File.Delete(file);
+                        coversDeleted++;
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
+        return new ClearLibraryResult(booksCount, foldersCount, coversDeleted, opt.ResetVocabulary);
+    }
 }
 

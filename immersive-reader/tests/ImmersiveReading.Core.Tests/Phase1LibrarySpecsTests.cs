@@ -388,6 +388,33 @@ public sealed class Phase1LibrarySpecsTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Feature06_ClearLibrary_DeletesBooks_And_Cascades()
+    {
+        // 1. Setup library with books and folders
+        var fld = _manager.SaveFolder(null, null, "Fiction");
+        var b1 = await _manager.ImportBookAsync(CreateMinimalEpub("clear1.epub", "Clearable Book 1"), folderId: fld.FolderId);
+        var b2 = await _manager.ImportBookAsync(CreateMinimalEpub("clear2.epub", "Clearable Book 2"), folderId: fld.FolderId);
+
+        var listBefore = _manager.ListBooks(new BookListQuery());
+        Assert.True(listBefore.TotalCount >= 2);
+
+        // 2. Clear library (with folders)
+        var result = _manager.ClearLibrary(new ClearLibraryOptions(RemoveFolders: true, ResetVocabulary: false));
+
+        Assert.True(result.BooksDeleted >= 2);
+        Assert.True(result.FoldersDeleted >= 1);
+
+        // 3. Verify library is empty
+        var listAfter = _manager.ListBooks(new BookListQuery());
+        Assert.Equal(0, listAfter.TotalCount);
+        Assert.Empty(_manager.GetFolderTree());
+
+        // 4. Verify FTS search returns 0
+        var ftsSearch = _manager.ListBooks(new BookListQuery(Search: "Clearable"));
+        Assert.Equal(0, ftsSearch.TotalCount);
+    }
+
     private string CreateMinimalEpub(string fileNameOrPath, string dcTitle)
     {
         return CreateSyntheticEpub(

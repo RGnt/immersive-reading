@@ -20,6 +20,7 @@ public sealed class LibraryRpcModule(LibraryManager library, IRpcEventSink? even
             yield return ("library.resetBookMetadataToOpf", (req, _) => Task.FromResult<object?>(ResetBookMetadataToOpf(req)));
             yield return ("library.deleteBook", (req, _) => Task.FromResult<object?>(DeleteBook(req)));
             yield return ("library.bulkDeleteBooks", (req, _) => Task.FromResult<object?>(BulkDeleteBooks(req)));
+            yield return ("library.clearLibrary", (req, _) => Task.FromResult<object?>(ClearLibrary(req)));
             yield return ("library.pruneEmptyFolders", (req, _) => Task.FromResult<object?>(PruneEmptyFolders()));
             yield return ("library.moveFolder", (req, _) => Task.FromResult<object?>(MoveFolder(req)));
             yield return ("library.reorderBooks", (req, _) => Task.FromResult<object?>(ReorderBooks(req)));
@@ -154,6 +155,15 @@ public sealed class LibraryRpcModule(LibraryManager library, IRpcEventSink? even
         var bookIds = req.StringList("bookIds");
         int deleted = library.BulkDeleteBooks(bookIds);
         return new { ok = true, deletedCount = deleted };
+    }
+
+    private object? ClearLibrary(RpcRequest req)
+    {
+        bool removeFolders = req.OptionalBool("removeFolders") ?? true;
+        bool resetVocabulary = req.OptionalBool("resetVocabulary") ?? false;
+        var res = library.ClearLibrary(new ClearLibraryOptions(removeFolders, resetVocabulary));
+        events?.Emit("library.cleared", res);
+        return new { ok = true, result = res };
     }
 
     private object? PruneEmptyFolders()

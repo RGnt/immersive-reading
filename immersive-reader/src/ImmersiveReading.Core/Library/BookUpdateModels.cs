@@ -40,3 +40,15 @@ public sealed record BulkBookUpdatePatch(
     IReadOnlyList<CustomFieldValueInput>? CustomFields = null
 );
 
+public sealed record ClearLibraryOptions(
+    bool RemoveFolders = true,
+    bool ResetVocabulary = false
+);
+
+public sealed record ClearLibraryResult(
+    int BooksDeleted,
+    int FoldersDeleted,
+    int CoversDeleted,
+    bool VocabularyReset
+);
+

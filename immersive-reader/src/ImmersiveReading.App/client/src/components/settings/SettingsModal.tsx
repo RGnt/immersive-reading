@@ -19,6 +19,8 @@ import {
   Download,
   RefreshCw,
   HardDrive,
+  AlertTriangle,
+  Trash2,
 } from 'lucide-react';
 import type { AppConfig, DictionaryItem, DictionaryPreset, PythonDetectInfo } from '../../types/api';
 import { PluginSettingsTab } from './PluginSettingsTab';
@@ -92,6 +94,41 @@ export const SettingsModal: React.FC = () => {
   const [isDetectingPython, setIsDetectingPython] = useState(false);
   const [isSettingUpPython, setIsSettingUpPython] = useState(false);
   const [pythonStatusMessage, setPythonStatusMessage] = useState<{ text: string; ok: boolean } | null>(null);
+
+  // Danger zone clear library state
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearInputText, setClearInputText] = useState('');
+  const [clearRemoveFolders, setClearRemoveFolders] = useState(true);
+  const [clearResetVocab, setClearResetVocab] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+  const [clearStatusMessage, setClearStatusMessage] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const handleClearLibrary = async () => {
+    if (clearInputText.trim().toUpperCase() !== 'CLEAR') return;
+    setIsClearing(true);
+    setClearStatusMessage(null);
+    try {
+      const res = await rpc.call<any>('library.clearLibrary', {
+        removeFolders: clearRemoveFolders,
+        resetVocabulary: clearResetVocab,
+      });
+      if (res?.ok) {
+        setClearStatusMessage({
+          text: `Library cleared successfully (${res.result?.booksDeleted ?? 0} books, ${res.result?.foldersDeleted ?? 0} folders removed).`,
+          ok: true,
+        });
+        setShowClearConfirm(false);
+        setClearInputText('');
+        await useLibraryStore.getState().loadBootstrap();
+      } else {
+        setClearStatusMessage({ text: 'Failed to clear library.', ok: false });
+      }
+    } catch (err: any) {
+      setClearStatusMessage({ text: err?.message || 'Error occurred while clearing library.', ok: false });
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   const loadDictionaries = async () => {
     try {
@@ -725,6 +762,119 @@ export const SettingsModal: React.FC = () => {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* DANGER ZONE */}
+              <div className="pt-4 border-t border-[var(--border-color)]">
+                <div className="p-4 rounded-lg border border-rose-500/40 bg-rose-950/20 space-y-3">
+                  <div className="flex items-center space-x-2 text-rose-400">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    <span className="font-bold text-xs uppercase tracking-wide">Danger Zone</span>
+                  </div>
+
+                  <div>
+                    <h4 className="text-xs font-semibold text-[var(--text-primary)]">Clear Library Catalog</h4>
+                    <p className="text-[11px] text-[var(--text-muted)] mt-0.5">
+                      Permanently clears all imported books, chapters, bookmarks, reading progress, and AI reading sessions from your local database. Your original EPUB files on disk will NOT be touched or deleted.
+                    </p>
+                  </div>
+
+                  {clearStatusMessage && (
+                    <div
+                      className={`p-2 rounded text-xs flex items-center space-x-1.5 ${
+                        clearStatusMessage.ok
+                          ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30'
+                          : 'bg-rose-500/10 text-rose-300 border border-rose-500/30'
+                      }`}
+                    >
+                      {clearStatusMessage.ok ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      )}
+                      <span>{clearStatusMessage.text}</span>
+                    </div>
+                  )}
+
+                  {!showClearConfirm ? (
+                    <div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowClearConfirm(true);
+                          setClearInputText('');
+                          setClearStatusMessage(null);
+                        }}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs transition-colors cursor-pointer shadow-sm"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Clear Entire Library...</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-3.5 rounded-lg bg-black/40 border border-rose-500/30 space-y-3">
+                      <div className="text-xs text-rose-300 font-semibold flex items-center space-x-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                        <span>Are you absolutely sure you want to clear your library?</span>
+                      </div>
+
+                      <div className="space-y-1.5 text-xs text-[var(--text-muted)]">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={clearRemoveFolders}
+                            onChange={(e) => setClearRemoveFolders(e.target.checked)}
+                            className="rounded border-[var(--border-color)] accent-rose-600"
+                          />
+                          <span>Also remove virtual folders and categories</span>
+                        </label>
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={clearResetVocab}
+                            onChange={(e) => setClearResetVocab(e.target.checked)}
+                            className="rounded border-[var(--border-color)] accent-rose-600"
+                          />
+                          <span>Also reset vocabulary learning progress (Known / Learning word states)</span>
+                        </label>
+                      </div>
+
+                      <p className="text-[11px] text-[var(--text-muted)]">
+                        To confirm deletion, please type <strong className="text-rose-400 font-mono">CLEAR</strong> below:
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="text"
+                          value={clearInputText}
+                          onChange={(e) => setClearInputText(e.target.value)}
+                          placeholder="Type CLEAR to confirm"
+                          className="px-2.5 py-1 rounded bg-[var(--bg-primary)] border border-rose-500/40 text-xs text-[var(--text-primary)] w-48 font-mono focus:outline-none focus:border-rose-400"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleClearLibrary}
+                          disabled={clearInputText.trim().toUpperCase() !== 'CLEAR' || isClearing}
+                          className="flex items-center space-x-1.5 px-3 py-1 rounded bg-rose-600 hover:bg-rose-500 disabled:opacity-40 disabled:hover:bg-rose-600 text-white font-bold text-xs transition-colors cursor-pointer"
+                        >
+                          {isClearing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                          <span>Confirm & Clear</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowClearConfirm(false);
+                            setClearInputText('');
+                          }}
+                          disabled={isClearing}
+                          className="px-2.5 py-1 rounded border border-[var(--border-color)] hover:bg-white/5 text-xs text-[var(--text-muted)] transition-colors"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}

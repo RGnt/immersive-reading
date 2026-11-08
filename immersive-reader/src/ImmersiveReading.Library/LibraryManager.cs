@@ -66,6 +66,7 @@ public sealed class LibraryManager : IBookCatalog
     public BookDetail ResetBookMetadataToOpf(string bookId) => _metadata.ResetBookMetadataToOpf(bookId);
     public void DeleteBook(string bookId) => _metadata.DeleteBook(bookId);
     public int BulkDeleteBooks(IReadOnlyList<string> bookIds) => _metadata.BulkDeleteBooks(bookIds);
+    public ClearLibraryResult ClearLibrary(ClearLibraryOptions? options = null) => _metadata.ClearLibrary(options);
     public void ReorderBooks(IReadOnlyList<string> orderedBookIds) => _metadata.ReorderBooks(orderedBookIds);
 
     // ---- Folders ----
