@@ -334,10 +334,14 @@ Click the `⚙️ Settings` gear icon in the library sidebar or press `Ctrl + ,`
 - **Furigana Styling**: Adjust furigana opacity, font size ratio (default 50% of parent kanji), and color.
 - **Japanese Fonts**: Set primary and fallback fonts for reading (supports all system fonts installed in Windows).
 
-### Configuring Paths & LLM Endpoints
+### Configuring Paths, Plugins & Extensions
 - **Directories**: Set your default book import folder, dictionary storage directory, and study pack output directory.
 - **MeCab Integration**: Verify or update your MeCab dictionary path (IPAdic or UniDic).
-- **LLM Settings**: Choose your provider (Ollama, LM Studio, OpenAI, Anthropic), set your endpoint URL (e.g., `http://localhost:11434/v1`), model name, and temperature.
+- **Plugins & Extensions**:
+  - View all installed and active plugins (e.g. *Japanese Language Pack*, *AI Reading Companion*).
+  - Enable or disable plugins on the fly (hot reloading for feature plugins, or clean restart prompts for core language engines).
+  - Configure plugin-specific preferences dynamically through validated schema forms (e.g., custom LLM endpoints, Ollama/LM Studio models, quiz difficulty, persona behavior).
+- **LLM Settings**: Choose your provider (Ollama, LM Studio, OpenAI, Anthropic), set your endpoint URL (e.g., `http://localhost:11434/v1`), model name, and test your connection with live latency feedback.
 
 ---
 

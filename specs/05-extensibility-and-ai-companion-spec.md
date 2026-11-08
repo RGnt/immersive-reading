@@ -1,68 +1,70 @@
-# 05 — Extensibility Architecture, AI Reading Comprehension & $n+1$ Persona Chat Specification
+# 05 — Unified Extensibility Architecture, AI Reading Comprehension & $n+1$ Persona Chat Specification
 
-> **Modules:** `ImmersiveReading.Core.Extensions`, `ImmersiveReading.Plugins.AiCompanion`  
-> **Key Design Principle:** Opt-in, modular extension architecture (`IFeaturePlugin`) that keeps the core EPUB reader and dictionary 100% deterministic while enabling rich AI tutoring, comprehension testing, $n+1$ vocabulary-constrained character chat, and future user-created plugins.
+> **Modules:** `ImmersiveReading.Core.Plugins`, `ImmersiveReading.App.Plugins`, `ImmersiveReading.Plugins.AiCompanion`  
+> **Key Design Principle:** Opt-in, unified plugin architecture (`IImmersivePlugin`) providing sandboxed SQLite WAL databases, reactive JSON-Schema configuration, hot/cold reloads, and dynamic React UI slot mounting (`@ir/sdk`), while keeping the core EPUB reader and dictionary 100% deterministic and offline.
 
 ---
 
-## 1. General Extensibility Architecture (`ImmersiveReading.Core.Extensions`)
+## 1. Unified Extensibility Architecture (`ImmersiveReading.Core.Plugins`)
 
-Because an immersive reading platform naturally inspires new workflows—AI comprehension quizzes, $n+1$ character roleplay, grammar coaching, TTS audio synchronization, visual novel overlays, or custom exporters—the application provides a **Feature Plugin Bus (`IFeaturePlugin`)** alongside the linguistic `ILanguagePlugin` SDK.
+Because an immersive reading platform naturally inspires new workflows—AI comprehension quizzes, $n+1$ character roleplay, grammar coaching, TTS audio synchronization, visual novel overlays, or custom exporters—the application provides a **Unified Plugin Architecture (`IImmersivePlugin`)** that unifies language packs (`ILanguagePlugin`) and feature plugins under a single lifecycle, configuration, database sandboxing, and UI slot architecture:
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────────┐
-│                         ImmersiveReading Host                             │
+│                    ImmersiveReading Plugin Host                           │
 │  ┌─────────────────────┐  ┌──────────────────────┐  ┌──────────────────┐  │
-│  │ IReaderContextBus   │  │ IVocabularyBudgetSvc │  │ AngleSharp       │  │
-│  │ - Current Book/Ch   │  │ - Known Words (n)    │  │ Snippet Enricher │  │
-│  │ - Just-Read Window  │  │ - Target Words (+1)  │  │ (Tokenize & Ruby │  │
-│  │ - Zero-Spoiler Gate │  │ - MeCab n+1 Verifier │  │  any HTML/Chat!) │  │
+│  │ IPluginConfigCtx    │  │ IPluginDatabaseCtx   │  │ IPluginEventBus  │  │
+│  │ - schema.json       │  │ - SQLite WAL Sandbox │  │ - Pub/Sub Hub    │  │
+│  │ - reactive merging  │  │ - Auto Migrations    │  │ - UI Push Events │  │
+│  └──────────┬──────────┘  └──────────┬───────────┘  └────────┬─────────┘  │
+│  ┌──────────┴──────────┐  ┌──────────┴───────────┐  ┌────────┴─────────┐  │
+│  │ IReaderContextSvc   │  │ IVocabularyBudgetSvc │  │ ISnippetEnricher │  │
+│  │ - Just-Read Window  │  │ - Known Words (n)    │  │ (AngleSharp DOM  │  │
+│  │ - Zero-Spoiler Gate │  │ - Target Words (+1)  │  │  Token & Ruby)   │  │
 │  └──────────┬──────────┘  └──────────┬───────────┘  └────────┬─────────┘  │
 └─────────────┼────────────────────────┼───────────────────────┼────────────┘
               │                        │                       │
      ┌────────┴────────────────────────┴───────────────────────┴────────┐
-     │                  IFeaturePlugin Extension Host                   │
+     │             IImmersivePlugin Unified Host Manager                │
      ├─────────────────────────┬────────────────────────┬───────────────┤
      ▼                         ▼                        ▼               ▼
 ┌─────────────────────┐ ┌──────────────────────┐ ┌─────────────┐ ┌──────────────┐
-│ Comprehension Tutor │ │ n+1 Persona Chat     │ │ Grammar /   │ │ Future User  │
-│ (MCQ -> Freeform)   │ │ (Book Character AI)  │ │ Audio / TTS │ │ Plugins      │
+│ Japanese Language   │ │ AI Companion Plugin  │ │ Grammar /   │ │ Future User  │
+│ (RestartRequired)   │ │ (Hot Reloadable)     │ │ Audio / TTS │ │ Plugins      │
 └─────────────────────┘ └──────────────────────┘ └─────────────┘ └──────────────┘
 ```
 
 ### 1.1 Core Extension Contracts
 
 ```csharp
-namespace ImmersiveReading.Core.Extensions;
+namespace ImmersiveReading.Core.Plugins;
 
-public interface IFeaturePlugin : IDisposable
+public interface IImmersivePlugin : IAsyncDisposable
 {
-    /// <summary>Unique plugin identifier, e.g., "aiCompanion", "ttsSync", "grammarCoach".</summary>
-    string PluginId { get; }
-
-    string DisplayName { get; }
-    string Version { get; }
-
-    /// <summary>Called at startup so the plugin can register RPC handlers, DB tables, and UI panels.</summary>
-    ValueTask InitializeAsync(IFeaturePluginContext context, CancellationToken ct = default);
+    PluginManifest Manifest { get; }
+    Task InitializeAsync(IPluginHostContext context, CancellationToken ct = default);
+    Task EnableAsync(CancellationToken ct = default);
+    Task DisableAsync(CancellationToken ct = default);
 }
 
-public interface IFeaturePluginContext
+public interface IPluginHostContext
 {
+    string PluginId { get; }
+    IPluginConfigContext Config { get; }
+    IPluginDatabaseContext Database { get; }
+    IPluginEventBus EventBus { get; }
     IReaderContextService ReaderContext { get; }
     IVocabularyBudgetService VocabularyBudget { get; }
     ISnippetEnricher SnippetEnricher { get; }
 
-    /// <summary>Registers a JSON-RPC handler invoked via "ext.{PluginId}.{action}".</summary>
-    void RegisterRpcAction(string action, Func<JsonElement, CancellationToken, Task<object?>> handler);
-
-    /// <summary>Registers a drawer tab or toolbar button in the Photino Reader UI.</summary>
-    void RegisterUiPanel(ReaderUiPanelDescriptor panel);
-
-    /// <summary>Registers an optional pre-render AngleSharp DOM stage.</summary>
+    void RegisterRpcAction(string action, PluginRpcHandler handler);
+    void RegisterLanguagePlugin(ILanguagePlugin plugin, bool isFallback = false);
+    void RegisterUiSlot(PluginSlotRegistration registration);
     void RegisterDomEnrichmentStage(IDomEnrichmentStage stage);
 }
 ```
+
+For backward compatibility with existing tests and modules, plugins may additionally implement the legacy `IFeaturePlugin` and `ILanguagePlugin` interfaces.
 
 ### 1.2 Zero-Spoiler `IReaderContextService`
 Any plugin (especially AI comprehension or persona chat) needs access to what the user is reading **without ever accidentally reading ahead and spoiling future plot points**:

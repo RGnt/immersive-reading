@@ -38,6 +38,9 @@ Welcome to the **Immersive Reading LLM Wiki**. This knowledge base documents [`e
     - [02 — Pre-Render AngleSharp DOM Enrichment & Language Plugin Spec](../specs/02-prerender-enrichment-and-plugin-spec.md)
     - [03 — On-the-Fly Dictionary Lookup Engine Spec](../specs/03-onthefly-dictionary-lookup-spec.md)
     - [04 — Photino.NET Desktop App, Custom Scheme & IPC Spec](../specs/04-photino-reader-ui-and-ipc-spec.md)
+    - [05 — Unified Extensibility & AI Companion Spec](../specs/05-extensibility-and-ai-companion-spec.md)
+    - [06 — Junior Developer Implementation Backlog](../specs/06-junior-developer-implementation-plan.md)
+    - [07 — Global Configuration & Settings Spec](../specs/07-global-configuration-and-settings-spec.md)
 
 ---
 
