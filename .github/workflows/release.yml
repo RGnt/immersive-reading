@@ -1,0 +1,111 @@
+name: Build & Release Single-File Packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux-x64
+            os: ubuntu-latest
+            archive_ext: tar.gz
+          - target: win-x64
+            os: windows-latest
+            archive_ext: zip
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Set Release Date
+        id: date
+        shell: bash
+        run: echo "date=$(date +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+
+      - name: Publish (Self-Contained Single-File)
+        shell: bash
+        run: |
+          dotnet publish immersive-reader/src/ImmersiveReading.App/ImmersiveReading.App.csproj \
+            -c Release \
+            -r ${{ matrix.target }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o ./dist/immersive-reader
+
+      - name: Clean Symbols (*.pdb)
+        shell: bash
+        run: |
+          rm -f ./dist/immersive-reader/*.pdb
+
+      - name: Package Release Archive (Linux tar.gz)
+        if: matrix.target == 'linux-x64'
+        shell: bash
+        run: |
+          mkdir -p ./release-pkg
+          ARCHIVE_NAME="immersive-reader-${{ steps.date.outputs.date }}-${{ matrix.target }}.tar.gz"
+          tar -czvf "./release-pkg/${ARCHIVE_NAME}" -C ./dist immersive-reader
+          echo "archive_path=./release-pkg/${ARCHIVE_NAME}" >> "$GITHUB_ENV"
+          echo "archive_name=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
+
+      - name: Package Release Archive (Windows zip)
+        if: matrix.target == 'win-x64'
+        shell: bash
+        run: |
+          mkdir -p ./release-pkg
+          ARCHIVE_NAME="immersive-reader-${{ steps.date.outputs.date }}-${{ matrix.target }}.zip"
+          python3 -c "import shutil; shutil.make_archive('./release-pkg/' + '${ARCHIVE_NAME}'.replace('.zip', ''), 'zip', './dist', 'immersive-reader')"
+          echo "archive_path=./release-pkg/${ARCHIVE_NAME}" >> "$GITHUB_ENV"
+          echo "archive_name=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.archive_name }}
+          path: ${{ env.archive_path }}
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set Release Date & Tag
+        id: release_meta
+        run: |
+          DATE_STR="$(date +'%Y-%m-%d')"
+          echo "date=${DATE_STR}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${DATE_STR}-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
+          merge-multiple: true
+
+      - name: Inspect downloaded packages
+        run: |
+          ls -la ./artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_meta.outputs.tag }}
+          name: Immersive Reader Release ${{ steps.release_meta.outputs.date }} (Run #${{ github.run_number }})
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: ./artifacts/*
