@@ -38,6 +38,25 @@ public sealed class PosHighlighterSettings
     [JsonPropertyName("colorAdverb")]
     public string ColorAdverb { get; set; } = "#a3e635";
 
+    [JsonPropertyName("colorNoun")]
+    public string ColorNoun { get; set; } = "#93c5fd";
+
+    [JsonPropertyName("maxCacheSizeMb")]
+    public int MaxCacheSizeMb { get; set; } = 500;
+
+    [JsonPropertyName("cacheSizeMb")]
+    public int CacheSizeMb
+    {
+        get => MaxCacheSizeMb;
+        set => MaxCacheSizeMb = value;
+    }
+
+    [JsonPropertyName("usePythonNlp")]
+    public bool UsePythonNlp { get; set; } = true;
+
+    [JsonPropertyName("pythonPath")]
+    public string? PythonPath { get; set; } = null;
+
     public static PosHighlighterSettings FromJson(JsonElement element)
     {
         try

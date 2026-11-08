@@ -378,4 +378,23 @@ public sealed class RpcContractTests : IDisposable
         Assert.True(result.TryGetProperty("cancelled", out var cancelledProp));
         Assert.True(cancelledProp.GetBoolean());
     }
+
+    [Fact]
+    public async Task StudyPack_Generate_MethodIsRegisteredAndRecognized()
+    {
+        // When book does not exist or bridge is not configured, it fails with domain error, NOT "Unknown RPC method"
+        var envelope = await CallAsync("studyPack.generate", """{"bookId": "nonexistent"}""");
+        Assert.True(envelope.TryGetProperty("error", out var errProp));
+        string msg = errProp.GetProperty("message").GetString() ?? "";
+        Assert.DoesNotContain("Unknown RPC method", msg, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Reader_GetChapterInsights_MethodIsRegisteredAndRecognized()
+    {
+        var envelope = await CallAsync("reader.getChapterInsights", """{"bookId": "nonexistent"}""");
+        Assert.True(envelope.TryGetProperty("error", out var errProp));
+        string msg = errProp.GetProperty("message").GetString() ?? "";
+        Assert.DoesNotContain("Unknown RPC method", msg, StringComparison.OrdinalIgnoreCase);
+    }
 }

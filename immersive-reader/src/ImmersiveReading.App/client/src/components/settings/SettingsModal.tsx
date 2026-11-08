@@ -1209,6 +1209,33 @@ export const SettingsModal: React.FC = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-[11px] font-semibold text-[var(--text-muted)] uppercase">
+                      NLP Chapter Cache Size ({localConfig.reader.maxCacheSizeMb ?? 500} MB)
+                    </label>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="2000"
+                    step="50"
+                    value={localConfig.reader.maxCacheSizeMb ?? 500}
+                    onChange={(e) =>
+                      setLocalConfig({
+                        ...localConfig,
+                        reader: { ...localConfig.reader, maxCacheSizeMb: parseInt(e.target.value, 10) },
+                      })
+                    }
+                    className="w-full accent-[var(--accent-color)]"
+                  />
+                  <div className="text-[10px] text-[var(--text-muted)] mt-0.5">
+                    Maximum disk cache size for Python NLP chapter POS classifications.
+                  </div>
+                </div>
+              </div>
+
               <div className="pt-2">
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input

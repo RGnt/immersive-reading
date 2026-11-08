@@ -40,6 +40,7 @@ export const BookInfoModal: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'meta' | 'jiten' | 'chapters' | 'studypack' | 'opf'>('meta');
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [studyPackReady, setStudyPackReady] = useState(false);
 
   // Form Fields
   const [title, setTitle] = useState('');
@@ -117,8 +118,21 @@ export const BookInfoModal: React.FC = () => {
     setJitenResults([]);
     setJitenStatus(null);
     setStatusMessage(null);
+    setStudyPackReady(!!s.hasStudyPack);
     setActiveTab('meta');
   }, [activeBookDetail]);
+
+  useEffect(() => {
+    if (activeTab === 'studypack' && activeBookDetail) {
+      rpc.call<any>('studypack.getOverview', { bookId: activeBookDetail.summary.bookId })
+        .then((res) => {
+          if (res?.overview?.available || (res?.overview?.masterPdfs?.length || 0) > 0 || (res?.overview?.vocabularySets?.length || 0) > 0) {
+            setStudyPackReady(true);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [activeTab, activeBookDetail]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1067,12 +1081,12 @@ export const BookInfoModal: React.FC = () => {
                   </div>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                      book.hasStudyPack
+                      (book.hasStudyPack || studyPackReady)
                         ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                         : 'bg-slate-700 text-slate-300'
                     }`}
                   >
-                    {book.hasStudyPack ? 'READY' : 'NOT GENERATED'}
+                    {(book.hasStudyPack || studyPackReady) ? 'READY' : 'NOT GENERATED'}
                   </span>
                 </div>
 

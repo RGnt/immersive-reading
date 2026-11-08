@@ -60,7 +60,17 @@ public sealed class JapaneseLanguagePlugin : ILanguagePlugin, IImmersivePlugin
             EntryClassName = "JapaneseKanjiEnrichmentStage"
         });
 
-        // 3. Kanji & Furigana PDF Section Builder (Order 410)
+        // 3. Grammar Detection Stage (Order 310)
+        context.RegisterPythonStage(new PythonStageDescriptor
+        {
+            StageId = "ja.grammar",
+            Order = 310,
+            TargetLanguages = ["ja"],
+            ScriptRelativePath = "python/ja_stages.py",
+            EntryClassName = "JapaneseGrammarDetectionStage"
+        });
+
+        // 4. Kanji, Vocab & Grammar PDF Section Builder (Order 410)
         context.RegisterPythonStage(new PythonStageDescriptor
         {
             StageId = "ja.pdf_sections",

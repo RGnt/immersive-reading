@@ -88,7 +88,7 @@ public static class ReaderHeadInjector
               color: inherit;
             }
             .ir-tok {
-              color: var(--text-primary, #f8fafc) !important;
+              color: var(--text-primary, #f8fafc);
             }
             rt {
               color: var(--ruby-color, #e2e8f0) !important;

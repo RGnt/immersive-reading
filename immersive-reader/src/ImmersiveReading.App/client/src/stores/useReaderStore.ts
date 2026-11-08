@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { rpc } from '../services/rpc';
-import type { BookDetail, ChapterSummary, BookmarkItem } from '../types/api';
+import type { BookDetail, ChapterSummary, BookmarkItem, ChapterInsights } from '../types/api';
 
 export interface TermSense {
   dictionaryTitle: string;
@@ -102,6 +102,15 @@ interface ReaderState {
   // Shortcuts & Toast Actions
   toggleShortcuts: (force?: boolean) => void;
   showToast: (message: string) => void;
+
+  // Chapter Study Panel Actions
+  isChapterStudyOpen: boolean;
+  chapterInsights: ChapterInsights | null;
+  isLoadingChapterInsights: boolean;
+  toggleChapterStudy: () => void;
+  openChapterStudy: () => void;
+  closeChapterStudy: () => void;
+  loadChapterInsights: () => Promise<void>;
 }
 
 export const useReaderStore = create<ReaderState>((set, get) => ({
@@ -130,6 +139,9 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   isBookmarksOpen: false,
   isShortcutsOpen: false,
   toastMessage: null,
+  isChapterStudyOpen: false,
+  chapterInsights: null,
+  isLoadingChapterInsights: false,
 
   openBook: async (bookId: string, initialHref?: string) => {
     try {
@@ -192,6 +204,10 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
       chapterHtml: html || '',
       popover: { ...get().popover, isOpen: false },
     });
+
+    if (get().isChapterStudyOpen) {
+      get().loadChapterInsights();
+    }
   },
 
   closeReader: () => {
@@ -406,5 +422,38 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     (window as any).__toastTimer = setTimeout(() => {
       set({ toastMessage: null });
     }, 1500);
+  },
+
+  toggleChapterStudy: () => {
+    const nextState = !get().isChapterStudyOpen;
+    set({ isChapterStudyOpen: nextState });
+    if (nextState) {
+      get().loadChapterInsights();
+    }
+  },
+
+  openChapterStudy: () => {
+    set({ isChapterStudyOpen: true });
+    get().loadChapterInsights();
+  },
+
+  closeChapterStudy: () => set({ isChapterStudyOpen: false }),
+
+  loadChapterInsights: async () => {
+    const { bookDetail, currentChapterIndex, currentSpineHref } = get();
+    if (!bookDetail) return;
+    set({ isLoadingChapterInsights: true });
+    try {
+      const res = await rpc.call<ChapterInsights>('reader.getChapterInsights', {
+        bookId: bookDetail.summary.bookId,
+        chapterIndex: currentChapterIndex,
+        spineHref: currentSpineHref,
+      });
+      set({ chapterInsights: res });
+    } catch (err) {
+      console.error('Failed to load chapter insights:', err);
+    } finally {
+      set({ isLoadingChapterInsights: false });
+    }
   },
 }));

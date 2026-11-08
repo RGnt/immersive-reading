@@ -13,8 +13,10 @@ def main(argv=None):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Enrich books, build study documents or explicitly update decks.")
-    parser.add_argument("command", choices=["build", "enrich", "decks", "run-manifest"])
+    parser.add_argument("command", choices=["build", "enrich", "decks", "run-manifest", "pos-chapter", "generate-transfer"])
     parser.add_argument("--manifest", type=Path, help="Path to pipeline-manifest.json for run-manifest")
+    parser.add_argument("--transfer", type=Path, help="Path to learning_material.json or study_transfer.json for generate-transfer")
+    parser.add_argument("--input", type=Path, help="Input JSON file for pos-chapter (default: stdin)")
     parser.add_argument("--books", type=Path, default=Path("books"))
     parser.add_argument("--book", type=Path)
     parser.add_argument("--output", type=Path, default=Path("output"))
@@ -26,6 +28,18 @@ def main(argv=None):
     parser.add_argument("--package", action="store_true", help="Also create study-pack.zip")
     parser.add_argument("--update-decks", action="store_true")
     args = parser.parse_args(argv)
+    if args.command == "pos-chapter":
+        from .pos_chapter import main as pos_main
+        cli_args = [sys.argv[0]]
+        if args.input:
+            cli_args.append(str(args.input))
+        return pos_main(cli_args)
+    if args.command == "generate-transfer":
+        if not args.transfer:
+            parser.error("generate-transfer requires --transfer <path>")
+        from .transfer import generate_from_transfer_file
+        generate_from_transfer_file(args.transfer, args.output)
+        return 0
     if args.command == "run-manifest":
         if not args.manifest:
             parser.error("run-manifest requires --manifest <path>")

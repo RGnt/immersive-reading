@@ -9,5 +9,8 @@
   "colorSuffix": "#facc15",
   "colorParticleSingle": "#34d399",
   "colorParticleMulti": "#2dd4bf",
-  "colorAdverb": "#a3e635"
+  "colorAdverb": "#a3e635",
+  "colorNoun": "#93c5fd",
+  "maxCacheSizeMb": 500,
+  "usePythonNlp": true
 }

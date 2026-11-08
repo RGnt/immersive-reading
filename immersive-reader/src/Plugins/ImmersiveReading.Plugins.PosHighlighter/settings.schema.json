@@ -18,57 +18,87 @@
     },
     "colorAdjI": {
       "type": "string",
+      "format": "color",
       "title": "i-Adjectives (形容詞)",
       "description": "Color for i-adjectives (e.g. 美味しい, 楽しい, 暑い)",
       "default": "#fb923c"
     },
     "colorAdjNa": {
       "type": "string",
+      "format": "color",
       "title": "na-Adjectives (形容動詞 / 形状詞)",
-      "description": "Color for na-adjectives (e.g. 静か, 綺麗, 変)",
+      "description": "Color for na-adjectives (e.g. 便利, 静か, 綺麗, 親切, 有名)",
       "default": "#f472b6"
     },
     "colorVerbGodan": {
       "type": "string",
+      "format": "color",
       "title": "u-Verbs / Godan (五段動詞)",
-      "description": "Color for Godan verbs ending in u, ku, su, mu, etc. (e.g. 行く, 話す, 読む)",
+      "description": "Color for Godan verbs ending in u, ku, su, mu, etc. (e.g. 行く, 話す, 読む, 走る)",
       "default": "#38bdf8"
     },
     "colorVerbIchidan": {
       "type": "string",
+      "format": "color",
       "title": "ru-Verbs / Ichidan (一段動詞)",
       "description": "Color for Ichidan verbs ending in iru/eru (e.g. 食べる, 見る, 答える)",
       "default": "#818cf8"
     },
     "colorVerbIrregular": {
       "type": "string",
+      "format": "color",
       "title": "Irregular Verbs (サ変・カ変)",
-      "description": "Color for irregular verbs (e.g. する, 来る)",
+      "description": "Color for irregular verbs (e.g. する, 来る, 勉強する)",
       "default": "#c084fc"
     },
     "colorSuffix": {
       "type": "string",
-      "title": "Suffixes (接尾辞)",
-      "description": "Color for grammatical suffixes distinct from particles (e.g. さん, 様, 的, たち, 目)",
+      "format": "color",
+      "title": "Suffixes & Prefixes (接尾辞・接頭辞)",
+      "description": "Color for grammatical suffixes and prefixes (e.g. さん, 様, 的, たち, 目, 超, 不)",
       "default": "#facc15"
     },
     "colorParticleSingle": {
       "type": "string",
+      "format": "color",
       "title": "Single-Kana Particles (助詞)",
       "description": "Color for single-kana grammatical particles (e.g. は, が, を, に, で, と, も, へ, か, ね, よ, の)",
       "default": "#34d399"
     },
     "colorParticleMulti": {
       "type": "string",
+      "format": "color",
       "title": "Multi-Kana / Compound Particles",
       "description": "Color for multi-kana particles (e.g. から, まで, より, など, ほど)",
       "default": "#2dd4bf"
     },
     "colorAdverb": {
       "type": "string",
+      "format": "color",
       "title": "Adverbs (副詞)",
-      "description": "Color for adverbs (e.g. ゆっくり, たくさん)",
+      "description": "Color for adverbs (e.g. 突然, 時々, ゆっくり, たくさん)",
       "default": "#a3e635"
+    },
+    "colorNoun": {
+      "type": "string",
+      "format": "color",
+      "title": "Nouns (名詞)",
+      "description": "Color for kanji and kana nouns (e.g. 本, 学校, 先生, 猫, 時間)",
+      "default": "#93c5fd"
+    },
+    "maxCacheSizeMb": {
+      "type": "integer",
+      "title": "Max POS Cache Size (MB)",
+      "description": "Maximum disk cache size in megabytes for Python NLP chapter POS classifications",
+      "default": 500,
+      "minimum": 50,
+      "maximum": 5000
+    },
+    "usePythonNlp": {
+      "type": "boolean",
+      "title": "Use Python NLP Pipeline",
+      "description": "Whether to use Python SudachiPy NLP pipeline for chapter POS analysis with offline fallback",
+      "default": true
     }
   }
 }

@@ -9,6 +9,7 @@ from typing import Any
 from .epub import read_epub
 from .sdk.stage import ChapterDocument, PipelineContext, PipelineStage
 from .sdk.pdf import compile_master_study_pdf
+from .transfer import build_transfer_payload, find_data_dir
 
 
 def extract_epub_chapters(epub_path: Path) -> list[ChapterDocument]:
@@ -81,6 +82,11 @@ def run_pipeline_from_manifest(manifest_path: Path) -> PipelineContext:
         plugin_configs=manifest.get("pluginConfigs", {}),
     )
 
+    if manifest.get("dataDirectory"):
+        ctx.artifacts["data_dir"] = Path(manifest["dataDirectory"])
+    if manifest.get("dictionariesDbPath"):
+        ctx.artifacts["dictionaries_db"] = Path(manifest["dictionariesDbPath"])
+
     # 2. Built-in Phase 0: Extract EPUB chapters
     ctx.emit_progress("core.epub_extract", "Extracting EPUB chapters...", 5)
     ctx.chapters = extract_epub_chapters(ctx.epub_path)
@@ -106,6 +112,25 @@ def run_pipeline_from_manifest(manifest_path: Path) -> PipelineContext:
     # 4. Write canonical study_data.json
     ctx.emit_progress("core.serialize", "Writing study pack JSON artifacts...", 90)
     study_data_path = output_dir / "study_data.json"
+    items_list = [vars(item) for item in ctx.study_items.values()]
+
+    ch_words = ctx.artifacts.get("chapter_words", {})
+    ch_kanji = ctx.artifacts.get("chapter_kanji", {})
+    ch_grammar = ctx.artifacts.get("chapter_grammar", {})
+    chapters_payload = []
+    for idx, ch in enumerate(ctx.chapters):
+        chapters_payload.append({
+            "index": ch.index,
+            "title": ch.title,
+            "spineHref": ch.spine_href,
+            "wordCount": len(ch_words.get(idx, [])),
+            "kanjiCount": len(ch_kanji.get(idx, [])),
+            "grammarCount": len(ch_grammar.get(idx, [])),
+            "vocabulary": ch_words.get(idx, []),
+            "kanji": ch_kanji.get(idx, []),
+            "grammar": ch_grammar.get(idx, []),
+        })
+
     study_data_payload = {
         "bookId": ctx.book_id,
         "title": ctx.title,
@@ -114,13 +139,68 @@ def run_pipeline_from_manifest(manifest_path: Path) -> PipelineContext:
         "chapterCount": len(ctx.chapters),
         "tokenCount": len(ctx.tokens),
         "wordCount": len(ctx.study_items),
-        "items": [vars(item) for item in ctx.study_items.values()],
+        "chapters": chapters_payload,
+        "items": items_list,
     }
     study_data_path.write_text(
         json.dumps(study_data_payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     ctx.artifacts["study_data"] = study_data_path
+
+    # Also write canonical vocabulary-sets.json (20 words per set) for seamless reader integration
+    sets = []
+    set_num = 1
+    for i in range(0, len(items_list), 20):
+        chunk = items_list[i : i + 20]
+        sets.append({
+            "id": f"set-{set_num:02d}",
+            "number": set_num,
+            "size": len(chunk),
+            "words": [
+                {
+                    "card_id": item.get("key", item.get("headword", "")),
+                    "word": item.get("headword", item.get("key", "")),
+                    "reading": item.get("reading", "") or "",
+                    "chapter_id": "",
+                    "study_number": i + c_idx + 1,
+                    "definition": item.get("pos", "") or (item.get("sample_sentences", [""])[0] if item.get("sample_sentences") else ""),
+                    "book_occurrences": item.get("book_occurrences", 1),
+                }
+                for c_idx, item in enumerate(chunk)
+            ]
+        })
+        set_num += 1
+
+    vocab_sets_path = output_dir / "vocabulary-sets.json"
+    vocab_sets_path.write_text(
+        json.dumps({"sets": sets}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    ctx.artifacts["vocabulary_sets"] = vocab_sets_path
+
+    # 4b. Write open learning_material.json transfer payload (with stroke order and rich cards)
+    data_dir = find_data_dir()
+    transfer_payload = build_transfer_payload(
+        book_id=ctx.book_id,
+        title=ctx.title,
+        language=ctx.language,
+        writing_direction=ctx.writing_direction,
+        chapters=chapters_payload,
+        deck_csv_file=ctx.deck_csv_path.name if ctx.deck_csv_path else None,
+        epub_file=ctx.epub_path.name if ctx.epub_path else None,
+        data_dir=data_dir,
+    )
+    transfer_json_str = json.dumps(transfer_payload, ensure_ascii=False, indent=2)
+    transfer_path = output_dir / "learning_material.json"
+    transfer_path.write_text(transfer_json_str, encoding="utf-8")
+    (output_dir / "study_transfer.json").write_text(transfer_json_str, encoding="utf-8")
+
+    book_data_dir = output_dir / "data" / ctx.book_id
+    book_data_dir.mkdir(parents=True, exist_ok=True)
+    (book_data_dir / "learning_material.json").write_text(transfer_json_str, encoding="utf-8")
+    (book_data_dir / "study_transfer.json").write_text(transfer_json_str, encoding="utf-8")
+    ctx.artifacts["learning_material"] = transfer_path
 
     # Flashcards if populated
     if ctx.flashcards:

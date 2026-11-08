@@ -15,11 +15,20 @@ _PDF_LOCK = RLock()
 
 
 def register_font(font_path=None):
-    if font_path is None or not Path(font_path).is_file():
-        raise FileNotFoundError("Set --font to a Japanese TrueType font (.ttf or glyf-based .ttc).")
-    with _PDF_LOCK:
-        pdfmetrics.registerFont(TTFont("Japanese", str(font_path), subfontIndex=0))
-    return str(font_path)
+    if font_path is not None and Path(font_path).is_file():
+        with _PDF_LOCK:
+            pdfmetrics.registerFont(TTFont("Japanese", str(font_path), subfontIndex=0))
+        return str(font_path)
+
+    if "Japanese" in pdfmetrics.getRegisteredFontNames():
+        return "Japanese"
+
+    from .sdk.pdf import register_cjk_font
+    res = register_cjk_font(font_path)
+    if "Japanese" in pdfmetrics.getRegisteredFontNames():
+        return res
+
+    raise FileNotFoundError("Set --font to a Japanese TrueType font (.ttf or glyf-based .ttc).")
 
 
 @contextmanager

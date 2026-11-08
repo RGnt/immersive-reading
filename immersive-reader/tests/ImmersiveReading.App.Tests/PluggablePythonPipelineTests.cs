@@ -46,20 +46,22 @@ public sealed class PluggablePythonPipelineTests : IDisposable
     }
 
     [Fact]
-    public async Task JapaneseLanguagePlugin_RegistersThreePythonStages_SortedByOrder()
+    public async Task JapaneseLanguagePlugin_RegistersFourPythonStages_SortedByOrder()
     {
         var jaPlugin = new JapaneseLanguagePlugin();
         await _host.InitializePluginsAsync([jaPlugin]);
 
         var jaStages = await _host.ResolveStagesForLanguageAsync("ja");
 
-        Assert.Equal(3, jaStages.Count);
+        Assert.Equal(4, jaStages.Count);
         Assert.Equal("ja.sudachi_tokenize", jaStages[0].Descriptor.StageId);
         Assert.Equal(110, jaStages[0].Descriptor.Order);
         Assert.Equal("ja.kanji_enrichment", jaStages[1].Descriptor.StageId);
         Assert.Equal(210, jaStages[1].Descriptor.Order);
-        Assert.Equal("ja.pdf_sections", jaStages[2].Descriptor.StageId);
-        Assert.Equal(410, jaStages[2].Descriptor.Order);
+        Assert.Equal("ja.grammar", jaStages[2].Descriptor.StageId);
+        Assert.Equal(310, jaStages[2].Descriptor.Order);
+        Assert.Equal("ja.pdf_sections", jaStages[3].Descriptor.StageId);
+        Assert.Equal(410, jaStages[3].Descriptor.Order);
 
         // Verify that the python script was materialized from embedded resources into plugin data directory
         var scriptPath = Path.Combine(jaStages[0].PluginDataDirectory, "python", "ja_stages.py");
@@ -79,7 +81,7 @@ public sealed class PluggablePythonPipelineTests : IDisposable
         var esStages = await _host.ResolveStagesForLanguageAsync("es");
         var frStages = await _host.ResolveStagesForLanguageAsync("fr");
 
-        Assert.Equal(3, jaStages.Count);
+        Assert.Equal(4, jaStages.Count);
         Assert.All(jaStages, s => Assert.Equal("japanese", s.PluginId));
 
         Assert.Single(esStages);

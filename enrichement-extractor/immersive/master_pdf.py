@@ -44,7 +44,9 @@ def write_master(path, book, kind, groups, chapter=None, *, cancel=None, charts=
                                        ("LINEBELOW", (0, 0), (-1, -1), .35, colors.HexColor("#aaaaaa")),
                                        ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5),
                                        ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
-            story.append(table if chapter else KeepInFrame(182*mm, 245*mm, [table], mode="shrink", hAlign="LEFT"))
+            # Multi-page vocabulary lists must flow naturally across pages; KeepInFrame(shrink)
+            # is reserved only for single-page 20-word sets (len <= 25) so text never shrinks into a tiny sliver.
+            story.append(table if chapter or len(cards) > 25 else KeepInFrame(182*mm, 245*mm, [table], mode="shrink", hAlign="LEFT"))
         else:
             for card in cards:
                 cell = [p(card["title"], "heading"), p(card["meaning"]), p(card["details"]),

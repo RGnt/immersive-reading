@@ -92,6 +92,12 @@ public sealed record PythonPipelineRunManifest
     [JsonPropertyName("deckCsvPath")]
     public string? DeckCsvPath { get; init; }
 
+    [JsonPropertyName("dataDirectory")]
+    public string? DataDirectory { get; init; }
+
+    [JsonPropertyName("dictionariesDbPath")]
+    public string? DictionariesDbPath { get; init; }
+
     [JsonPropertyName("includeA4Pdf")]
     public bool IncludeA4Pdf { get; init; } = true;
 

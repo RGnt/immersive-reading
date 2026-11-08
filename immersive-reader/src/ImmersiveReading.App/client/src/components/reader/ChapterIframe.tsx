@@ -73,7 +73,7 @@ export const ChapterIframe: React.FC = () => {
           color: inherit;
         }
         .ir-tok {
-          color: ${textPrimary} !important;
+          color: ${textPrimary};
         }
         rt {
           color: ${rubyColor} !important;

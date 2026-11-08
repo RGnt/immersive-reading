@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using ImmersiveReading.Core.Config;
 using ImmersiveReading.Core.Library;
 using ImmersiveReading.Library;
@@ -11,7 +12,8 @@ public sealed class StudyPackRpcModule(
     PythonStudyPackBridge? studyPackBridge = null,
     FlashcardMiningService? flashcardService = null,
     IRpcEventSink? events = null,
-    IConfigurationManager? configManager = null) : IRpcModule, IDisposable
+    IConfigurationManager? configManager = null,
+    LibraryDatabase? db = null) : IRpcModule, IDisposable
 {
     private StudyPackLease? _activeStudyLease;
     private readonly AnkiConnectClient _ankiClient = new();
@@ -22,7 +24,12 @@ public sealed class StudyPackRpcModule(
         {
             yield return ("studypack.getOverview", (req, _) => Task.FromResult<object?>(GetOverview(req)));
             yield return ("studypack.build", BuildAsync);
+            yield return ("studypack.generate", BuildAsync);
             yield return ("studypack.openPdf", (req, _) => Task.FromResult<object?>(OpenPdf(req)));
+            yield return ("studypack.getLearningMaterial", GetLearningMaterialAsync);
+            yield return ("studypack.exportTransfer", GetLearningMaterialAsync);
+            yield return ("studypack.importTransfer", ImportTransferAsync);
+            yield return ("studypack.generateFromTransfer", GenerateFromTransferAsync);
             yield return ("flashcards.mine", MineFlashcardAsync);
             yield return ("flashcards.list", (req, _) => Task.FromResult<object?>(ListFlashcards(req)));
             yield return ("anki.ping", PingAnkiAsync);
@@ -66,6 +73,24 @@ public sealed class StudyPackRpcModule(
         }
 
         var overview = studyPackBridge.GetBookStudyPack(bookId);
+        if (overview.Available && db is not null)
+        {
+            try
+            {
+                using var conn = db.OpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "UPDATE books SET has_study_pack = 1, updated_at_utc = $now WHERE book_id = $id AND has_study_pack = 0;";
+                cmd.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O"));
+                cmd.Parameters.AddWithValue("$id", bookId);
+                int affected = cmd.ExecuteNonQuery();
+                if (affected > 0)
+                {
+                    events?.Emit("library.bookUpdated", new { bookId, hasStudyPack = true });
+                }
+            }
+            catch { }
+        }
+
         var minedCards = flashcardService?.ListBookCards(bookId) ?? [];
         return new
         {
@@ -99,10 +124,34 @@ public sealed class StudyPackRpcModule(
             if (matched is not null) epubPath = matched;
         }
 
-        var options = new StudyPackOptions(DeckCsvPath: null, IncludeA4Pdf: !readerOnly, ReaderOnly: readerOnly);
-        return await studyPackBridge
+        string? deckCsvPath = req.OptionalString("deckCsvPath") ?? req.OptionalString("deckPath");
+        if (string.IsNullOrEmpty(deckCsvPath) && Directory.Exists(detail.Summary.FolderPath))
+        {
+            deckCsvPath = Directory.GetFiles(detail.Summary.FolderPath, "*.csv").FirstOrDefault();
+        }
+
+        var options = new StudyPackOptions(DeckCsvPath: deckCsvPath, IncludeA4Pdf: !readerOnly, ReaderOnly: readerOnly);
+        var result = await studyPackBridge
             .BuildStudyPackAsync(detail.Summary, epubPath, options, progress, ct)
             .ConfigureAwait(false);
+
+        if (result.Success && db is not null)
+        {
+            try
+            {
+                using var conn = db.OpenConnection();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "UPDATE books SET has_study_pack = 1, updated_at_utc = $now WHERE book_id = $id;";
+                cmd.Parameters.AddWithValue("$now", DateTime.UtcNow.ToString("O"));
+                cmd.Parameters.AddWithValue("$id", bookId);
+                cmd.ExecuteNonQuery();
+
+                events?.Emit("library.bookUpdated", new { bookId, hasStudyPack = true });
+            }
+            catch { }
+        }
+
+        return result;
     }
 
     private static object? OpenPdf(RpcRequest req)
@@ -122,6 +171,101 @@ public sealed class StudyPackRpcModule(
             });
         }
         return new { ok = true, fullPath };
+    }
+
+    private async Task<object?> GetLearningMaterialAsync(RpcRequest req, CancellationToken ct)
+    {
+        string bookId = req.RequiredString("bookId");
+        string outputDir = studyPackBridge?.OutputRoot ?? Path.Combine(Directory.GetCurrentDirectory(), "output");
+
+        string[] candidatePaths = [
+            Path.Combine(outputDir, "data", bookId, "learning_material.json"),
+            Path.Combine(outputDir, "data", bookId, "study_transfer.json"),
+            Path.Combine(outputDir, "learning_material.json"),
+            Path.Combine(outputDir, "study_data.json"),
+        ];
+
+        foreach (var path in candidatePaths)
+        {
+            if (File.Exists(path))
+            {
+                using var stream = File.OpenRead(path);
+                using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+                return new
+                {
+                    bookId,
+                    filePath = path,
+                    learningMaterial = doc.RootElement.Clone()
+                };
+            }
+        }
+
+        return new { bookId, filePath = (string?)null, learningMaterial = (object?)null };
+    }
+
+    private async Task<object?> ImportTransferAsync(RpcRequest req, CancellationToken ct)
+    {
+        if (studyPackBridge is null) throw new InvalidOperationException("Study pack bridge not configured.");
+        string bookId = req.RequiredString("bookId");
+        string? transferJson = req.OptionalString("transferJson");
+        string? sourceFilePath = req.OptionalString("sourceFilePath");
+
+        if (string.IsNullOrEmpty(transferJson) && !string.IsNullOrEmpty(sourceFilePath) && File.Exists(sourceFilePath))
+        {
+            transferJson = await File.ReadAllTextAsync(sourceFilePath, ct);
+        }
+
+        if (string.IsNullOrEmpty(transferJson))
+        {
+            throw new ArgumentException("Either 'transferJson' or 'sourceFilePath' must be provided.");
+        }
+
+        // Validate JSON
+        using var doc = JsonDocument.Parse(transferJson);
+
+        string outputDir = studyPackBridge.OutputRoot;
+        string bookDataDir = Path.Combine(outputDir, "data", bookId);
+        Directory.CreateDirectory(bookDataDir);
+
+        string targetPath = Path.Combine(bookDataDir, "learning_material.json");
+        await File.WriteAllTextAsync(targetPath, transferJson, ct);
+        await File.WriteAllTextAsync(Path.Combine(bookDataDir, "study_transfer.json"), transferJson, ct);
+
+        bool generatePdfs = req.OptionalBool("generatePdfs") ?? true;
+        if (generatePdfs)
+        {
+            var progress = new Progress<string>(line =>
+            {
+                events?.Emit("studypack.buildProgress", new { bookId, line });
+            });
+            var buildRes = await studyPackBridge.GenerateFromTransferAsync(bookId, targetPath, progress, ct);
+            return new { ok = buildRes.Success, bookId, path = targetPath, buildResult = buildRes };
+        }
+
+        return new { ok = true, bookId, path = targetPath };
+    }
+
+    private async Task<object?> GenerateFromTransferAsync(RpcRequest req, CancellationToken ct)
+    {
+        if (studyPackBridge is null) throw new InvalidOperationException("Study pack bridge not configured.");
+        string bookId = req.RequiredString("bookId");
+        string outputDir = studyPackBridge.OutputRoot;
+        string targetPath = Path.Combine(outputDir, "data", bookId, "learning_material.json");
+        if (!File.Exists(targetPath))
+        {
+            targetPath = Path.Combine(outputDir, "learning_material.json");
+        }
+        if (!File.Exists(targetPath))
+        {
+            throw new FileNotFoundException($"Learning material transfer file not found for book '{bookId}'.");
+        }
+
+        var progress = new Progress<string>(line =>
+        {
+            events?.Emit("studypack.buildProgress", new { bookId, line });
+        });
+        var buildRes = await studyPackBridge.GenerateFromTransferAsync(bookId, targetPath, progress, ct);
+        return new { ok = buildRes.Success, bookId, path = targetPath, buildResult = buildRes };
     }
 
     private async Task<object?> MineFlashcardAsync(RpcRequest req, CancellationToken ct)

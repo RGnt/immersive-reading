@@ -166,6 +166,23 @@ const PluginConfigurationPane: React.FC<{
                   />
                   <span className="text-xs text-white/80">Enabled</span>
                 </label>
+              ) : prop.format === 'color' ? (
+                <div className="flex items-center gap-2.5">
+                  <input
+                    type="color"
+                    value={val || '#ffffff'}
+                    onChange={(e) => onUpdate({ [key]: e.target.value })}
+                    className="w-9 h-8 rounded border border-white/20 bg-transparent cursor-pointer p-0.5"
+                    title="Click to pick a color"
+                  />
+                  <input
+                    type="text"
+                    value={val ?? ''}
+                    onChange={(e) => onUpdate({ [key]: e.target.value })}
+                    className="flex-1 px-3 py-1.5 rounded bg-black/40 border border-white/15 text-sm text-white font-mono"
+                    placeholder="#rrggbb"
+                  />
+                </div>
               ) : (
                 <input
                   type={

@@ -23,24 +23,44 @@ public sealed class PosHighlighterPlugin : IImmersivePlugin
 
     private PosHighlighterSettings _settings = new();
     private PosDomEnrichmentStage? _stage;
+    private ChapterPosCache? _cache;
     private IDisposable? _configSub;
 
     public PosHighlighterSettings CurrentSettings => _settings;
     public PosDomEnrichmentStage? ActiveStage => _stage;
+    public ChapterPosCache? ActiveCache => _cache;
 
     public ValueTask OnEnableAsync(IPluginHostContext context, CancellationToken ct = default)
     {
         // 1. Load initial settings
         _settings = context.Config.Get<PosHighlighterSettings>();
 
-        // 2. Instantiate and register DOM enrichment stage
-        _stage = new PosDomEnrichmentStage(_settings);
+        // 2. Instantiate and register DOM enrichment stage with persistent cache
+        _cache = new ChapterPosCache(context.Database?.DatabaseFilePath, maxCacheSizeMb: _settings.MaxCacheSizeMb);
+        _stage = new PosDomEnrichmentStage(_settings, cache: _cache);
         context.RegisterDomEnrichmentStage(_stage);
 
         // 3. Register RPC actions
         context.RegisterRpcAction("getSettings", (payload, token) =>
         {
             return Task.FromResult<object?>(_settings);
+        });
+
+        context.RegisterRpcAction("clearCache", (payload, token) =>
+        {
+            _cache?.Clear();
+            return Task.FromResult<object?>(new { success = true });
+        });
+
+        context.RegisterRpcAction("getCacheStats", (payload, token) =>
+        {
+            var (count, bytes) = _cache?.GetStats() ?? (0, 0L);
+            return Task.FromResult<object?>(new
+            {
+                count,
+                bytes,
+                maxMb = _settings.MaxCacheSizeMb
+            });
         });
 
         context.RegisterRpcAction("toggle", async (payload, token) =>
@@ -96,6 +116,8 @@ public sealed class PosHighlighterPlugin : IImmersivePlugin
         _configSub?.Dispose();
         _configSub = null;
         _stage = null;
+        _cache?.Dispose();
+        _cache = null;
         return ValueTask.CompletedTask;
     }
 
@@ -104,6 +126,8 @@ public sealed class PosHighlighterPlugin : IImmersivePlugin
         _configSub?.Dispose();
         _configSub = null;
         _stage = null;
+        _cache?.Dispose();
+        _cache = null;
         return ValueTask.CompletedTask;
     }
 }

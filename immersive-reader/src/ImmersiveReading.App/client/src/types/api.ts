@@ -26,6 +26,7 @@ export interface AppConfig {
     furiganaMode: 'AllKanji' | 'Uncommon' | 'None';
     autoSavePosition: boolean;
     columnMaxWidthPx: number;
+    maxCacheSizeMb?: number;
   };
   llm: {
     preset: string;
@@ -300,16 +301,42 @@ export interface VocabularySet {
   }[];
 }
 
+export interface StudyPackPdfArtifact {
+  fileName: string;
+  title: string;
+  kind?: string;
+  fullPath?: string;
+  appSchemeUrl?: string;
+  sizeBytes?: number;
+}
+
+export interface VocabularySetWordItem {
+  cardId: string;
+  word: string;
+  reading?: string;
+  chapterId?: string;
+  studyNumber?: number;
+}
+
+export interface VocabularyLearningSet {
+  id: string;
+  number: number;
+  size: number;
+  words: VocabularySetWordItem[];
+}
+
 export interface StudyPackOverview {
   bookId: string;
-  hasActivePublication: boolean;
+  available?: boolean;
+  hasActivePublication?: boolean;
   generation?: string;
-  vocabularySets: VocabularySet[];
-  masterPdfs: {
-    pdfName: string;
-    pdfPath: string;
-    category: 'kanji' | 'vocabulary' | 'grammar';
-  }[];
+  activeManifestPath?: string;
+  masterPdfs: any[];
+  chapterPdfs?: any[];
+  vocabularySets: any[];
+  totalVocabularyInSets?: number;
+  hasHtmlCompanion?: boolean;
+  htmlEntryPath?: string;
 }
 
 export interface AiQuizQuestion {
@@ -341,5 +368,46 @@ export interface PersonaChatMessage {
   content: string;
   timestamp: string;
   syntheticChapterHref?: string;
+}
+
+export interface ChapterVocabularyItem {
+  lemma: string;
+  word: string;
+  reading?: string;
+  partOfSpeech?: string;
+  occurrences: number;
+  definition?: string;
+  sampleSentence?: string;
+}
+
+export interface ChapterKanjiItem {
+  character: string;
+  occurrences: number;
+  words?: string[];
+  codepointHex?: string;
+  meanings?: string[];
+  onyomi?: string[];
+  kunyomi?: string[];
+  strokeCount?: number;
+  level?: string;
+}
+
+export interface ChapterGrammarItem {
+  id: string;
+  label: string;
+  meaning: string;
+  occurrences: number;
+  examples?: string[];
+  note?: string;
+}
+
+export interface ChapterInsights {
+  bookId: string;
+  chapterIndex: number;
+  spineHref: string;
+  chapterTitle: string;
+  vocabulary: ChapterVocabularyItem[];
+  kanji: ChapterKanjiItem[];
+  grammar: ChapterGrammarItem[];
 }
 

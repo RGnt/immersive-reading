@@ -6,6 +6,7 @@ import { ReaderSearchBar } from './ReaderSearchBar';
 import { BookmarksDrawer } from './BookmarksDrawer';
 import { ShortcutsModal } from './ShortcutsModal';
 import { ReaderToast } from './ReaderToast';
+import { ChapterStudyPanel } from './ChapterStudyPanel';
 import { ReaderDrawerPluginSlot } from '../plugins/PluginSlots';
 
 export const ReaderView: React.FC = () => {
@@ -21,6 +22,7 @@ export const ReaderView: React.FC = () => {
           <ShortcutsModal />
           <ReaderToast />
         </div>
+        <ChapterStudyPanel />
         <ReaderDrawerPluginSlot />
       </div>
     </div>

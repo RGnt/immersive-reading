@@ -202,6 +202,40 @@ public sealed class Phase4StudyPackSpecsTests : IDisposable
         Assert.Contains("キャンプ\tきゃんぷ\tcamping trip; outdoor camp\tはじめての海とキャンプに出かけました。", tsvContent);
     }
 
+    [Fact]
+    public async Task PythonStudyPackBridge_EnsureRequirements_Detects_Existing_Packages_Without_Calling_Pip()
+    {
+        string workspaceRoot = FindWorkspaceRoot();
+        string pythonExe = Path.Combine(workspaceRoot, "enrichement-extractor", ".venv", "Scripts", "python.exe");
+        if (!File.Exists(pythonExe))
+        {
+            pythonExe = Path.Combine(workspaceRoot, "enrichement-extractor", ".venv", "bin", "python");
+        }
+
+        if (!File.Exists(pythonExe))
+        {
+            return; // Skip if no venv present in test environment
+        }
+
+        string sitePackagesDir = Path.Combine(_tempDir, "test-python-packages");
+        var requirements = new List<string> { "sudachipy>=0.6.8", "sudachidict_core>=20240109" };
+
+        var bridge = new PythonStudyPackBridge(_tempDir, Path.Combine(workspaceRoot, "enrichement-extractor"), configuredPythonExe: pythonExe);
+
+        // This call should succeed because sudachipy and sudachidict_core are already installed in the venv,
+        // even though the venv does NOT have 'pip' installed!
+        var method = typeof(PythonStudyPackBridge).GetMethod("EnsurePipRequirementsAsync",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var task = (Task)method.Invoke(null, [pythonExe, sitePackagesDir, requirements, null, CancellationToken.None])!;
+        await task;
+
+        // Verify stamp file written
+        string stampFile = Path.Combine(sitePackagesDir, ".requirements.sha256");
+        Assert.True(File.Exists(stampFile));
+    }
+
     private static string FindWorkspaceRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);

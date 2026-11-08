@@ -102,7 +102,7 @@ export interface JsonSchemaProperty {
   enumLabels?: string[];
   minimum?: number;
   maximum?: number;
-  format?: 'password' | 'uri' | 'textarea';
+  format?: 'password' | 'uri' | 'textarea' | 'color';
   'x-rpc-action'?: {
     label: string;
     actionName: string;

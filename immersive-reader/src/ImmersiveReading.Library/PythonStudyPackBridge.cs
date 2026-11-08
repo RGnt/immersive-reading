@@ -145,6 +145,15 @@ public sealed class PythonStudyPackBridge : IStudyPackCatalog
             extraPaths.Add(_extractorRoot);
         }
 
+        var extDir = _extractorRoot ?? Path.GetDirectoryName(_outputRoot) ?? "";
+        var dataDir = Path.Combine(extDir, "data");
+        if (!Directory.Exists(dataDir))
+        {
+            var fallback = Path.Combine(Directory.GetCurrentDirectory(), "enrichement-extractor", "data");
+            if (Directory.Exists(fallback)) dataDir = fallback;
+        }
+        var dictDbCandidate = Path.Combine(dataRootDir, "dictionaries.db");
+
         var manifest = new PythonPipelineRunManifest
         {
             BookId = book.BookId,
@@ -153,6 +162,8 @@ public sealed class PythonStudyPackBridge : IStudyPackCatalog
             EpubFilePath = epubPath,
             OutputDirectory = outputDir,
             DeckCsvPath = options.DeckCsvPath,
+            DataDirectory = Directory.Exists(dataDir) ? dataDir : null,
+            DictionariesDbPath = File.Exists(dictDbCandidate) ? dictDbCandidate : null,
             IncludeA4Pdf = options.IncludeA4Pdf,
             ExtraPythonPaths = extraPaths,
             PluginConfigs = pluginConfigs,
@@ -169,7 +180,6 @@ public sealed class PythonStudyPackBridge : IStudyPackCatalog
             ct).ConfigureAwait(false);
 
         var logSb = new StringBuilder();
-        var extDir = _extractorRoot ?? Path.GetDirectoryName(_outputRoot) ?? "";
 
         var psi = new ProcessStartInfo
         {
@@ -182,6 +192,17 @@ public sealed class PythonStudyPackBridge : IStudyPackCatalog
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };
+
+        // Ensure shared plugin site-packages directory is on PYTHONPATH if packages were installed there
+        if (Directory.Exists(sharedSitePackagesDir))
+        {
+            string existingPythonPath = Environment.GetEnvironmentVariable("PYTHONPATH") ?? "";
+            string newPythonPath = string.IsNullOrEmpty(existingPythonPath)
+                ? sharedSitePackagesDir
+                : $"{sharedSitePackagesDir}{Path.PathSeparator}{existingPythonPath}";
+            psi.Environment["PYTHONPATH"] = newPythonPath;
+        }
+
         psi.ArgumentList.Add("-m");
         psi.ArgumentList.Add("immersive.cli");
         psi.ArgumentList.Add("run-manifest");
@@ -230,6 +251,79 @@ public sealed class PythonStudyPackBridge : IStudyPackCatalog
         }
     }
 
+    public async Task<StudyPackBuildResult> GenerateFromTransferAsync(
+        string bookId,
+        string transferFilePath,
+        IProgress<string>? onProgressLine = null,
+        CancellationToken ct = default)
+    {
+        string pythonExe = _configuredPythonExe ?? "";
+        if (string.IsNullOrWhiteSpace(pythonExe) || !File.Exists(pythonExe))
+        {
+            var extRoot = _extractorRoot ?? Path.GetDirectoryName(_outputRoot) ?? "";
+            var venvScript = Path.Combine(extRoot, ".venv", "Scripts", "python.exe");
+            if (!File.Exists(venvScript))
+                venvScript = Path.Combine(extRoot, ".venv", "bin", "python");
+            pythonExe = File.Exists(venvScript) ? venvScript : "python";
+        }
+
+        var extDir = _extractorRoot ?? Path.GetDirectoryName(_outputRoot) ?? "";
+        var logSb = new StringBuilder();
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = pythonExe,
+            WorkingDirectory = extDir,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+
+        psi.ArgumentList.Add("-m");
+        psi.ArgumentList.Add("immersive.cli");
+        psi.ArgumentList.Add("generate-transfer");
+        psi.ArgumentList.Add("--transfer");
+        psi.ArgumentList.Add(transferFilePath);
+        psi.ArgumentList.Add("--output");
+        psi.ArgumentList.Add(_outputRoot);
+
+        using var proc = new Process { StartInfo = psi };
+        proc.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is not null)
+            {
+                lock (logSb) logSb.AppendLine(e.Data);
+                onProgressLine?.Report(e.Data);
+            }
+        };
+        proc.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null)
+            {
+                lock (logSb) logSb.AppendLine(e.Data);
+                onProgressLine?.Report(e.Data);
+            }
+        };
+
+        try
+        {
+            proc.Start();
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+            await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+
+            var success = proc.ExitCode == 0;
+            return new StudyPackBuildResult(success, proc.ExitCode, logSb.ToString(), GetBookStudyPack(bookId));
+        }
+        catch (Exception ex)
+        {
+            return new StudyPackBuildResult(false, -1, $"Failed to run generate-transfer: {ex.Message}", null);
+        }
+    }
+
     private static async Task EnsurePipRequirementsAsync(
         string pythonExe,
         string sitePackagesDir,
@@ -237,6 +331,8 @@ public sealed class PythonStudyPackBridge : IStudyPackCatalog
         IProgress<string>? progress,
         CancellationToken ct)
     {
+        if (requirements.Count == 0) return;
+
         Directory.CreateDirectory(sitePackagesDir);
         var hashInput = string.Join('\n', requirements);
         var hashHex = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(hashInput)));
@@ -245,8 +341,50 @@ public sealed class PythonStudyPackBridge : IStudyPackCatalog
         if (File.Exists(stampFile) && await File.ReadAllTextAsync(stampFile, ct).ConfigureAwait(false) == hashHex)
             return;
 
-        progress?.Report($"Installing Python plugin dependencies: {string.Join(", ", requirements)}...");
+        // 1. Check if the requirements are already satisfied in the Python environment
+        var missingRequirements = await GetMissingRequirementsAsync(pythonExe, requirements, ct).ConfigureAwait(false);
+        if (missingRequirements.Count == 0)
+        {
+            await File.WriteAllTextAsync(stampFile, hashHex, ct).ConfigureAwait(false);
+            return;
+        }
 
+        progress?.Report($"Installing missing Python plugin dependencies: {string.Join(", ", missingRequirements)}...");
+
+        // 2. Try 'uv pip install' first if uv is available
+        string? uvExe = FindUvExecutable();
+        if (!string.IsNullOrEmpty(uvExe))
+        {
+            var uvPsi = new ProcessStartInfo
+            {
+                FileName = uvExe,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            uvPsi.ArgumentList.Add("pip");
+            uvPsi.ArgumentList.Add("install");
+            uvPsi.ArgumentList.Add("--python");
+            uvPsi.ArgumentList.Add(pythonExe);
+            uvPsi.ArgumentList.Add("--target");
+            uvPsi.ArgumentList.Add(sitePackagesDir);
+            foreach (var req in missingRequirements)
+                uvPsi.ArgumentList.Add(req);
+
+            using var uvProc = Process.Start(uvPsi);
+            if (uvProc is not null)
+            {
+                await uvProc.WaitForExitAsync(ct).ConfigureAwait(false);
+                if (uvProc.ExitCode == 0)
+                {
+                    await File.WriteAllTextAsync(stampFile, hashHex, ct).ConfigureAwait(false);
+                    return;
+                }
+            }
+        }
+
+        // 3. Fallback to 'python -m pip install'
         var psi = new ProcessStartInfo
         {
             FileName = pythonExe,
@@ -261,7 +399,7 @@ public sealed class PythonStudyPackBridge : IStudyPackCatalog
         psi.ArgumentList.Add("--target");
         psi.ArgumentList.Add(sitePackagesDir);
         psi.ArgumentList.Add("--upgrade");
-        foreach (var req in requirements)
+        foreach (var req in missingRequirements)
             psi.ArgumentList.Add(req);
 
         using var proc = Process.Start(psi);
@@ -271,9 +409,95 @@ public sealed class PythonStudyPackBridge : IStudyPackCatalog
         if (proc.ExitCode != 0)
         {
             var err = await proc.StandardError.ReadToEndAsync(ct).ConfigureAwait(false);
-            throw new InvalidOperationException($"Failed to install plugin Python requirements: {err}");
+            throw new InvalidOperationException($"Failed to install plugin Python requirements ({string.Join(", ", missingRequirements)}): {err.Trim()}");
         }
 
         await File.WriteAllTextAsync(stampFile, hashHex, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<List<string>> GetMissingRequirementsAsync(
+        string pythonExe,
+        IReadOnlyList<string> requirements,
+        CancellationToken ct)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = pythonExe,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add("""
+                import sys, re, importlib.util
+                missing = []
+                for req in sys.argv[1:]:
+                    name = re.split(r'[<>=!~]', req)[0].strip().replace('-', '_')
+                    if importlib.util.find_spec(name) is None:
+                        # Try without normalizing underscores
+                        orig = re.split(r'[<>=!~]', req)[0].strip()
+                        if importlib.util.find_spec(orig) is None:
+                            missing.append(req)
+                if missing:
+                    print(','.join(missing))
+                    sys.exit(1)
+                sys.exit(0)
+                """);
+            foreach (var req in requirements)
+                psi.ArgumentList.Add(req);
+
+            using var proc = Process.Start(psi);
+            if (proc is null) return requirements.ToList();
+            await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+
+            if (proc.ExitCode == 0)
+            {
+                return [];
+            }
+
+            var output = (await proc.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false)).Trim();
+            if (!string.IsNullOrEmpty(output))
+            {
+                return output.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            }
+
+            return requirements.ToList();
+        }
+        catch
+        {
+            // If check process fails to launch, assume they need installation
+            return requirements.ToList();
+        }
+    }
+
+    private static string? FindUvExecutable()
+    {
+        var pathEnv = Environment.GetEnvironmentVariable("PATH") ?? "";
+        foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var candidate = Path.Combine(dir, OperatingSystem.IsWindows() ? "uv.exe" : "uv");
+            if (File.Exists(candidate)) return candidate;
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var candidates = new[]
+            {
+                Path.Combine(userProfile, ".cargo", "bin", "uv.exe"),
+                Path.Combine(userProfile, "AppData", "Local", "Programs", "uv", "uv.exe"),
+                Path.Combine(userProfile, "AppData", "Roaming", "uv", "uv.exe"),
+                Path.Combine(userProfile, "AppData", "Local", "hermes", "bin", "uv.exe")
+            };
+            foreach (var c in candidates)
+            {
+                if (File.Exists(c)) return c;
+            }
+        }
+
+        return null;
     }
 }

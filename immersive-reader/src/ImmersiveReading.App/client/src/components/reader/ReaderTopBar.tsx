@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Bot,
   Sparkles,
+  BookOpen,
   AlignVerticalSpaceAround,
   AlignHorizontalSpaceAround,
   Search,
@@ -35,6 +36,8 @@ export const ReaderTopBar: React.FC = () => {
     toggleBookmarks,
     bookmarks,
     toggleShortcuts,
+    isChapterStudyOpen,
+    toggleChapterStudy,
   } = useReaderStore();
 
   const openCompanion = useCompanionStore((s) => s.openCompanion);
@@ -165,12 +168,25 @@ export const ReaderTopBar: React.FC = () => {
         </button>
 
         <button
+          onClick={toggleChapterStudy}
+          className={`flex items-center space-x-1 px-2 py-1 rounded border text-xs transition-colors ${
+            isChapterStudyOpen
+              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm'
+              : 'bg-[var(--bg-primary)] border-[var(--border-color)] text-emerald-400 hover:border-emerald-400'
+          }`}
+          title="Toggle Chapter Vocabulary, Kanji & Grammar Panel"
+        >
+          <BookOpen className="w-3.5 h-3.5" />
+          <span>Chapter Study</span>
+        </button>
+
+        <button
           onClick={() => openStudyPack(bookDetail.summary.bookId)}
           className="flex items-center space-x-1 px-2 py-1 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-emerald-400 hover:border-emerald-400"
           title="Study Pack Drawer"
         >
           <Sparkles className="w-3.5 h-3.5" />
-          <span>Study</span>
+          <span>Full Pack</span>
         </button>
 
         <button

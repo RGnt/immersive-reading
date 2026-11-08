@@ -47,7 +47,8 @@ public sealed record ReaderSettings(
     double LineHeight = 1.85,
     string FuriganaMode = "AllKanji",
     bool AutoSavePosition = true,
-    int ColumnMaxWidthPx = 900
+    int ColumnMaxWidthPx = 900,
+    int MaxCacheSizeMb = 500
 );
 
 public sealed record LlmSettings(
