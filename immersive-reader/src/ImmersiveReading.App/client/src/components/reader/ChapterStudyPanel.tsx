@@ -250,9 +250,16 @@ export const ChapterStudyPanel: React.FC = () => {
                     <span className="text-2xl font-bold text-teal-400 font-japanese leading-none">
                       {item.character}
                     </span>
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-300 border border-teal-500/30">
-                      ×{item.occurrences}
-                    </span>
+                    <div className="flex items-center space-x-1">
+                      {item.firstAppearance && (
+                        <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30" title="First appearance in this book">
+                          NEW
+                        </span>
+                      )}
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-300 border border-teal-500/30">
+                        ×{item.occurrences}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex items-center space-x-2 text-[10px] text-[var(--text-muted)] font-mono">

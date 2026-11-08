@@ -128,6 +128,9 @@ def build_transfer_payload(
             sample_s = k.get("sampleSentence") or w_info.get("sampleSentence") or context_w
 
             stroke_order = k.get("stroke_order") or stroke_orders.get(char)
+            is_first = char not in seen_kanji_chars
+            if is_first:
+                seen_kanji_chars.add(char)
 
             kanji_item = {
                 "character": char,
@@ -143,10 +146,10 @@ def build_transfer_payload(
                 "context_gloss": context_g,
                 "sampleSentence": sample_s,
                 "stroke_order": stroke_order,
+                "firstAppearance": is_first,
             }
             ch_kanji_list.append(kanji_item)
-            if char not in seen_kanji_chars:
-                seen_kanji_chars.add(char)
+            if is_first:
                 all_kanji.append(kanji_item)
 
         ch_grammar_list = []
@@ -292,14 +295,19 @@ def generate_from_transfer_data(
             except Exception:
                 pass
 
-        # 3. Kanji Master Sheet
+        # 3. Kanji Master Sheet (card_flowable: source-grounded to book text, first-appearance only)
         kanji_context = {}
         total_kanji_cards = 0
+        seen_transfer_kanji = set()
         for idx, ch in enumerate(chapters):
             cid = f"chapter-{ch.get('index', idx)+1:02d}"
             c_cards = []
             for k in ch.get("kanji", []):
                 char = k.get("character", "")
+                if not char or char in seen_transfer_kanji:
+                    continue
+                seen_transfer_kanji.add(char)
+
                 context_w = k.get("context_word") or char
                 context_r = k.get("context_reading") or ""
                 context_g = k.get("context_gloss") or ""

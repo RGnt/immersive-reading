@@ -559,13 +559,15 @@ class JapaneseKanjiEnrichmentStage(PipelineStage):
                 else:
                     item.level_tag = "Compound (Jukugo)"
 
-        # 2. Extract per-chapter kanji distribution with dictionary definitions
+        # 2. Extract per-chapter kanji distribution with dictionary definitions (Source-grounded to book text)
+        seen_kanji: set[str] = set()
         chapter_kanji_map: dict[int, list[dict[str, Any]]] = {}
         for ch_idx, chapter in enumerate(ctx.chapters):
             text = chapter.text or ""
             kanji_counts: dict[str, int] = {}
             kanji_words: dict[str, list[str]] = {}
 
+            # Strict source grounding: only kanji that actually appear in this chapter's text
             for token in ctx.tokens:
                 if token.chapter_index == ch_idx:
                     for char in token.surface:
@@ -582,6 +584,10 @@ class JapaneseKanjiEnrichmentStage(PipelineStage):
 
             kanji_list = []
             for char, count in sorted(kanji_counts.items(), key=lambda kv: kv[1], reverse=True):
+                is_first = char not in seen_kanji
+                if is_first:
+                    seen_kanji.add(char)
+
                 info = _resolve_kanji_details(char, db_conn)
                 kanji_list.append({
                     "character": char,
@@ -593,6 +599,7 @@ class JapaneseKanjiEnrichmentStage(PipelineStage):
                     "meanings": info.get("meanings", []),
                     "strokeCount": info.get("strokeCount"),
                     "grade": info.get("grade"),
+                    "firstAppearance": is_first,
                 })
             chapter_kanji_map[ch_idx] = kanji_list
 
@@ -760,21 +767,30 @@ class JapaneseKanjiSectionRenderer:
 
         story = []
         chapter_kanji = ctx.artifacts.get("chapter_kanji", {})
+        seen_renderer_kanji = set()
 
         for ch_idx, chapter in enumerate(ctx.chapters):
             kanji_list = chapter_kanji.get(ch_idx, [])
-            if not kanji_list:
+            # In the Kanji Master sheet: ONLY kanji from the book and chapter on their first appearance!
+            new_kanji = [
+                k for k in kanji_list
+                if k.get("character") and (k.get("firstAppearance", False) or k["character"] not in seen_renderer_kanji)
+            ]
+            for k in new_kanji:
+                seen_renderer_kanji.add(k["character"])
+
+            if not new_kanji:
                 continue
 
             if story:
                 story.append(PageBreak())
 
             ch_title = chapter.title or f"Chapter {ch_idx + 1}"
-            story.append(Paragraph(f"Chapter {ch_idx + 1} — {ch_title} ({len(kanji_list)} Unique Kanji)", style_sheet["Heading2"]))
+            story.append(Paragraph(f"Chapter {ch_idx + 1} — {ch_title} ({len(new_kanji)} New Kanji)", style_sheet["Heading2"]))
             story.append(Spacer(1, 8))
 
             table_data = [["Nr.", "Kanji", "Meanings", "On / Kun", "Count", "In Chapter Words"]]
-            for idx, k in enumerate(kanji_list):
+            for idx, k in enumerate(new_kanji):
                 words_str = "、 ".join(k.get("words", []))
                 meanings_str = ", ".join(k.get("meanings", [])) if k.get("meanings") else f"U+{k.get('codepointHex', '')}"
                 readings_str = "/".join((k.get("onyomi", [])[:2] + k.get("kunyomi", [])[:2]))

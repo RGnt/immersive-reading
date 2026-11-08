@@ -236,8 +236,10 @@ def compile_master_study_pdf(ctx: PipelineContext) -> Path | None:
                 ctx.artifacts["grammar_master_pdf"] = grammar_pdf
 
             # 3. Kanji Master Sheet (card_flowable with 35pt glyphs, ON/KUN, meanings, practice grid)
+            # Strict invariant: Only kanji from the book and chapter, first-appearance only (no duplicates)
             kanji_context = {}
             total_kanji_cards = 0
+            seen_master_kanji = set()
             for idx, ch in enumerate(ctx.chapters):
                 cid = f"chapter-{idx+1:02d}"
                 kanji_list = ch_kanji_map.get(idx, [])
@@ -245,6 +247,10 @@ def compile_master_study_pdf(ctx: PipelineContext) -> Path | None:
                 c_words = words_by_chapter.get(idx, {})
                 for k in kanji_list:
                     char = k.get("character", "")
+                    if not char or char in seen_master_kanji:
+                        continue
+                    seen_master_kanji.add(char)
+
                     context_words = k.get("words", [])
                     context_w = context_words[0] if context_words else char
                     w_info = c_words.get(context_w, {})

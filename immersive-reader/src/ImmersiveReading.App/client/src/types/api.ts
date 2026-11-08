@@ -390,6 +390,7 @@ export interface ChapterKanjiItem {
   kunyomi?: string[];
   strokeCount?: number;
   level?: string;
+  firstAppearance?: boolean;
 }
 
 export interface ChapterGrammarItem {
