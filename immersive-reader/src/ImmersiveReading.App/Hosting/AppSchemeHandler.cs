@@ -1,26 +1,33 @@
 using System.Text;
+using ImmersiveReading.App.Plugins;
 
 namespace ImmersiveReading.App.Hosting;
 
 /// <summary>
-/// Handles <c>ir-app://</c> custom scheme requests for static web UI assets, covers, and study-pack outputs.
+/// Handles <c>ir-app://</c> custom scheme requests for static web UI assets, covers, study-pack outputs, plugin bundles, and SDK bridges.
 /// </summary>
 public sealed class AppSchemeHandler
 {
     private readonly string _wwwrootDir;
     private readonly string _coversDir;
     private readonly string? _extractorOutputDir;
+    private readonly PluginHostManager? _pluginHostManager;
 
-    public AppSchemeHandler(string wwwrootDir, string coversDir, string? extractorOutputDir = null)
+    public AppSchemeHandler(
+        string wwwrootDir,
+        string coversDir,
+        string? extractorOutputDir = null,
+        PluginHostManager? pluginHostManager = null)
     {
         _wwwrootDir = Path.GetFullPath(wwwrootDir);
         _coversDir = Path.GetFullPath(coversDir);
         _extractorOutputDir = !string.IsNullOrEmpty(extractorOutputDir) ? Path.GetFullPath(extractorOutputDir) : null;
+        _pluginHostManager = pluginHostManager;
     }
 
     public Stream Handle(string url, out string contentType)
     {
-        return HandleRequest(url, _wwwrootDir, _coversDir, _extractorOutputDir, out contentType);
+        return HandleRequest(url, _wwwrootDir, _coversDir, _extractorOutputDir, _pluginHostManager, out contentType);
     }
 
     public static Stream HandleRequest(
@@ -28,13 +35,22 @@ public sealed class AppSchemeHandler
         string wwwrootDir,
         string coversDir,
         out string contentType)
-        => HandleRequest(url, wwwrootDir, coversDir, extractorOutputDir: null, out contentType);
+        => HandleRequest(url, wwwrootDir, coversDir, extractorOutputDir: null, pluginHostManager: null, out contentType);
 
     public static Stream HandleRequest(
         string url,
         string wwwrootDir,
         string coversDir,
         string? extractorOutputDir,
+        out string contentType)
+        => HandleRequest(url, wwwrootDir, coversDir, extractorOutputDir, pluginHostManager: null, out contentType);
+
+    public static Stream HandleRequest(
+        string url,
+        string wwwrootDir,
+        string coversDir,
+        string? extractorOutputDir,
+        PluginHostManager? pluginHostManager,
         out string contentType)
     {
         contentType = "text/plain; charset=utf-8";
@@ -47,6 +63,38 @@ public sealed class AppSchemeHandler
             // Prevent path traversal
             if (relativePath.Contains("..", StringComparison.Ordinal) || host.Contains("..", StringComparison.Ordinal))
             {
+                return new MemoryStream([]);
+            }
+
+            // 1. Virtual Plugin Asset Serving (ir-app://plugins/{pluginId}/{*assetPath})
+            if (host == "plugins" || relativePath.StartsWith("plugins/", StringComparison.OrdinalIgnoreCase))
+            {
+                var rel = host == "plugins" ? relativePath : relativePath["plugins/".Length..];
+                var segments = rel.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                if (segments.Length >= 2 && pluginHostManager != null)
+                {
+                    var pluginId = segments[0];
+                    var assetSubPath = string.Join('/', segments.Skip(1));
+                    var stream = pluginHostManager.OpenAssetStream(pluginId, assetSubPath);
+                    if (stream != null)
+                    {
+                        contentType = GetMimeType(assetSubPath);
+                        return stream;
+                    }
+                }
+                return new MemoryStream([]);
+            }
+
+            // 2. Virtual SDK Bridge Modules (ir-app://sdk/{moduleName})
+            if (host == "sdk" || relativePath.StartsWith("sdk/", StringComparison.OrdinalIgnoreCase))
+            {
+                var rel = host == "sdk" ? relativePath : relativePath["sdk/".Length..];
+                var shim = GetSdkShim(rel);
+                if (shim != null)
+                {
+                    contentType = "application/javascript; charset=utf-8";
+                    return new MemoryStream(Encoding.UTF8.GetBytes(shim));
+                }
                 return new MemoryStream([]);
             }
 
@@ -116,6 +164,57 @@ public sealed class AppSchemeHandler
     {
         string normalizedRoot = rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         return fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static string? GetSdkShim(string relativePath)
+    {
+        string name = Path.GetFileName(relativePath).ToLowerInvariant();
+        return name switch
+        {
+            "react.js" => """
+                const R = (typeof window !== 'undefined' ? window.__IR_RUNTIME__?.React : null) || {};
+                export default R;
+                export const {
+                    useState, useEffect, useLayoutEffect, useInsertionEffect, useMemo, useCallback, useRef,
+                    useContext, createContext, useReducer, useId, useTransition, useDeferredValue, useSyncExternalStore,
+                    startTransition, memo, forwardRef, lazy, Suspense, Fragment, Children, cloneElement, createElement,
+                    isValidElement, createRef
+                } = R;
+                """,
+            "react-dom.js" => """
+                const RD = (typeof window !== 'undefined' ? window.__IR_RUNTIME__?.ReactDOM : null) || {};
+                export default RD;
+                export const { createPortal, flushSync } = RD;
+                """,
+            "jsx-runtime.js" => """
+                const JX = (typeof window !== 'undefined' ? window.__IR_RUNTIME__?.JsxRuntime : null) || {};
+                export const jsx = JX.jsx;
+                export const jsxs = JX.jsxs;
+                export const Fragment = JX.Fragment;
+                export default JX;
+                """,
+            "lucide-react.js" => """
+                const L = (typeof window !== 'undefined' ? window.__IR_RUNTIME__?.LucideReact : null) || {};
+                export default L;
+                export const createLucideIcon = L.createLucideIcon;
+                export const {
+                    Bot, Sparkles, BrainCircuit, BookOpen, Settings, Layers, Languages, Check, X,
+                    ChevronRight, ChevronDown, ChevronLeft, ChevronUp, Play, Pause, RotateCcw,
+                    HelpCircle, Info, AlertCircle, MessageSquare, Send, Search, Folder, Tag,
+                    Filter, Sliders, Download, Upload, Trash, Edit, Plus, RefreshCw, FileText,
+                    Library, Volume2, VolumeX, Moon, Sun, Monitor, Maximize, Minimize
+                } = L;
+                """,
+            "host-sdk.js" => """
+                const SDK = (typeof window !== 'undefined' ? window.__IR_RUNTIME__?.HostSdk : null) || {};
+                export default SDK;
+                export const {
+                    usePluginRpc, usePluginConfig, useActiveBook, EnrichedText,
+                    PluginPageLayout, PluginDrawerShell, Button
+                } = SDK;
+                """,
+            _ => null
+        };
     }
 
     public static string GetMimeType(string filePath)

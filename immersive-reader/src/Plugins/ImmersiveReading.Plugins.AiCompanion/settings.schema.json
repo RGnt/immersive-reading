@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "properties": {
+    "endpointUrl": {
+      "type": "string",
+      "title": "OpenAI-Compatible LLM Endpoint URL",
+      "description": "Local llama-server, Ollama, LM Studio, or OpenAI API base URL.",
+      "default": "http://127.0.0.1:8080/v1",
+      "x-rpc-action": {
+        "label": "Test LLM Connection",
+        "actionName": "testEndpoint"
+      }
+    },
+    "apiKey": {
+      "type": "string",
+      "format": "password",
+      "title": "API Key (Optional for local servers)",
+      "default": ""
+    },
+    "modelId": {
+      "type": "string",
+      "title": "Model Identifier",
+      "default": "qwen3-8b"
+    },
+    "quizDisplayMode": {
+      "type": "string",
+      "title": "Reading Comprehension Quiz Display Location",
+      "description": "Choose whether quizzes open as a modal popup, side drawer panel, or full page view.",
+      "enum": ["modal", "drawer", "view"],
+      "enumLabels": ["Modal Pop-up", "Side Drawer Panel", "Dedicated Page View"],
+      "default": "modal"
+    },
+    "questionCount": {
+      "type": "integer",
+      "title": "Questions per Quiz",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 3
+    },
+    "maxContextChars": {
+      "type": "integer",
+      "title": "Zero-Spoiler Context Window (Characters)",
+      "minimum": 500,
+      "maximum": 12000,
+      "default": 3500
+    },
+    "enforceNPlusOne": {
+      "type": "boolean",
+      "title": "Enforce i+1 Vocabulary Budget in Persona Replies",
+      "default": true
+    }
+  }
+}

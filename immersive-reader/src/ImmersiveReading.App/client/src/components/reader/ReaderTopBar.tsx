@@ -2,6 +2,7 @@ import React from 'react';
 import { useReaderStore } from '../../stores/useReaderStore';
 import { useCompanionStore } from '../../stores/useCompanionStore';
 import { useStudyPackStore } from '../../stores/useStudyPackStore';
+import { ReaderToolbarPluginSlot } from '../plugins/PluginSlots';
 import {
   ArrowLeft,
   ChevronLeft,
@@ -179,6 +180,8 @@ export const ReaderTopBar: React.FC = () => {
           <Bot className="w-3.5 h-3.5" />
           <span>AI Companion</span>
         </button>
+
+        <ReaderToolbarPluginSlot />
 
         {/* SHORTCUTS HELP BUTTON */}
         <button

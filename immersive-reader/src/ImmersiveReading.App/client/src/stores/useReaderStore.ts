@@ -83,7 +83,7 @@ interface ReaderState {
   cycleFuriganaMode: () => void;
   toggleWritingMode: () => void;
   adjustFontSize: (deltaPx: number) => void;
-  handleTokenClick: (tokenId: number, rect: { left: number; top: number; width?: number; height?: number }) => Promise<void>;
+  handleTokenClick: (tokenId: number, rect: { left: number; top: number; width?: number; height?: number }, overrideChapterHref?: string, overrideBookId?: string) => Promise<void>;
   closePopover: () => void;
   setPopoverTab: (tab: 'words' | 'kanji') => void;
   mineFlashcard: (selectedTermIndex?: number, forceAnkiSync?: boolean) => Promise<any>;
@@ -240,9 +240,11 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     set((s) => ({ fontSizePx: Math.max(14, Math.min(48, s.fontSizePx + deltaPx)) }));
   },
 
-  handleTokenClick: async (tokenId, rect) => {
+  handleTokenClick: async (tokenId, rect, overrideChapterHref?: string, overrideBookId?: string) => {
     const { bookDetail, currentSpineHref } = get();
-    if (!bookDetail) return;
+    const effectiveBookId = overrideBookId || bookDetail?.summary.bookId;
+    const effectiveHref = overrideChapterHref || currentSpineHref;
+    if (!effectiveBookId || !effectiveHref) return;
 
     set({
       popover: {
@@ -257,8 +259,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
 
     try {
       const result = await rpc.call<LookupQueryResult>('lookup.query', {
-        bookId: bookDetail.summary.bookId,
-        chapterHref: currentSpineHref,
+        bookId: effectiveBookId,
+        chapterHref: effectiveHref,
         tokenId,
       });
 

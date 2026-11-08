@@ -37,7 +37,7 @@ public static class ReaderVerification
             .ConfigureAwait(false);
 
         // 2. Verify ir-app://assets/ir-reader-injected.css and ir-app://assets/ir-reader-bridge.js
-        var schemeHandler = new AppSchemeHandler(services.Paths.WwwrootDir, services.Paths.CoversDir, services.Paths.ExtractorOutputDir);
+        var schemeHandler = new AppSchemeHandler(services.Paths.WwwrootDir, services.Paths.CoversDir, services.Paths.ExtractorOutputDir, services.PluginHostManager);
         using var cssStream = schemeHandler.Handle("ir-app://assets/ir-reader-injected.css", out string cssMime);
         using var jsStream = schemeHandler.Handle("ir-app://assets/ir-reader-bridge.js", out string jsMime);
         if (cssStream.Length < 100 || !cssMime.StartsWith("text/css", StringComparison.OrdinalIgnoreCase))

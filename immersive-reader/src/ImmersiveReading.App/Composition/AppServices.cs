@@ -1,3 +1,4 @@
+using ImmersiveReading.App.Plugins;
 using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Config;
 using ImmersiveReading.Core.Extensions;
@@ -32,7 +33,10 @@ public sealed class AppServices : IDisposable
     public VocabularyBudgetService VocabBudget { get; }
     public ConfigurationManager Config { get; }
     public FeaturePluginHost PluginHost { get; }
+    public PluginHostManager PluginHostManager { get; }
     public IReadOnlyList<IPluginModule> Modules { get; }
+
+    private readonly ForwardingRpcEventSink _forwardingEventSink;
 
     private AppServices(
         IServiceProvider serviceProvider,
@@ -52,6 +56,8 @@ public sealed class AppServices : IDisposable
         VocabularyBudgetService vocabBudget,
         ConfigurationManager config,
         FeaturePluginHost pluginHost,
+        PluginHostManager pluginHostManager,
+        ForwardingRpcEventSink forwardingEventSink,
         IReadOnlyList<IPluginModule> modules)
     {
         ServiceProvider = serviceProvider;
@@ -71,6 +77,8 @@ public sealed class AppServices : IDisposable
         VocabBudget = vocabBudget;
         Config = config;
         PluginHost = pluginHost;
+        PluginHostManager = pluginHostManager;
+        _forwardingEventSink = forwardingEventSink;
         Modules = modules;
     }
 
@@ -193,6 +201,32 @@ public sealed class AppServices : IDisposable
             }
         }
 
+        var forwardingSink = new ForwardingRpcEventSink();
+        string dataRoot = Path.GetDirectoryName(paths.DbPath) ?? paths.AppDataDir;
+        var pluginHostManager = new ImmersiveReading.App.Plugins.PluginHostManager(
+            dataRootDir: dataRoot,
+            bookCatalog: provider.GetRequiredService<LibraryManager>(),
+            readerContext: readerContext,
+            vocabBudget: vocabBudget,
+            snippetEnricher: snippetEnricher,
+            languageRegistry: languages,
+            rpcEvents: forwardingSink);
+
+        var unifiedPlugins = new List<IImmersivePlugin>();
+        if (languages.Resolve(LanguageCodes.Japanese) is IImmersivePlugin jaImmersive)
+        {
+            unifiedPlugins.Add(jaImmersive);
+        }
+        foreach (var p in pluginHost.Plugins)
+        {
+            if (p is IImmersivePlugin ip && !unifiedPlugins.Contains(ip))
+            {
+                unifiedPlugins.Add(ip);
+            }
+        }
+
+        pluginHostManager.InitializePluginsAsync(unifiedPlugins).GetAwaiter().GetResult();
+
         return new AppServices(
             serviceProvider: provider,
             paths: paths,
@@ -211,6 +245,8 @@ public sealed class AppServices : IDisposable
             vocabBudget: vocabBudget,
             config: config,
             pluginHost: pluginHost,
+            pluginHostManager: pluginHostManager,
+            forwardingEventSink: forwardingSink,
             modules: moduleList);
     }
 
@@ -218,6 +254,7 @@ public sealed class AppServices : IDisposable
         Action<string>? sendMessageToUi = null,
         Action<bool, string>? onSelfTestCompleted = null)
     {
+        _forwardingEventSink.SetTarget(sendMessageToUi);
         var events = new Rpc.DelegateRpcEventSink(sendMessageToUi);
         return
         [
@@ -228,12 +265,13 @@ public sealed class AppServices : IDisposable
             new Rpc.Modules.DictionaryRpcModule(DictDb, events: events),
             new Rpc.Modules.StudyPackRpcModule(Library, StudyPackBridge, Flashcards, events, Config),
             new Rpc.Modules.ConfigRpcModule(Config, events),
-            new Rpc.Modules.ExtensionsRpcModule(PluginHost, onSelfTestCompleted)
+            new Rpc.Modules.ExtensionsRpcModule(PluginHostManager, PluginHost, onSelfTestCompleted)
         ];
     }
 
     public void Dispose()
     {
+        PluginHostManager.DisposeAsync().AsTask().GetAwaiter().GetResult();
         PluginHost.Dispose();
 
         foreach (var module in Modules)
@@ -249,5 +287,17 @@ public sealed class AppServices : IDisposable
         DictDb.Dispose();
         Languages.Dispose();
         Db.Dispose();
+    }
+}
+
+public sealed class ForwardingRpcEventSink : Rpc.IRpcEventSink
+{
+    private Action<string>? _current;
+    public void SetTarget(Action<string>? target) => _current = target;
+    public void Emit(string eventName, object data)
+    {
+        if (_current is null) return;
+        string json = System.Text.Json.JsonSerializer.Serialize(new { @event = eventName, data }, Rpc.RpcJson.Options);
+        _current(json);
     }
 }

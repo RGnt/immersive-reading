@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ImmersiveReading.App.Composition;
+using ImmersiveReading.App.Plugins;
 using ImmersiveReading.Core.Config;
 using ImmersiveReading.Core.Extensions;
 using ImmersiveReading.Dictionaries;
@@ -12,13 +13,16 @@ public sealed class LibraryRpcDispatcher : IDisposable
 {
     private readonly Dictionary<string, RpcHandler> _handlers = new(StringComparer.OrdinalIgnoreCase);
     private readonly FeaturePluginHost? _featurePluginHost;
+    private readonly PluginHostManager? _pluginHostManager;
     private readonly List<IDisposable> _disposables = [];
 
     public LibraryRpcDispatcher(
         IEnumerable<IRpcModule> modules,
-        FeaturePluginHost? featurePluginHost = null)
+        FeaturePluginHost? featurePluginHost = null,
+        PluginHostManager? pluginHostManager = null)
     {
         _featurePluginHost = featurePluginHost;
+        _pluginHostManager = pluginHostManager;
         foreach (var module in modules)
         {
             if (module is IDisposable d)
@@ -40,7 +44,7 @@ public sealed class LibraryRpcDispatcher : IDisposable
         AppServices services,
         Action<string>? sendMessageToUi = null,
         Action<bool, string>? onSelfTestCompleted = null)
-        : this(services.CreateRpcModules(sendMessageToUi, onSelfTestCompleted), services.PluginHost)
+        : this(services.CreateRpcModules(sendMessageToUi, onSelfTestCompleted), services.PluginHost, services.PluginHostManager)
     {
     }
 
@@ -100,7 +104,7 @@ public sealed class LibraryRpcDispatcher : IDisposable
         yield return new Modules.DictionaryRpcModule(dictDb);
         yield return new Modules.StudyPackRpcModule(library, studyPackBridge, flashcardService, events, configManager);
         yield return new Modules.ConfigRpcModule(configManager, events);
-        yield return new Modules.ExtensionsRpcModule(featurePluginHost, onSelfTestCompleted);
+        yield return new Modules.ExtensionsRpcModule(pluginHostManager: null, featurePluginHost: featurePluginHost, onSelfTestCompleted: onSelfTestCompleted);
     }
 
     public async Task<string> DispatchJsonAsync(string rawRequestJson, CancellationToken ct = default)
@@ -137,6 +141,11 @@ public sealed class LibraryRpcDispatcher : IDisposable
         if (_handlers.TryGetValue(method, out var handler))
         {
             return await handler(new RpcRequest(method, p), ct).ConfigureAwait(false);
+        }
+
+        if (_pluginHostManager is not null && _pluginHostManager.TryGetRpcHandler(method, out var unifiedHandler) && unifiedHandler is not null)
+        {
+            return await unifiedHandler(p, ct).ConfigureAwait(false);
         }
 
         if (_featurePluginHost is not null && _featurePluginHost.TryGetRpcHandler(method, out var extHandler) && extHandler is not null)

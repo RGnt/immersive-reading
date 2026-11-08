@@ -21,6 +21,7 @@ import {
   HardDrive,
 } from 'lucide-react';
 import type { AppConfig, DictionaryItem, DictionaryPreset, PythonDetectInfo } from '../../types/api';
+import { PluginSettingsTab } from './PluginSettingsTab';
 
 const THEME_PRESETS: Record<string, {
   bgPrimary: string;
@@ -75,8 +76,6 @@ export const SettingsModal: React.FC = () => {
   const { folders, tags } = useLibraryStore();
 
   const [localConfig, setLocalConfig] = useState<AppConfig | null>(null);
-  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [ankiTestStatus, setAnkiTestStatus] = useState<{ reachable: boolean; message: string } | null>(null);
   const [isTestingAnki, setIsTestingAnki] = useState(false);
@@ -178,62 +177,6 @@ export const SettingsModal: React.FC = () => {
           themePreset: 'custom',
         },
       });
-    }
-  };
-
-  const handleLlmPresetChange = (preset: string) => {
-    let endpoint = localConfig.llm.endpointUrl;
-    let model = localConfig.llm.modelId;
-    let timeout = localConfig.llm.timeoutSeconds;
-
-    if (preset === 'ollama') {
-      endpoint = 'http://localhost:11434/v1/chat/completions';
-      model = 'llama3.2';
-      timeout = 15;
-    } else if (preset === 'lmstudio') {
-      endpoint = 'http://localhost:1234/v1/chat/completions';
-      model = 'qwen2.5-7b';
-      timeout = 20;
-    } else if (preset === 'openai') {
-      endpoint = 'https://api.openai.com/v1/chat/completions';
-      model = 'gpt-4o-mini';
-      timeout = 30;
-    } else if (preset === 'offline') {
-      endpoint = '';
-      model = 'offline-heuristic';
-      timeout = 5;
-    }
-
-    setLocalConfig({
-      ...localConfig,
-      llm: {
-        ...localConfig.llm,
-        preset,
-        endpointUrl: endpoint,
-        modelId: model,
-        timeoutSeconds: timeout,
-      },
-    });
-  };
-
-  const handleTestLlm = async () => {
-    setIsTesting(true);
-    setTestResult(null);
-    try {
-      const res = await rpc.call<any>('config.testLlmEndpoint', {
-        endpointUrl: localConfig.llm.endpointUrl,
-        modelId: localConfig.llm.modelId,
-        apiKey: localConfig.llm.apiKey,
-        timeoutSeconds: localConfig.llm.timeoutSeconds,
-      });
-      setTestResult({
-        ok: res?.ok ?? true,
-        message: res?.message || (res?.ok ? 'Endpoint is reachable and responding!' : 'Failed to reach endpoint'),
-      });
-    } catch (err: any) {
-      setTestResult({ ok: false, message: err.message || 'Connection failed' });
-    } finally {
-      setIsTesting(false);
     }
   };
 
@@ -476,7 +419,7 @@ export const SettingsModal: React.FC = () => {
             }`}
           >
             <Bot className="w-3.5 h-3.5" />
-            <span>AI & LLM</span>
+            <span>Plugins</span>
           </button>
           <button
             onClick={() => setActiveTab('dictionaries')}
@@ -1135,158 +1078,10 @@ export const SettingsModal: React.FC = () => {
             </div>
           )}
 
-          {/* TAB: LLM */}
+          {/* TAB: PLUGINS */}
           {activeTab === 'llm' && (
-            <div className="space-y-4 max-w-2xl">
-              <div>
-                <label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase mb-1">
-                  Quick Provider Preset
-                </label>
-                <select
-                  value={localConfig.llm.preset}
-                  onChange={(e) => handleLlmPresetChange(e.target.value)}
-                  className="w-full px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
-                >
-                  <option value="ollama">Ollama Local (http://localhost:11434)</option>
-                  <option value="lmstudio">LM Studio / llama.cpp (http://localhost:1234)</option>
-                  <option value="openai">OpenAI / Compatible API (api.openai.com)</option>
-                  <option value="offline">Offline Deterministic Heuristic</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase mb-1">
-                  Endpoint URL (chat/completions)
-                </label>
-                <input
-                  type="url"
-                  value={localConfig.llm.endpointUrl}
-                  onChange={(e) =>
-                    setLocalConfig({
-                      ...localConfig,
-                      llm: { ...localConfig.llm, endpointUrl: e.target.value },
-                    })
-                  }
-                  placeholder="http://localhost:11434/v1/chat/completions"
-                  className="w-full px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase mb-1">
-                    Model Name / ID
-                  </label>
-                  <input
-                    type="text"
-                    value={localConfig.llm.modelId}
-                    onChange={(e) =>
-                      setLocalConfig({
-                        ...localConfig,
-                        llm: { ...localConfig.llm, modelId: e.target.value },
-                      })
-                    }
-                    placeholder="llama3.2, qwen2.5:7b, gpt-4o-mini"
-                    className="w-full px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase mb-1">
-                    API Key (optional for local)
-                  </label>
-                  <input
-                    type="password"
-                    value={localConfig.llm.apiKey}
-                    onChange={(e) =>
-                      setLocalConfig({
-                        ...localConfig,
-                        llm: { ...localConfig.llm, apiKey: e.target.value },
-                      })
-                    }
-                    placeholder="sk-..."
-                    className="w-full px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase mb-1">
-                    Timeout (seconds)
-                  </label>
-                  <input
-                    type="number"
-                    min="3"
-                    max="120"
-                    value={localConfig.llm.timeoutSeconds}
-                    onChange={(e) =>
-                      setLocalConfig({
-                        ...localConfig,
-                        llm: { ...localConfig.llm, timeoutSeconds: parseInt(e.target.value, 10) || 15 },
-                      })
-                    }
-                    className="w-full px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] uppercase mb-1">
-                    Temperature (0.0 - 1.5)
-                  </label>
-                  <input
-                    type="number"
-                    min="0.0"
-                    max="1.5"
-                    step="0.1"
-                    value={localConfig.llm.temperature}
-                    onChange={(e) =>
-                      setLocalConfig({
-                        ...localConfig,
-                        llm: { ...localConfig.llm, temperature: parseFloat(e.target.value) || 0.7 },
-                      })
-                    }
-                    className="w-full px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3 pt-1">
-                <button
-                  type="button"
-                  onClick={handleTestLlm}
-                  disabled={isTesting}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] hover:border-[var(--accent-color)] text-xs font-medium"
-                >
-                  {isTesting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5 text-amber-400" />}
-                  <span>{isTesting ? 'Testing...' : '⚡ Test Connection & Fetch Models'}</span>
-                </button>
-                {testResult && (
-                  <span
-                    className={`flex items-center space-x-1 text-xs ${
-                      testResult.ok ? 'text-emerald-400' : 'text-red-400'
-                    }`}
-                  >
-                    {testResult.ok ? <Check className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
-                    <span>{testResult.message}</span>
-                  </span>
-                )}
-              </div>
-
-              <div className="pt-2 border-t border-[var(--border-color)]">
-                <label className="flex items-center space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={localConfig.llm.enableOfflineHeuristicFallback}
-                    onChange={(e) =>
-                      setLocalConfig({
-                        ...localConfig,
-                        llm: { ...localConfig.llm, enableOfflineHeuristicFallback: e.target.checked },
-                      })
-                    }
-                    className="rounded border-[var(--border-color)]"
-                  />
-                  <span>Enable offline deterministic fallback if remote LLM is unreachable</span>
-                </label>
-              </div>
+            <div className="py-1">
+              <PluginSettingsTab />
             </div>
           )}
 

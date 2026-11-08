@@ -21,7 +21,7 @@ public sealed class MainWindowHost(AppServices services, AppPaths paths)
                 window?.Close();
             });
 
-        var appSchemeHandler = new AppSchemeHandler(paths.WwwrootDir, paths.CoversDir, paths.ExtractorOutputDir);
+        var appSchemeHandler = new AppSchemeHandler(paths.WwwrootDir, paths.CoversDir, paths.ExtractorOutputDir, services.PluginHostManager);
 
         window = new PhotinoWindow()
             .SetTitle("Immersive Reading — EPUB Library & Reader")

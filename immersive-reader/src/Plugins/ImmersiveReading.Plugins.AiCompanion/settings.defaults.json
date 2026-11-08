@@ -1,0 +1,9 @@
+{
+  "endpointUrl": "http://127.0.0.1:8080/v1",
+  "apiKey": "",
+  "modelId": "qwen3-8b",
+  "quizDisplayMode": "modal",
+  "questionCount": 3,
+  "maxContextChars": 3500,
+  "enforceNPlusOne": true
+}
