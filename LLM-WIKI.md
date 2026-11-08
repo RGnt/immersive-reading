@@ -21,7 +21,7 @@
 | **[wiki/playbooks-and-invariants.md](wiki/playbooks-and-invariants.md)** | Non-negotiable system invariants, step-by-step recipes for common tasks, and verification commands |
 | **[wiki/testing-and-fixtures.md](wiki/testing-and-fixtures.md)** | Synthetic `fixture()` helper, subprocess `NoPrint`/socket guards, and test matrix across all 19 test files |
 | **[wiki/roadmap-and-open-work.md](wiki/roadmap-and-open-work.md)** | Refactoring status matrix, DOM source mapping & lookup design notes, and known real-book edge cases |
-| **[specs/00-master-architecture-and-roadmap.md](specs/00-master-architecture-and-roadmap.md)** | .NET 10 + Photino.NET + AngleSharp + MeCab.DotNet EPUB Library, Reader, AI Companion & Global Settings specifications (`00`–`07`) |
+| **[specs/00-master-architecture-and-roadmap.md](specs/00-master-architecture-and-roadmap.md)** | .NET 10 + Photino.NET + AngleSharp + MeCab.DotNet EPUB Library, Reader, AI Companion, Global Settings & Pluggable Pipeline specifications (`00`–`08`) |
 
 ---
 
@@ -109,7 +109,9 @@ flowchart TD
 
 ### Entry Points & Orchestration
 - [`immersive/__init__.py`](enrichement-extractor/immersive/__init__.py) — Package version (`__version__ = "0.3.0"`).
-- [`immersive/cli.py`](enrichement-extractor/immersive/cli.py) — Console script `immersive` (`build`, `enrich`, `decks` subcommands). Emits per-book JSON summaries to `stdout` and errors/warnings to `stderr`.
+- [`immersive/cli.py`](enrichement-extractor/immersive/cli.py) — Console script `immersive` (`build`, `enrich`, `decks`, `run-manifest` subcommands). Emits per-book JSON summaries to `stdout` and errors/warnings to `stderr`.
+- [`immersive/pipeline_runner.py`](enrichement-extractor/immersive/pipeline_runner.py) — Pluggable stage runner (`run_pipeline_from_manifest`, `load_stage_instance`, `extract_epub_chapters`).
+- [`immersive/sdk/`](enrichement-extractor/immersive/sdk) — Language-agnostic pipeline SDK: [`stage.py`](enrichement-extractor/immersive/sdk/stage.py) (`PipelineContext`, `PipelineStage`, `ExtractedToken`, `StudyItem`, `PdfSectionRenderer`), [`pdf.py`](enrichement-extractor/immersive/sdk/pdf.py) (`shape_bidirectional_text`, `compile_master_study_pdf`).
 - [`immersive/pipeline.py`](enrichement-extractor/immersive/pipeline.py) — Console script `immersive-pipeline` and legacy [`run_stages()`](enrichement-extractor/immersive/pipeline.py#L24-L42) facade over `run_job`. Supports `--reader-only`, `--decks-only`, `--doctor`, `--skip-pdf`, `--skip-html`, `--skip-cards`, `--skip-package`, `--update-decks`.
 - [`immersive/orchestration.py`](enrichement-extractor/immersive/orchestration.py) — Shared task executor: [`BuildOptions`](enrichement-extractor/immersive/orchestration.py#L16-L33), [`BookResult`](enrichement-extractor/immersive/orchestration.py#L36-L51), [`JobResult`](enrichement-extractor/immersive/orchestration.py#L55-L63), [`ExportFailure`](enrichement-extractor/immersive/orchestration.py#L65-L69), and [`run_job()`](enrichement-extractor/immersive/orchestration.py#L93-L108). Coordinates enrichment, input stamp verification, deck updates, staging, study exports, and atomic publication.
 - [`immersive/jobs.py`](enrichement-extractor/immersive/jobs.py) — Cooperative cancellation: [`CancellationToken`](enrichement-extractor/immersive/jobs.py#L9-L17), [`CancelledError`](enrichement-extractor/immersive/jobs.py#L5-L6), [`check_cancelled()`](enrichement-extractor/immersive/jobs.py#L20-L22).

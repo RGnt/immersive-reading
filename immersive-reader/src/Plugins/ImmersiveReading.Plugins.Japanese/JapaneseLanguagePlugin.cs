@@ -38,6 +38,38 @@ public sealed class JapaneseLanguagePlugin : ILanguagePlugin, IImmersivePlugin
     public ValueTask OnEnableAsync(IPluginHostContext context, CancellationToken ct = default)
     {
         context.RegisterLanguageAnalyzer(this);
+
+        // 1. Morphological Tokenization Stage (Order 110)
+        context.RegisterPythonStage(new PythonStageDescriptor
+        {
+            StageId = "ja.sudachi_tokenize",
+            Order = 110,
+            TargetLanguages = ["ja"],
+            ScriptRelativePath = "python/ja_stages.py",
+            EntryClassName = "JapaneseSudachiTokenizerStage",
+            PipRequirements = ["sudachipy>=0.6.8", "sudachidict_core>=20240109"]
+        });
+
+        // 2. Kanji & JLPT Enrichment Stage (Order 210)
+        context.RegisterPythonStage(new PythonStageDescriptor
+        {
+            StageId = "ja.kanji_enrichment",
+            Order = 210,
+            TargetLanguages = ["ja"],
+            ScriptRelativePath = "python/ja_stages.py",
+            EntryClassName = "JapaneseKanjiEnrichmentStage"
+        });
+
+        // 3. Kanji & Furigana PDF Section Builder (Order 410)
+        context.RegisterPythonStage(new PythonStageDescriptor
+        {
+            StageId = "ja.pdf_sections",
+            Order = 410,
+            TargetLanguages = ["ja"],
+            ScriptRelativePath = "python/ja_stages.py",
+            EntryClassName = "JapanesePdfSectionsStage"
+        });
+
         return ValueTask.CompletedTask;
     }
 

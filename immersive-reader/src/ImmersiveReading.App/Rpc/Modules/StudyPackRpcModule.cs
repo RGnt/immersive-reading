@@ -90,8 +90,18 @@ public sealed class StudyPackRpcModule(
             events?.Emit("studypack.buildProgress", new { bookId, line });
         });
 
+        string epubPath = Path.Combine(detail.Summary.FolderPath, detail.Summary.EpubFileName);
+        if (!File.Exists(epubPath))
+        {
+            var matched = Directory.Exists(detail.Summary.FolderPath)
+                ? Directory.GetFiles(detail.Summary.FolderPath, "*.epub").FirstOrDefault()
+                : null;
+            if (matched is not null) epubPath = matched;
+        }
+
+        var options = new StudyPackOptions(DeckCsvPath: null, IncludeA4Pdf: !readerOnly, ReaderOnly: readerOnly);
         return await studyPackBridge
-            .BuildStudyPackAsync(bookId, detail.Summary.FolderPath, readerOnly, progress, ct)
+            .BuildStudyPackAsync(detail.Summary, epubPath, options, progress, ct)
             .ConfigureAwait(false);
     }
 

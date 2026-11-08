@@ -13,7 +13,8 @@ def main(argv=None):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="Enrich books, build study documents or explicitly update decks.")
-    parser.add_argument("command", choices=["build", "enrich", "decks"])
+    parser.add_argument("command", choices=["build", "enrich", "decks", "run-manifest"])
+    parser.add_argument("--manifest", type=Path, help="Path to pipeline-manifest.json for run-manifest")
     parser.add_argument("--books", type=Path, default=Path("books"))
     parser.add_argument("--book", type=Path)
     parser.add_argument("--output", type=Path, default=Path("output"))
@@ -25,6 +26,12 @@ def main(argv=None):
     parser.add_argument("--package", action="store_true", help="Also create study-pack.zip")
     parser.add_argument("--update-decks", action="store_true")
     args = parser.parse_args(argv)
+    if args.command == "run-manifest":
+        if not args.manifest:
+            parser.error("run-manifest requires --manifest <path>")
+        from .pipeline_runner import run_pipeline_from_manifest
+        run_pipeline_from_manifest(args.manifest)
+        return 0
     if args.command == "enrich" and args.update_decks:
         parser.error("enrich leaves inputs unchanged; use decks to update source CSVs")
     if args.command != "build" and (args.cards or args.package):

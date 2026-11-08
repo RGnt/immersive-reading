@@ -29,6 +29,7 @@ public interface IPluginHostContext
     IDisposable RegisterRpcAction(string actionName, PluginRpcHandler handler);
     IDisposable RegisterLanguageAnalyzer(ILanguagePlugin languagePlugin, bool isFallback = false);
     IDisposable RegisterDomEnrichmentStage(IDomEnrichmentStage stage);
+    IDisposable RegisterPythonStage(PythonStageDescriptor stage);
 
     Stream? OpenAssetStream(string relativeAssetPath);
 }

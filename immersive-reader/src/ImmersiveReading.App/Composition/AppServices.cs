@@ -227,6 +227,9 @@ public sealed class AppServices : IDisposable
 
         pluginHostManager.InitializePluginsAsync(unifiedPlugins).GetAwaiter().GetResult();
 
+        var studyPackBridge = provider.GetRequiredService<PythonStudyPackBridge>();
+        studyPackBridge.StageRegistry = pluginHostManager;
+
         return new AppServices(
             serviceProvider: provider,
             paths: paths,

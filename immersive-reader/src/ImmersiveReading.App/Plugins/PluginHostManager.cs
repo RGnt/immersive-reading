@@ -13,7 +13,7 @@ using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Extensions;
 using ImmersiveReading.Core.Plugins;
 
-public sealed class PluginHostManager : IAsyncDisposable
+public sealed class PluginHostManager : IPythonStageRegistryProvider, IAsyncDisposable
 {
     private readonly string _dataRootDir;
     private readonly IBookCatalog _bookCatalog;
@@ -27,6 +27,8 @@ public sealed class PluginHostManager : IAsyncDisposable
     private readonly Dictionary<string, PluginEntry> _plugins = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, PluginRpcHandler> _rpcHandlers = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<IDomEnrichmentStage> _domStages = [];
+    private readonly List<(PluginEntry Entry, PythonStageDescriptor Stage)> _pythonStages = [];
+    private readonly Lock _pythonStagesLock = new();
     private readonly string _enabledStateFilePath;
 
     public PluginHostManager(
@@ -262,6 +264,57 @@ public sealed class PluginHostManager : IAsyncDisposable
         File.WriteAllText(_enabledStateFilePath, json);
     }
 
+    public async ValueTask<IReadOnlyList<ActivePythonStageRegistration>> ResolveStagesForLanguageAsync(
+        string languageCode,
+        CancellationToken ct = default)
+    {
+        List<(PluginEntry Entry, PythonStageDescriptor Stage)> matching;
+        lock (_pythonStagesLock)
+        {
+            matching = _pythonStages
+                .Where(x => x.Stage.TargetLanguages.Contains("*", StringComparer.OrdinalIgnoreCase)
+                         || x.Stage.TargetLanguages.Contains(languageCode, StringComparer.OrdinalIgnoreCase))
+                .OrderBy(x => x.Stage.Order)
+                .ToList();
+        }
+
+        var resolved = new List<ActivePythonStageRegistration>(matching.Count);
+
+        foreach (var (entry, stage) in matching)
+        {
+            await MaterializePluginAssetToDiskAsync(entry, stage.ScriptRelativePath, ct).ConfigureAwait(false);
+            foreach (var assetRelPath in stage.BundledAssetRelativePaths)
+            {
+                await MaterializePluginAssetToDiskAsync(entry, assetRelPath, ct).ConfigureAwait(false);
+            }
+
+            resolved.Add(new ActivePythonStageRegistration(
+                entry.Instance.Manifest.Id,
+                entry.PluginDataDir,
+                entry.Config.GetRawJson(),
+                stage));
+        }
+
+        return resolved;
+    }
+
+    private async ValueTask MaterializePluginAssetToDiskAsync(
+        PluginEntry entry,
+        string relativePath,
+        CancellationToken ct)
+    {
+        var sanitized = relativePath.TrimStart('/', '\\').Replace('\\', '/');
+        var targetFilePath = Path.Combine(entry.PluginDataDir, sanitized.Replace('/', Path.DirectorySeparatorChar));
+
+        await using var stream = OpenAssetStream(entry.Instance.Manifest.Id, sanitized);
+        if (stream is null)
+            return;
+
+        Directory.CreateDirectory(Path.GetDirectoryName(targetFilePath)!);
+        await using var fs = File.Create(targetFilePath);
+        await stream.CopyToAsync(fs, ct).ConfigureAwait(false);
+    }
+
     public async ValueTask DisposeAsync()
     {
         foreach (var entry in _plugins.Values)
@@ -275,6 +328,10 @@ public sealed class PluginHostManager : IAsyncDisposable
         _plugins.Clear();
         _rpcHandlers.Clear();
         _domStages.Clear();
+        lock (_pythonStagesLock)
+        {
+            _pythonStages.Clear();
+        }
     }
 
     public sealed class ScopedPluginHostContext : IPluginHostContext
@@ -324,6 +381,23 @@ public sealed class PluginHostManager : IAsyncDisposable
             return TrackDisposable(() =>
             {
                 lock (_host._domStages) { _host._domStages.Remove(stage); }
+            });
+        }
+
+        public IDisposable RegisterPythonStage(PythonStageDescriptor stage)
+        {
+            var item = (_entry, stage);
+            lock (_host._pythonStagesLock)
+            {
+                _host._pythonStages.Add(item);
+                _host._pythonStages.Sort((a, b) => a.Stage.Order.CompareTo(b.Stage.Order));
+            }
+            return TrackDisposable(() =>
+            {
+                lock (_host._pythonStagesLock)
+                {
+                    _host._pythonStages.Remove(item);
+                }
             });
         }
 

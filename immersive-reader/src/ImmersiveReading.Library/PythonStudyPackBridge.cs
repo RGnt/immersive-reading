@@ -1,25 +1,46 @@
+using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Library;
+using ImmersiveReading.Core.Plugins;
 using ImmersiveReading.Library.StudyPack;
 
 namespace ImmersiveReading.Library;
 
 /// <summary>
 /// Facade over the study-pack components: publication reading, snapshot leases,
-/// overview building and the Python build runner.
+/// overview building, pluggable stage DAG execution, and the Python build runner.
 /// </summary>
 public sealed class PythonStudyPackBridge : IStudyPackCatalog
 {
     private readonly string _outputRoot;
+    private readonly string? _extractorRoot;
+    private readonly string? _configuredPythonExe;
     private readonly IStudyPackBuilder _builder;
+    private IPythonStageRegistryProvider? _stageRegistry;
 
     public string OutputRoot => _outputRoot;
 
-    public PythonStudyPackBridge(string outputRoot, string? extractorRoot = null, IStudyPackBuilder? builder = null, string? configuredPythonExe = null)
+    public IPythonStageRegistryProvider? StageRegistry
+    {
+        get => _stageRegistry;
+        set => _stageRegistry = value;
+    }
+
+    public PythonStudyPackBridge(
+        string outputRoot,
+        string? extractorRoot = null,
+        IStudyPackBuilder? builder = null,
+        string? configuredPythonExe = null,
+        IPythonStageRegistryProvider? stageRegistry = null)
     {
         _outputRoot = Path.GetFullPath(outputRoot);
+        _extractorRoot = extractorRoot is not null ? Path.GetFullPath(extractorRoot) : null;
+        _configuredPythonExe = configuredPythonExe;
         _builder = builder ?? new PythonBuildRunner(_outputRoot, extractorRoot, configuredPythonExe);
+        _stageRegistry = stageRegistry;
     }
 
     public (string? Generation, string? ManifestPath, JsonDocument? ManifestDoc) TryReadActivePublication()
@@ -38,4 +59,221 @@ public sealed class PythonStudyPackBridge : IStudyPackCatalog
         IProgress<string>? onProgressLine = null,
         CancellationToken ct = default)
         => _builder.BuildStudyPackAsync(bookId, bookFolderPath, readerOnly, onProgressLine, ct);
+
+    public async Task<StudyPackBuildResult> BuildStudyPackAsync(
+        BookSummary book,
+        string epubPath,
+        StudyPackOptions? options = null,
+        IProgress<string>? onProgressLine = null,
+        CancellationToken ct = default)
+    {
+        options ??= new StudyPackOptions();
+        var lang = string.IsNullOrWhiteSpace(book.Language) ? "ja" : book.Language;
+
+        if (_stageRegistry is not null)
+        {
+            var registrations = await _stageRegistry.ResolveStagesForLanguageAsync(lang, ct).ConfigureAwait(false);
+            if (registrations.Count > 0)
+            {
+                return await BuildWithManifestStagesAsync(book, epubPath, registrations, options, onProgressLine, ct).ConfigureAwait(false);
+            }
+        }
+
+        // Fallback to legacy builder if no stages registered for this language
+        return await _builder.BuildStudyPackAsync(book.BookId, book.FolderPath, options.ReaderOnly, onProgressLine, ct).ConfigureAwait(false);
+    }
+
+    private async Task<StudyPackBuildResult> BuildWithManifestStagesAsync(
+        BookSummary book,
+        string epubPath,
+        IReadOnlyList<ActivePythonStageRegistration> registrations,
+        StudyPackOptions options,
+        IProgress<string>? onProgressLine,
+        CancellationToken ct)
+    {
+        string pythonExe = _configuredPythonExe ?? "";
+        if (string.IsNullOrWhiteSpace(pythonExe) || !File.Exists(pythonExe))
+        {
+            var extRoot = _extractorRoot ?? Path.GetDirectoryName(_outputRoot) ?? "";
+            var venvScript = Path.Combine(extRoot, ".venv", "Scripts", "python.exe");
+            if (!File.Exists(venvScript))
+                venvScript = Path.Combine(extRoot, ".venv", "bin", "python");
+            pythonExe = File.Exists(venvScript) ? venvScript : "python";
+        }
+
+        var dataRootDir = Path.GetDirectoryName(_outputRoot) ?? _outputRoot;
+        var sharedSitePackagesDir = Path.Combine(dataRootDir, "python-packages");
+
+        var allPipReqs = registrations
+            .SelectMany(r => r.Descriptor.PipRequirements)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(r => r, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (allPipReqs.Count > 0)
+        {
+            await EnsurePipRequirementsAsync(pythonExe, sharedSitePackagesDir, allPipReqs, onProgressLine, ct).ConfigureAwait(false);
+        }
+
+        var outputDir = Path.Combine(_outputRoot, "data", book.BookId);
+        Directory.CreateDirectory(outputDir);
+
+        var pluginConfigs = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        var manifestStages = new List<ResolvedPythonStageManifestEntry>(registrations.Count);
+
+        foreach (var reg in registrations)
+        {
+            pluginConfigs[reg.PluginId] = reg.PluginConfig;
+            var scriptDiskPath = Path.Combine(
+                reg.PluginDataDirectory,
+                reg.Descriptor.ScriptRelativePath.TrimStart('/', '\\').Replace('/', Path.DirectorySeparatorChar));
+
+            manifestStages.Add(new ResolvedPythonStageManifestEntry
+            {
+                PluginId = reg.PluginId,
+                StageId = reg.Descriptor.StageId,
+                Order = reg.Descriptor.Order,
+                ScriptFilePath = scriptDiskPath,
+                EntryClassName = reg.Descriptor.EntryClassName,
+                PluginDataDir = reg.PluginDataDirectory
+            });
+        }
+
+        var extraPaths = new List<string> { sharedSitePackagesDir };
+        if (!string.IsNullOrWhiteSpace(_extractorRoot))
+        {
+            extraPaths.Add(_extractorRoot);
+        }
+
+        var manifest = new PythonPipelineRunManifest
+        {
+            BookId = book.BookId,
+            Title = book.Title,
+            Language = string.IsNullOrWhiteSpace(book.Language) ? "ja" : book.Language,
+            EpubFilePath = epubPath,
+            OutputDirectory = outputDir,
+            DeckCsvPath = options.DeckCsvPath,
+            IncludeA4Pdf = options.IncludeA4Pdf,
+            ExtraPythonPaths = extraPaths,
+            PluginConfigs = pluginConfigs,
+            Stages = manifestStages
+        };
+
+        var tempDir = Path.Combine(dataRootDir, "temp");
+        Directory.CreateDirectory(tempDir);
+        var manifestPath = Path.Combine(tempDir, $"pipeline-{book.BookId}-{Guid.NewGuid():N}.json");
+
+        await File.WriteAllTextAsync(
+            manifestPath,
+            JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }),
+            ct).ConfigureAwait(false);
+
+        var logSb = new StringBuilder();
+        var extDir = _extractorRoot ?? Path.GetDirectoryName(_outputRoot) ?? "";
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = pythonExe,
+            WorkingDirectory = extDir,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8
+        };
+        psi.ArgumentList.Add("-m");
+        psi.ArgumentList.Add("immersive.cli");
+        psi.ArgumentList.Add("run-manifest");
+        psi.ArgumentList.Add("--manifest");
+        psi.ArgumentList.Add(manifestPath);
+
+        using var proc = new Process { StartInfo = psi };
+
+        proc.OutputDataReceived += (_, e) =>
+        {
+            if (e.Data is not null)
+            {
+                lock (logSb) logSb.AppendLine(e.Data);
+                onProgressLine?.Report(e.Data);
+            }
+        };
+        proc.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null)
+            {
+                lock (logSb) logSb.AppendLine(e.Data);
+                onProgressLine?.Report(e.Data);
+            }
+        };
+
+        try
+        {
+            proc.Start();
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+            await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+
+            var success = proc.ExitCode == 0;
+            return new StudyPackBuildResult(success, proc.ExitCode, logSb.ToString(), GetBookStudyPack(book.BookId));
+        }
+        catch (Exception ex)
+        {
+            return new StudyPackBuildResult(false, -1, $"Failed to launch Python pipeline: {ex.Message}", null);
+        }
+        finally
+        {
+            if (File.Exists(manifestPath))
+            {
+                try { File.Delete(manifestPath); } catch { /* Ignore cleanup error */ }
+            }
+        }
+    }
+
+    private static async Task EnsurePipRequirementsAsync(
+        string pythonExe,
+        string sitePackagesDir,
+        IReadOnlyList<string> requirements,
+        IProgress<string>? progress,
+        CancellationToken ct)
+    {
+        Directory.CreateDirectory(sitePackagesDir);
+        var hashInput = string.Join('\n', requirements);
+        var hashHex = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(hashInput)));
+        var stampFile = Path.Combine(sitePackagesDir, ".requirements.sha256");
+
+        if (File.Exists(stampFile) && await File.ReadAllTextAsync(stampFile, ct).ConfigureAwait(false) == hashHex)
+            return;
+
+        progress?.Report($"Installing Python plugin dependencies: {string.Join(", ", requirements)}...");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = pythonExe,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+        psi.ArgumentList.Add("-m");
+        psi.ArgumentList.Add("pip");
+        psi.ArgumentList.Add("install");
+        psi.ArgumentList.Add("--target");
+        psi.ArgumentList.Add(sitePackagesDir);
+        psi.ArgumentList.Add("--upgrade");
+        foreach (var req in requirements)
+            psi.ArgumentList.Add(req);
+
+        using var proc = Process.Start(psi);
+        if (proc is null) return;
+        await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+
+        if (proc.ExitCode != 0)
+        {
+            var err = await proc.StandardError.ReadToEndAsync(ct).ConfigureAwait(false);
+            throw new InvalidOperationException($"Failed to install plugin Python requirements: {err}");
+        }
+
+        await File.WriteAllTextAsync(stampFile, hashHex, ct).ConfigureAwait(false);
+    }
 }

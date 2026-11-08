@@ -8,6 +8,10 @@
     <PackageReference Include="MeCab.DotNet" Version="1.2.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="python\**\*" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

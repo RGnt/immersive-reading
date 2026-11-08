@@ -41,6 +41,7 @@ Welcome to the **Immersive Reading LLM Wiki**. This knowledge base documents [`e
     - [05 — Unified Extensibility & AI Companion Spec](../specs/05-extensibility-and-ai-companion-spec.md)
     - [06 — Junior Developer Implementation Backlog](../specs/06-junior-developer-implementation-plan.md)
     - [07 — Global Configuration & Settings Spec](../specs/07-global-configuration-and-settings-spec.md)
+    - [08 — Pluggable Python Pipeline & Study Pack Stages Spec](../specs/08-pluggable-python-pipeline-stages-spec.md)
 
 ---
 

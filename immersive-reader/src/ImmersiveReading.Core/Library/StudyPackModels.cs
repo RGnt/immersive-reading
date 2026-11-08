@@ -44,3 +44,9 @@ public sealed record StudyPackBuildResult(
     StudyPackBookOverview? StudyPack
 );
 
+public sealed record StudyPackOptions(
+    string? DeckCsvPath = null,
+    bool IncludeA4Pdf = true,
+    bool ReaderOnly = false
+);
+
