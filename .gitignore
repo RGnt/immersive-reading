@@ -145,6 +145,10 @@ enrichement-extractor/.cache/
 enrichement-extractor/.enrichment/
 enrichement-extractor/tmp/
 enrichement-extractor/dist/
+# Scratch & temporary workspace folders
+/temp/
+temp/
+**/temp/
 tmp/
 *.tmp
 *.pdf
