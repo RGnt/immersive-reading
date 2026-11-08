@@ -206,3 +206,4 @@ class JapanesePdfSectionsStage(PipelineStage):
     ) -> None:
         ctx.emit_progress("ja.pdf_sections", "Registering Japanese PDF section...", 80)
         ctx.pdf_sections.append(JapaneseStudySectionRenderer())
+

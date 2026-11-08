@@ -92,3 +92,4 @@ class PipelineStage(ABC):
     ) -> None:
         """Executes the stage, mutating `ctx` in-place."""
         pass
+

@@ -138,3 +138,4 @@ def run_pipeline_from_manifest(manifest_path: Path) -> PipelineContext:
 
     ctx.emit_progress("core.complete", "Study Pack build completed.", 100)
     return ctx
+

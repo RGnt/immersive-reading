@@ -67,3 +67,4 @@ def compile_master_study_pdf(ctx: PipelineContext) -> Path | None:
     doc.build(story)
     ctx.artifacts["master_pdf"] = pdf_path
     return pdf_path
+

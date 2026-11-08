@@ -100,3 +100,4 @@ public interface IPythonStageRegistryProvider
 1. `ja.sudachi_tokenize` (`Order: 110`): SudachiPy morphological segmentation in Mode C.
 2. `ja.kanji_enrichment` (`Order: 210`): CJK kanji character detection, counts, and categorization.
 3. `ja.pdf_sections` (`Order: 410`): ReportLab table generation for top vocabulary items.
+

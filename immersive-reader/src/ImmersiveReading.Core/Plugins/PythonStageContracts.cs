@@ -104,3 +104,4 @@ public sealed record PythonPipelineRunManifest
     [JsonPropertyName("stages")]
     public IReadOnlyList<ResolvedPythonStageManifestEntry> Stages { get; init; } = [];
 }
+

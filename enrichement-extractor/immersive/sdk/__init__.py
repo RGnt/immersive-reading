@@ -23,3 +23,4 @@ __all__ = [
     "shape_bidirectional_text",
     "compile_master_study_pdf",
 ]
+
