@@ -28,8 +28,10 @@ internal static class ChapterListBuilder
             list.Add(np);
         }
 
-        // Find the first story ToC entry
-        EpubNavPoint? firstStoryNav = navPoints.FirstOrDefault(np => !FrontMatterClassifier.IsFrontMatterTitle(np.Title));
+        // Find the first story ToC entry (must not be front matter or back matter)
+        EpubNavPoint? firstStoryNav = navPoints.FirstOrDefault(np =>
+            !FrontMatterClassifier.IsFrontMatterTitle(np.Title) &&
+            !FrontMatterClassifier.IsBackMatterTitle(np.Title));
         int firstStorySpineIdx = -1;
         if (firstStoryNav is not null)
         {
@@ -159,6 +161,24 @@ internal static class ChapterListBuilder
                         IsExcluded: false
                     ));
                     cumulativeChars += charCount;
+                }
+            }
+        }
+
+        // Safety guard: if ALL chapters ended up excluded, ensure non-front/non-back chapters
+        // (or at least chapter 0) are readable so books are never locked to cover pages
+        if (chapters.Count > 0 && chapters.All(c => c.IsExcluded))
+        {
+            var candidate = chapters.FirstOrDefault(c =>
+                !FrontMatterClassifier.IsFrontOrBackMatter(c.Title, c.SpineHref))
+                ?? chapters[0];
+
+            for (int k = 0; k < chapters.Count; k++)
+            {
+                if (chapters[k].ChapterIndex == candidate.ChapterIndex ||
+                    !FrontMatterClassifier.IsFrontOrBackMatter(chapters[k].Title, chapters[k].SpineHref))
+                {
+                    chapters[k] = chapters[k] with { IsExcluded = false };
                 }
             }
         }

@@ -39,6 +39,22 @@ export const ChapterIframe: React.FC = () => {
       rRoot.style.setProperty('--reader-font-size', `${fontSize}px`);
       rRoot.style.setProperty('--reader-line-height', String(lineHeight));
 
+      // Direct synchronization of writing mode and furigana classes
+      rRoot.classList.remove('ir-mode-vertical', 'ir-mode-horizontal');
+      if (writingMode === 'vertical-rl') {
+        rRoot.classList.add('ir-mode-vertical');
+      } else {
+        rRoot.classList.add('ir-mode-horizontal');
+      }
+
+      rRoot.classList.remove('ir-furigana-all', 'ir-furigana-author', 'ir-furigana-unknown', 'ir-furigana-hover', 'ir-furigana-off');
+      const modeStr = String(furiganaMode || 'AllKanji');
+      if (modeStr === 'AuthorOnly') rRoot.classList.add('ir-furigana-author');
+      else if (modeStr === 'UnknownAndLearningOnly' || modeStr === 'Uncommon') rRoot.classList.add('ir-furigana-unknown');
+      else if (modeStr === 'Hover') rRoot.classList.add('ir-furigana-hover');
+      else if (modeStr === 'Off' || modeStr === 'None') rRoot.classList.add('ir-furigana-off');
+      else rRoot.classList.add('ir-furigana-all');
+
       let styleEl = doc.getElementById('ir-theme-injected-overrides') as HTMLStyleElement | null;
       if (!styleEl) {
         styleEl = doc.createElement('style');
@@ -62,6 +78,7 @@ export const ChapterIframe: React.FC = () => {
         rt {
           color: ${rubyColor} !important;
         }
+        ${(modeStr === 'Off' || modeStr === 'None') ? 'rt { display: none !important; }' : ''}
       `;
 
       if (doc.body) {
@@ -71,7 +88,7 @@ export const ChapterIframe: React.FC = () => {
     } catch {
       // Cross-origin guard
     }
-  }, [config, fontSizePx]);
+  }, [config, fontSizePx, furiganaMode, writingMode]);
 
   useEffect(() => {
     const handleMessage = (e: MessageEvent) => {

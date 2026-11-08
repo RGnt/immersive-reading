@@ -161,4 +161,96 @@ public sealed class EpubMetadataExtractorTests
             }
         }
     }
+
+    [Fact]
+    public void NormalizeXhtmlSelfClosingTags_ExpandsNonVoidElements()
+    {
+        string input = """
+            <html xmlns="http://www.w3.org/1999/xhtml">
+            <head>
+              <script src="../js/kobo.js"/>
+              <style type="text/css"/>
+            </head>
+            <body>
+              <div class="main"/>
+              <span id="s1"/>
+              <p class="text">Hello world</p>
+            </body>
+            </html>
+            """;
+
+        string normalized = EpubArchiveReader.NormalizeXhtmlSelfClosingTags(input);
+
+        Assert.Contains("<script src=\"../js/kobo.js\"></script>", normalized);
+        Assert.Contains("<style type=\"text/css\"></style>", normalized);
+        Assert.Contains("<div class=\"main\"></div>", normalized);
+        Assert.Contains("<span id=\"s1\"></span>", normalized);
+
+        // AngleSharp HTML5 parser must parse body text cleanly without swallowing into script
+        var doc = EpubArchiveReader.ParseXmlOrHtml(normalized);
+        Assert.NotNull(doc.Body);
+        var p = doc.QuerySelector("p.text");
+        Assert.NotNull(p);
+        Assert.Equal("Hello world", p.TextContent);
+    }
+
+    [Fact]
+    public void ExtractFromStream_WhenTocOnlyContainsCoverAndColophon_DoesNotExcludeAllChapters()
+    {
+        string opf = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <package xmlns="http://www.idpf.org/2007/opf" version="2.0">
+              <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+                <dc:title>Test Book</dc:title>
+                <dc:language>ja</dc:language>
+              </metadata>
+              <manifest>
+                <item id="cover" href="text/cover.xhtml" media-type="application/xhtml+xml"/>
+                <item id="ch1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/>
+                <item id="ch2" href="text/ch2.xhtml" media-type="application/xhtml+xml"/>
+                <item id="colophon" href="text/colophon.xhtml" media-type="application/xhtml+xml"/>
+                <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+              </manifest>
+              <spine toc="ncx">
+                <itemref idref="cover"/>
+                <itemref idref="ch1"/>
+                <itemref idref="ch2"/>
+                <itemref idref="colophon"/>
+              </spine>
+            </package>
+            """;
+
+        string ncx = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+              <navMap>
+                <navPoint id="p1" playOrder="1">
+                  <navLabel><text>目次</text></navLabel>
+                  <content src="text/cover.xhtml"/>
+                </navPoint>
+                <navPoint id="p2" playOrder="2">
+                  <navLabel><text>奥付</text></navLabel>
+                  <content src="text/colophon.xhtml"/>
+                </navPoint>
+              </navMap>
+            </ncx>
+            """;
+
+        var epubBytes = new TestEpubBuilder()
+            .WithOpf(opf)
+            .AddEntry("OEBPS/toc.ncx", ncx)
+            .WithChapter("text/cover.xhtml", "目次", "<p>目次</p>")
+            .WithChapter("text/ch1.xhtml", "第1話", "<p>これは物語の本文です。冒険がここから始まる。</p>")
+            .WithChapter("text/ch2.xhtml", "第2話", "<p>第二話の本文です。次の試練が待ち受けていた。</p>")
+            .WithChapter("text/colophon.xhtml", "奥付", "<p>発行者・著作権情報</p>")
+            .Build();
+
+        using var ms = new MemoryStream(epubBytes);
+        var pkg = EpubMetadataExtractor.ExtractFromStream(ms, "test.epub", computeDeepChapterStats: false);
+
+        // Story chapters (ch1, ch2) must NOT be excluded!
+        var nonExcluded = pkg.Chapters.Where(c => !c.IsExcluded).ToList();
+        Assert.NotEmpty(nonExcluded);
+        Assert.Contains(nonExcluded, c => c.SpineHref.Contains("ch1.xhtml"));
+    }
 }

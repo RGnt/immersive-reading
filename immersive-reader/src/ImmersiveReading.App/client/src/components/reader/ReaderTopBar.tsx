@@ -122,6 +122,8 @@ export const ReaderTopBar: React.FC = () => {
         >
           <option value="AllKanji">All Furigana</option>
           <option value="Uncommon">Uncommon Only</option>
+          <option value="AuthorOnly">Author Only</option>
+          <option value="Hover">Hover Only</option>
           <option value="None">Hide Furigana</option>
         </select>
 

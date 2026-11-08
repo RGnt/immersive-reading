@@ -34,6 +34,62 @@ public sealed class Phase2EnrichmentSpecsTests : IDisposable
         _schemeHandler = new BookSchemeHandler(_libraryManager, _pluginRegistry, _cache);
     }
 
+    [Fact]
+    public void EnrichChapter_WhenXhtmlContainsSelfClosingScriptAndStyle_CorrectlyTokenizesBodyText()
+    {
+        string rawXhtml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <!DOCTYPE html>
+            <html xmlns="http://www.w3.org/1999/xhtml" xml:lang="ja">
+            <head>
+              <meta charset="UTF-8"/>
+              <title>Test Chapter</title>
+              <script type="text/javascript" src="../js/kobo.js"/>
+              <style type="text/css" id="koboStyle"/>
+            </head>
+            <body class="p-text">
+              <div class="main">
+                <p>草花香る緑の草原で魔女たちの茶会が開かれる。</p>
+              </div>
+            </body>
+            </html>
+            """;
+
+        var plugin = _pluginRegistry.Resolve("ja");
+        var result = AngleSharpDomEnricher.EnrichChapter(
+            rawXhtml,
+            "book-test",
+            "text/ch1.xhtml",
+            plugin,
+            new EnrichmentOptions(FuriganaMode: FuriganaMode.AllKanji));
+
+        Assert.NotNull(result);
+        Assert.NotEmpty(result.TokenMap.Tokens);
+        Assert.Contains("ir-tok", result.EnrichedHtml);
+        Assert.Contains("ir-furigana-all", result.EnrichedHtml);
+        Assert.DoesNotContain("<script type=\"text/javascript\" src=\"../js/kobo.js\"/>", result.EnrichedHtml);
+    }
+
+    [Fact]
+    public void EnrichChapter_FuriganaOffMode_SetsOffClass()
+    {
+        string rawXhtml = """
+            <!DOCTYPE html>
+            <html><head><title>Test</title></head>
+            <body><p>日本語の文章です。</p></body></html>
+            """;
+
+        var plugin = _pluginRegistry.Resolve("ja");
+        var result = AngleSharpDomEnricher.EnrichChapter(
+            rawXhtml,
+            "book-test",
+            "text/ch1.xhtml",
+            plugin,
+            new EnrichmentOptions(FuriganaMode: FuriganaMode.Off));
+
+        Assert.Contains("ir-furigana-off", result.EnrichedHtml);
+    }
+
     public void Dispose()
     {
         _pluginRegistry.Dispose();

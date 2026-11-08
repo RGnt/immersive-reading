@@ -60,7 +60,7 @@ rt {
 
 /* Mode: Off */
 html.ir-furigana-off rt {
-  visibility: hidden !important;
+  display: none !important;
 }
 
 /* Mode: Hover */

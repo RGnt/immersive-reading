@@ -5,7 +5,7 @@ using AngleSharp.Html.Parser;
 
 namespace ImmersiveReading.Core.Epub;
 
-internal static class EpubArchiveReader
+public static class EpubArchiveReader
 {
     public static string? FindOpfPath(ZipArchive archive)
     {
@@ -39,6 +39,21 @@ internal static class EpubArchiveReader
         return null;
     }
 
+    private static readonly System.Text.RegularExpressions.Regex SelfClosingNonVoidRegex = new(
+        @"<(?<tag>script|style|div|span|p|iframe|title|textarea|a|b|i|strong|em|ruby|rt|rp|button)(?<attrs>(?:\s+[^""'>]+|""[^""]*""|'[^']*')*?)\s*/>",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Expands self-closing non-void XML/XHTML tags (e.g. &lt;script src="..." /&gt; or &lt;style ... /&gt;)
+    /// into explicit start and end tags so HTML5 parsers (AngleSharp and browser DOM) do not treat
+    /// them as unclosed rawtext tags that swallow following content.
+    /// </summary>
+    public static string NormalizeXhtmlSelfClosingTags(string markup)
+    {
+        if (string.IsNullOrEmpty(markup)) return string.Empty;
+        return SelfClosingNonVoidRegex.Replace(markup, "<${tag}${attrs}></${tag}>");
+    }
+
     public static string ReadEntryString(ZipArchiveEntry entry)
     {
         using var stream = entry.Open();
@@ -52,7 +67,8 @@ internal static class EpubArchiveReader
         {
             IsKeepingSourceReferences = false
         });
-        return htmlParser.ParseDocument(markup);
+        string normalized = NormalizeXhtmlSelfClosingTags(markup);
+        return htmlParser.ParseDocument(normalized);
     }
 }
 

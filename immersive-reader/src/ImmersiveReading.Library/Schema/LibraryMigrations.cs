@@ -254,6 +254,24 @@ public static class LibraryMigrations
                 created_at_utc      TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_chat_messages_session ON persona_chat_messages(chat_id, created_at_utc ASC);
+            """),
+
+        new SimpleDbMigration(ModuleId, 3, "RepairExcludedChaptersWhenAllExcluded", """
+            UPDATE book_chapters 
+            SET is_excluded = 0 
+            WHERE book_id IN (
+                SELECT book_id 
+                FROM book_chapters 
+                GROUP BY book_id 
+                HAVING SUM(CASE WHEN is_excluded = 0 THEN 1 ELSE 0 END) = 0
+            )
+            AND title NOT LIKE '%表紙%'
+            AND title NOT LIKE '%Cover%'
+            AND title NOT LIKE '%目次%'
+            AND title NOT LIKE '%Contents%'
+            AND title NOT LIKE '%奥付%'
+            AND title NOT LIKE '%Colophon%'
+            AND title NOT LIKE '%あとがき%';
             """)
     ];
 }

@@ -296,106 +296,21 @@
     }
   }
 
-  // --- IN-READER SEARCH LOGIC ---
-  let searchMatches = [];
-  let searchCurrentIndex = -1;
-
-  function clearSearchHighlights() {
-    searchMatches.forEach(el => {
-      el.classList.remove('ir-search-match', 'ir-search-current');
-    });
-    searchMatches = [];
-    searchCurrentIndex = -1;
-  }
-
-  function performSearch(query) {
-    clearSearchHighlights();
-    if (!query || !query.trim()) {
-      window.parent.postMessage({ type: 'ir-search-results', count: 0, current: 0 }, '*');
-      return;
-    }
-
-    const q = query.trim().toLowerCase();
-    const tokens = Array.from(document.querySelectorAll('.ir-tok'));
-    if (tokens.length > 0) {
-      tokens.forEach(el => {
-        const text = (el.textContent || '').toLowerCase();
-        const surf = (el.getAttribute('data-surface') || '').toLowerCase();
-        const lem = (el.getAttribute('data-lemma') || '').toLowerCase();
-        if (text.includes(q) || surf.includes(q) || lem.includes(q)) {
-          el.classList.add('ir-search-match');
-          searchMatches.push(el);
-        }
-      });
-    } else {
-      const paras = Array.from(document.querySelectorAll('p, div, h1, h2, h3, h4, span'));
-      paras.forEach(el => {
-        if (el.children.length === 0 && el.textContent && el.textContent.toLowerCase().includes(q)) {
-          el.classList.add('ir-search-match');
-          searchMatches.push(el);
-        }
-      });
-    }
-
-    if (searchMatches.length > 0) {
-      searchCurrentIndex = 0;
-      searchMatches[0].classList.add('ir-search-current');
-      searchMatches[0].scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-    }
-
-    window.parent.postMessage({
-      type: 'ir-search-results',
-      count: searchMatches.length,
-      current: searchMatches.length > 0 ? 1 : 0
-    }, '*');
-  }
-
-  function stepSearch(forward) {
-    if (searchMatches.length === 0) return;
-    searchMatches[searchCurrentIndex].classList.remove('ir-search-current');
-    if (forward) {
-      searchCurrentIndex = (searchCurrentIndex + 1) % searchMatches.length;
-    } else {
-      searchCurrentIndex = (searchCurrentIndex - 1 + searchMatches.length) % searchMatches.length;
-    }
-    const currentEl = searchMatches[searchCurrentIndex];
-    currentEl.classList.add('ir-search-current');
-    currentEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-    window.parent.postMessage({
-      type: 'ir-search-results',
-      count: searchMatches.length,
-      current: searchCurrentIndex + 1
-    }, '*');
-  }
-
-  window.addEventListener('keydown', function (e) {
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
-      e.preventDefault();
-      window.parent.postMessage({ type: 'ir-open-search' }, '*');
-    }
-  });
-
   // Handle commands sent from reader host UI
   window.addEventListener('message', function (e) {
     const data = e.data;
     if (!data || typeof data !== 'object') return;
 
-    if (data.type === 'ir-search-query') {
-      performSearch(data.query);
-    } else if (data.type === 'ir-search-step') {
-      stepSearch(data.forward !== false);
-    } else if (data.type === 'ir-search-clear') {
-      clearSearchHighlights();
-    } else if (data.type === 'ir-vim-motion') {
+    if (data.type === 'ir-vim-motion') {
       handleVimMotion(data);
     } else if (data.type === 'ir-set-furigana-mode') {
       const html = document.documentElement;
       html.classList.remove('ir-furigana-all', 'ir-furigana-author', 'ir-furigana-unknown', 'ir-furigana-hover', 'ir-furigana-off');
-      const mode = data.mode || 'AllKanji';
+      const mode = (data.mode || 'AllKanji').toString();
       if (mode === 'AuthorOnly') html.classList.add('ir-furigana-author');
-      else if (mode === 'UnknownAndLearningOnly') html.classList.add('ir-furigana-unknown');
+      else if (mode === 'UnknownAndLearningOnly' || mode === 'Uncommon') html.classList.add('ir-furigana-unknown');
       else if (mode === 'Hover') html.classList.add('ir-furigana-hover');
-      else if (mode === 'Off') html.classList.add('ir-furigana-off');
+      else if (mode === 'Off' || mode === 'None') html.classList.add('ir-furigana-off');
       else html.classList.add('ir-furigana-all');
     } else if (data.type === 'ir-set-writing-mode') {
       const html = document.documentElement;

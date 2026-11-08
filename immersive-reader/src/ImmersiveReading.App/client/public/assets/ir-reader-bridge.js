@@ -306,11 +306,11 @@
     } else if (data.type === 'ir-set-furigana-mode') {
       const html = document.documentElement;
       html.classList.remove('ir-furigana-all', 'ir-furigana-author', 'ir-furigana-unknown', 'ir-furigana-hover', 'ir-furigana-off');
-      const mode = data.mode || 'AllKanji';
+      const mode = (data.mode || 'AllKanji').toString();
       if (mode === 'AuthorOnly') html.classList.add('ir-furigana-author');
-      else if (mode === 'UnknownAndLearningOnly') html.classList.add('ir-furigana-unknown');
+      else if (mode === 'UnknownAndLearningOnly' || mode === 'Uncommon') html.classList.add('ir-furigana-unknown');
       else if (mode === 'Hover') html.classList.add('ir-furigana-hover');
-      else if (mode === 'Off') html.classList.add('ir-furigana-off');
+      else if (mode === 'Off' || mode === 'None') html.classList.add('ir-furigana-off');
       else html.classList.add('ir-furigana-all');
     } else if (data.type === 'ir-set-writing-mode') {
       const html = document.documentElement;

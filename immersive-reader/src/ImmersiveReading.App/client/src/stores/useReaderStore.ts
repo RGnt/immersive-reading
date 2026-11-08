@@ -55,7 +55,7 @@ interface ReaderState {
   currentSpineHref: string;
   chapterHtml: string;
   writingMode: 'vertical-rl' | 'horizontal-tb';
-  furiganaMode: 'AllKanji' | 'Uncommon' | 'None';
+  furiganaMode: 'AllKanji' | 'Uncommon' | 'AuthorOnly' | 'Hover' | 'None' | 'Off' | 'UnknownAndLearningOnly';
   fontSizePx: number;
   popover: PopoverState;
 
@@ -79,7 +79,7 @@ interface ReaderState {
   closeReader: () => void;
   nextChapter: () => Promise<void>;
   prevChapter: () => Promise<void>;
-  setFuriganaMode: (mode: 'AllKanji' | 'Uncommon' | 'None') => void;
+  setFuriganaMode: (mode: 'AllKanji' | 'Uncommon' | 'AuthorOnly' | 'Hover' | 'None') => void;
   cycleFuriganaMode: () => void;
   toggleWritingMode: () => void;
   adjustFontSize: (deltaPx: number) => void;
@@ -224,8 +224,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   },
 
   cycleFuriganaMode: () => {
-    const modes: ('AllKanji' | 'Uncommon' | 'None')[] = ['AllKanji', 'Uncommon', 'None'];
-    const curIdx = modes.indexOf(get().furiganaMode);
+    const modes: ('AllKanji' | 'Uncommon' | 'AuthorOnly' | 'Hover' | 'None')[] = ['AllKanji', 'Uncommon', 'AuthorOnly', 'Hover', 'None'];
+    const curIdx = modes.indexOf(get().furiganaMode as any);
     const nextMode = modes[(curIdx + 1) % modes.length];
     set({ furiganaMode: nextMode });
     get().showToast(`Furigana: ${nextMode}`);

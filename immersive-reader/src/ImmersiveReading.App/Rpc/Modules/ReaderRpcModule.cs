@@ -73,6 +73,7 @@ public sealed class ReaderRpcModule(
         {
             var firstValid = detail.Chapters.FirstOrDefault(c => !c.IsExcluded && c.CharCount > 0)
                 ?? detail.Chapters.FirstOrDefault(c => !c.IsExcluded)
+                ?? detail.Chapters.FirstOrDefault(c => !c.Title.Contains("表紙") && !c.Title.Contains("Cover") && !c.Title.Contains("目次") && !c.Title.Contains("Contents"))
                 ?? detail.Chapters[0];
             initialSpineHref = firstValid.SpineHref;
             initialChapterIndex = firstValid.ChapterIndex;
@@ -84,7 +85,8 @@ public sealed class ReaderRpcModule(
             if (targetCh is not null && targetCh.IsExcluded)
             {
                 var storyCh = detail.Chapters.FirstOrDefault(c => !c.IsExcluded && c.CharCount > 0)
-                    ?? detail.Chapters.FirstOrDefault(c => !c.IsExcluded);
+                    ?? detail.Chapters.FirstOrDefault(c => !c.IsExcluded)
+                    ?? detail.Chapters.FirstOrDefault(c => !c.Title.Contains("表紙") && !c.Title.Contains("Cover") && !c.Title.Contains("目次") && !c.Title.Contains("Contents"));
                 if (storyCh is not null)
                 {
                     initialSpineHref = storyCh.SpineHref;

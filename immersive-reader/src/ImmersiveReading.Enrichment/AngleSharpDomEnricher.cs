@@ -2,6 +2,7 @@ using System.Text;
 using AngleSharp;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
+using ImmersiveReading.Core.Epub;
 using ImmersiveReading.Core.Extensions;
 using ImmersiveReading.Core.Plugins;
 using ImmersiveReading.Enrichment.Dom;
@@ -35,7 +36,8 @@ public static class AngleSharpDomEnricher
         {
             IsKeepingSourceReferences = false
         });
-        var document = parser.ParseDocument(rawXhtml);
+        string normalizedXhtml = EpubArchiveReader.NormalizeXhtmlSelfClosingTags(rawXhtml);
+        var document = parser.ParseDocument(normalizedXhtml);
 
         // 1. Rewrite relative EPUB asset URLs (CSS, images, SVG covers, internal links)
         EpubUrlRewriter.RewriteRelativeAssetUrls(document, bookId, chapterHref);
