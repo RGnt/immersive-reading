@@ -43,8 +43,9 @@ public sealed class LibraryRpcDispatcher : IDisposable
     public LibraryRpcDispatcher(
         AppServices services,
         Action<string>? sendMessageToUi = null,
-        Action<bool, string>? onSelfTestCompleted = null)
-        : this(services.CreateRpcModules(sendMessageToUi, onSelfTestCompleted), services.PluginHost, services.PluginHostManager)
+        Action<bool, string>? onSelfTestCompleted = null,
+        Func<string?, string?>? folderPicker = null)
+        : this(services.CreateRpcModules(sendMessageToUi, onSelfTestCompleted, folderPicker), services.PluginHost, services.PluginHostManager)
     {
     }
 

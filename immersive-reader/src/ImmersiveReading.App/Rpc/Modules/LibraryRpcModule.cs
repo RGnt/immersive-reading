@@ -4,7 +4,10 @@ using ImmersiveReading.Library;
 
 namespace ImmersiveReading.App.Rpc.Modules;
 
-public sealed class LibraryRpcModule(LibraryManager library, IRpcEventSink? events = null) : IRpcModule
+public sealed class LibraryRpcModule(
+    LibraryManager library,
+    IRpcEventSink? events = null,
+    Func<string?, string?>? folderPicker = null) : IRpcModule
 {
     public IEnumerable<(string Method, RpcHandler Handler)> Handlers
     {
@@ -15,6 +18,7 @@ public sealed class LibraryRpcModule(LibraryManager library, IRpcEventSink? even
             yield return ("library.importBook", (req, ct) => ImportBookAsync(req, ct));
             yield return ("library.importBookBytes", (req, ct) => ImportBookBytesAsync(req, ct));
             yield return ("library.scanDirectory", (req, ct) => ScanDirectoryAsync(req, ct));
+            yield return ("library.pickDirectory", (req, ct) => PickDirectoryAsync(req, ct));
             yield return ("library.updateBookMetadata", (req, _) => Task.FromResult<object?>(UpdateBookMetadata(req)));
             yield return ("library.bulkUpdateBooks", (req, _) => Task.FromResult<object?>(BulkUpdateBooks(req)));
             yield return ("library.resetBookMetadataToOpf", (req, _) => Task.FromResult<object?>(ResetBookMetadataToOpf(req)));
@@ -120,6 +124,17 @@ public sealed class LibraryRpcModule(LibraryManager library, IRpcEventSink? even
             autoFolders,
             progress,
             ct).ConfigureAwait(false);
+    }
+
+    private Task<object?> PickDirectoryAsync(RpcRequest req, CancellationToken ct)
+    {
+        string? defaultDir = req.OptionalString("defaultPath");
+        string? picked = folderPicker?.Invoke(defaultDir);
+        return Task.FromResult<object?>(new
+        {
+            path = picked ?? "",
+            cancelled = string.IsNullOrWhiteSpace(picked)
+        });
     }
 
     private object? UpdateBookMetadata(RpcRequest req)

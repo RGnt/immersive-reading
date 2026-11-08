@@ -369,4 +369,13 @@ public sealed class RpcContractTests : IDisposable
         Assert.True(resObj.TryGetProperty("foldersDeleted", out _));
         Assert.True(resObj.TryGetProperty("coversDeleted", out _));
     }
+
+    [Fact]
+    public async Task Library_PickDirectory_ReturnsPathOrCancelled()
+    {
+        var result = await CallOkAsync("library.pickDirectory", """{"defaultPath": "C:\\Books"}""");
+        Assert.True(result.TryGetProperty("path", out _));
+        Assert.True(result.TryGetProperty("cancelled", out var cancelledProp));
+        Assert.True(cancelledProp.GetBoolean());
+    }
 }

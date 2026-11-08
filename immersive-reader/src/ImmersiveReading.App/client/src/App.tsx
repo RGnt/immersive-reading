@@ -4,6 +4,8 @@ import { Sidebar } from './components/layout/Sidebar';
 import { LibraryGrid } from './components/library/LibraryGrid';
 import { ReaderView } from './components/reader/ReaderView';
 import { BookInfoModal } from './components/library/BookInfoModal';
+import { ScanFolderModal } from './components/library/ScanFolderModal';
+import { SeriesJitenModal } from './components/library/SeriesJitenModal';
 import { AiCompanionDrawer } from './components/companion/AiCompanionDrawer';
 import { StudyPackDrawer } from './components/studypack/StudyPackDrawer';
 import { SettingsModal } from './components/settings/SettingsModal';
@@ -53,6 +55,8 @@ export const App: React.FC = () => {
       </div>
 
       <BookInfoModal />
+      <ScanFolderModal />
+      <SeriesJitenModal />
       <AiCompanionDrawer />
       <StudyPackDrawer />
       <SettingsModal />

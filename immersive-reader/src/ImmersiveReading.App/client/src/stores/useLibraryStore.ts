@@ -21,6 +21,19 @@ interface LibraryState {
   // Multi-selection state
   selectedBookIds: string[];
 
+  // Scanning state
+  isScanModalOpen: boolean;
+  defaultScanDir: string;
+  openScanModal: () => void;
+  closeScanModal: () => void;
+
+  // Series View & Jiten Matching
+  activeSeriesJiten: string | null;
+  openSeriesJiten: (seriesName: string) => void;
+  closeSeriesJiten: () => void;
+  selectedSeriesDrillDown: string | null;
+  setSelectedSeriesDrillDown: (seriesName: string | null) => void;
+
   // Actions
   loadBootstrap: () => Promise<void>;
   fetchBooks: (newOffset?: number) => Promise<void>;
@@ -66,6 +79,18 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   activeBookDetail: null,
   isInspectorOpen: false,
   selectedBookIds: [],
+  isScanModalOpen: false,
+  defaultScanDir: '',
+  activeSeriesJiten: null,
+  selectedSeriesDrillDown: null,
+
+  openScanModal: () => set({ isScanModalOpen: true }),
+  closeScanModal: () => set({ isScanModalOpen: false }),
+
+  openSeriesJiten: (seriesName: string) => set({ activeSeriesJiten: seriesName }),
+  closeSeriesJiten: () => set({ activeSeriesJiten: null }),
+
+  setSelectedSeriesDrillDown: (seriesName: string | null) => set({ selectedSeriesDrillDown: seriesName }),
 
   loadBootstrap: async () => {
     set({ isLoading: true });
@@ -74,6 +99,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       if (bootstrap) {
         set({
           folders: bootstrap.folders || [],
+          defaultScanDir: bootstrap.defaultScanDir || '',
         });
       }
       await get().fetchBooks(0);

@@ -19,6 +19,13 @@ public sealed class MainWindowHost(AppServices services, AppPaths paths)
                 Console.WriteLine(summary);
                 verifyExitCode = passed ? 0 : 1;
                 window?.Close();
+            },
+            folderPicker: defaultPath =>
+            {
+                var picked = window?.ShowOpenFolder(
+                    title: "Select Folder to Scan for Books",
+                    defaultPath: defaultPath ?? "");
+                return picked != null && picked.Length > 0 ? picked[0] : null;
             });
 
         var appSchemeHandler = new AppSchemeHandler(paths.WwwrootDir, paths.CoversDir, paths.ExtractorOutputDir, services.PluginHostManager);

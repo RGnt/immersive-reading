@@ -20,6 +20,9 @@ import {
   Folder,
   Tag,
   Building2,
+  FolderSearch,
+  Sparkles,
+  ArrowLeft,
 } from 'lucide-react';
 
 export const LibraryGrid: React.FC = () => {
@@ -36,6 +39,10 @@ export const LibraryGrid: React.FC = () => {
     toggleSelectBook,
     selectAllOnPage,
     clearSelection,
+    openScanModal,
+    openSeriesJiten,
+    selectedSeriesDrillDown,
+    setSelectedSeriesDrillDown,
   } = useLibraryStore();
   const openBook = useReaderStore((s) => s.openBook);
   const { config, updateLibrarySettings, openSettings } = useConfigStore();
@@ -219,28 +226,194 @@ export const LibraryGrid: React.FC = () => {
       );
     }
 
+    if (books.length === 0) {
+      return (
+        <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-4">
+          <div className="p-4 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30 shadow-inner">
+            <BookOpen className="w-12 h-12" />
+          </div>
+          <div className="max-w-md">
+            <h3 className="text-base font-bold text-[var(--text-primary)]">Your Library is Empty</h3>
+            <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
+              Scan a directory on disk to automatically discover, index, and organize your Japanese EPUB collection with instant metadata and cover extraction.
+            </p>
+          </div>
+          <button
+            onClick={() => openScanModal()}
+            className="flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 shadow-lg shadow-sky-500/10 transition-opacity"
+          >
+            <FolderSearch className="w-4 h-4" />
+            <span>📁 Scan Folder for Books</span>
+          </button>
+        </div>
+      );
+    }
+
     if (filteredBooks.length === 0) {
       return (
         <div className="h-full flex flex-col items-center justify-center text-[var(--text-muted)] p-8">
           <p className="text-base font-medium">No books match current filters</p>
           <p className="text-xs mt-1">
-            {books.length > 0
-              ? 'Books are hidden by active category or tag exclusion settings.'
-              : 'Try adjusting your search query or folder selection.'}
+            Books are hidden by active category or tag exclusion settings.
           </p>
-          {books.length > 0 && (
-            <button
-              onClick={() => openSettings('library')}
-              className="mt-3 px-3 py-1.5 rounded bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 shadow-sm"
-            >
-              Adjust Shelf Filter Exclusions
-            </button>
-          )}
+          <button
+            onClick={() => openSettings('library')}
+            className="mt-3 px-3 py-1.5 rounded bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 shadow-sm"
+          >
+            Adjust Shelf Filter Exclusions
+          </button>
         </div>
       );
     }
 
-    // TABLE VIEW (with shelf grouping headers)
+    // 1. SERIES DRILL-DOWN VIEW (when user opened a specific series)
+    if (selectedSeriesDrillDown) {
+      const seriesBooks = sortBooks(
+        filteredBooks.filter((b) => (b.seriesName || '__standalone__') === selectedSeriesDrillDown)
+      );
+      const displayName = selectedSeriesDrillDown === '__standalone__' ? 'Standalones & Single Volumes' : selectedSeriesDrillDown;
+
+      return (
+        <div className="space-y-6 pb-6">
+          {/* SERIES BANNER */}
+          <div className="p-4 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setSelectedSeriesDrillDown(null)}
+                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-[var(--border-color)] bg-[var(--bg-primary)] hover:border-[var(--accent-color)] text-xs text-[var(--text-primary)] font-medium transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Library</span>
+              </button>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h3 className="text-base font-bold text-[var(--text-primary)]">{displayName}</h3>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--accent-color)] font-semibold">
+                    {seriesBooks.length} {seriesBooks.length === 1 ? 'Volume' : 'Volumes'}
+                  </span>
+                </div>
+                {seriesBooks[0]?.authors && (
+                  <p className="text-xs text-[var(--text-muted)] mt-0.5">{seriesBooks[0].authors}</p>
+                )}
+              </div>
+            </div>
+
+            {selectedSeriesDrillDown !== '__standalone__' && (
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => openSeriesJiten(selectedSeriesDrillDown)}
+                  className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 text-xs font-semibold shadow-sm transition-colors"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>⚡ 1-Press Match on jiten.moe</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* VOLUMES GRID */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+            {seriesBooks.map((book) => (
+              <BookCard key={book.bookId} book={book} />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // 2. SERIES VIEW (Multi-volume series grouped as cards)
+    if (viewMode === 'series') {
+      const seriesGroups: Record<string, BookRecord[]> = {};
+      for (const b of filteredBooks) {
+        const key = b.seriesName || '__standalone__';
+        if (!seriesGroups[key]) seriesGroups[key] = [];
+        seriesGroups[key].push(b);
+      }
+
+      const sortedSeriesKeys = Object.keys(seriesGroups).sort((a, b) => {
+        if (a === '__standalone__') return 1;
+        if (b === '__standalone__') return -1;
+        return a.localeCompare(b, 'ja');
+      });
+
+      return (
+        <div className="space-y-6 pb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {sortedSeriesKeys.map((sKey) => {
+              const sBooks = sortBooks(seriesGroups[sKey]);
+              const firstBook = sBooks[0];
+              const sTitle = sKey === '__standalone__' ? 'Standalones' : sKey;
+              const coverUrl = firstBook?.coverCachePath ? `ir-app://covers/${firstBook.bookId}.jpg` : '';
+
+              // Find any difficulty rating in the series
+              const diffBook = sBooks.find((b) => b.customFields?.['jiten_difficulty']);
+              const diffVal = diffBook ? parseFloat(diffBook.customFields['jiten_difficulty']) : null;
+
+              return (
+                <div
+                  key={sKey}
+                  className="series-card group p-3 rounded-xl bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--accent-color)] shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                >
+                  <div className="space-y-3">
+                    <div className="relative aspect-[3/4] w-full bg-[var(--bg-primary)] rounded-lg overflow-hidden flex items-center justify-center border border-[var(--border-color)]/60">
+                      {coverUrl ? (
+                        <img
+                          src={coverUrl}
+                          alt={sTitle}
+                          className="w-full h-full object-cover transition-transform group-hover:scale-105 duration-200"
+                        />
+                      ) : (
+                        <Library className="w-10 h-10 text-[var(--text-muted)] opacity-30" />
+                      )}
+
+                      <div className="absolute top-2 right-2 px-2 py-0.5 rounded-full bg-black/75 backdrop-blur-md text-white border border-white/20 text-[10px] font-bold">
+                        📚 {sBooks.length} {sBooks.length === 1 ? 'Vol' : 'Vols'}
+                      </div>
+
+                      {diffVal !== null && !isNaN(diffVal) && (
+                        <div className="absolute bottom-2 left-2 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-500/40 backdrop-blur-md">
+                          ★ {diffVal.toFixed(1)}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-xs text-[var(--text-primary)] line-clamp-2 group-hover:text-[var(--accent-color)]">
+                        {sTitle}
+                      </h4>
+                      <p className="text-[11px] text-[var(--text-muted)] truncate mt-0.5">
+                        {firstBook?.authors || 'Unknown Author'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-[var(--border-color)]/60 flex items-center justify-between gap-2 mt-3">
+                    <button
+                      onClick={() => setSelectedSeriesDrillDown(sKey)}
+                      className="flex-1 py-1 px-2 rounded-lg bg-[var(--bg-primary)] border border-[var(--border-color)] hover:border-[var(--accent-color)] text-xs font-semibold text-[var(--text-primary)] hover:text-[var(--accent-color)] transition-colors text-center"
+                    >
+                      View All ({sBooks.length})
+                    </button>
+                    {sKey !== '__standalone__' && (
+                      <button
+                        onClick={() => openSeriesJiten(sKey)}
+                        className="p-1 px-2 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 hover:bg-sky-500/30 text-xs font-semibold transition-colors flex items-center space-x-1"
+                        title="Match series on Jiten.moe"
+                      >
+                        <Sparkles className="w-3 h-3" />
+                        <span>Jiten</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // 3. TABLE VIEW (with shelf grouping headers & difficulty column)
     if (viewMode === 'table') {
       return (
         <div className="w-full overflow-x-auto">
@@ -265,6 +438,7 @@ export const LibraryGrid: React.FC = () => {
                 <th className="py-2.5 px-3 w-32">Actions</th>
                 <th className="py-2.5 px-3">Title</th>
                 <th className="py-2.5 px-3">Series & Vol</th>
+                <th className="py-2.5 px-3 w-16 text-center">Diff</th>
                 <th className="py-2.5 px-3">Author(s)</th>
                 <th className="py-2.5 px-3">Publisher / Imprint</th>
                 <th className="py-2.5 px-3">ISBN</th>
@@ -276,13 +450,28 @@ export const LibraryGrid: React.FC = () => {
                 <React.Fragment key={shelf.id}>
                   {librarySettings.primaryGrouping !== 'none' && (
                     <tr className="bg-black/30 border-y border-[var(--border-color)]">
-                      <td colSpan={8} className="py-2 px-3">
-                        <div className="flex items-center space-x-2 font-bold text-xs text-[var(--text-primary)]">
-                          {renderShelfIcon(shelf.icon)}
-                          <span>{shelf.title}</span>
-                          <span className="text-[10px] font-normal text-[var(--text-muted)]">
-                            ({shelf.books.length} {shelf.books.length === 1 ? 'book' : 'books'})
-                          </span>
+                      <td colSpan={9} className="py-2 px-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2 font-bold text-xs text-[var(--text-primary)]">
+                            {renderShelfIcon(shelf.icon)}
+                            <span>{shelf.title}</span>
+                            <span className="text-[10px] font-normal text-[var(--text-muted)]">
+                              ({shelf.books.length} {shelf.books.length === 1 ? 'book' : 'books'})
+                            </span>
+                          </div>
+                          {shelf.icon === 'series' && shelf.id !== '__standalone__' && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openSeriesJiten(shelf.title);
+                              }}
+                              className="px-2 py-0.5 rounded text-[10px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/30 transition-colors flex items-center space-x-1"
+                              title={`Match "${shelf.title}" on Jiten.moe`}
+                            >
+                              <Sparkles className="w-2.5 h-2.5" />
+                              <span>⚡ Jiten Match</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -345,6 +534,15 @@ export const LibraryGrid: React.FC = () => {
                           '—'
                         )}
                       </td>
+                      <td className="py-2 px-3 text-center">
+                        {b.customFields?.['jiten_difficulty'] ? (
+                          <span className="font-bold text-amber-300 text-[11px] bg-amber-500/15 px-1.5 py-0.5 rounded border border-amber-500/30">
+                            ★ {parseFloat(b.customFields['jiten_difficulty']).toFixed(1)}
+                          </span>
+                        ) : (
+                          <span className="text-[var(--text-muted)] opacity-35">—</span>
+                        )}
+                      </td>
                       <td className="py-2 px-3 text-[var(--text-muted)] truncate max-w-xs">{b.authors || '—'}</td>
                       <td className="py-2 px-3 text-[var(--text-muted)] truncate max-w-xs">{b.imprint || b.publisher || '—'}</td>
                       <td className="py-2 px-3 text-[var(--text-muted)] font-mono text-[11px]">{b.isbn || '—'}</td>
@@ -359,7 +557,7 @@ export const LibraryGrid: React.FC = () => {
       );
     }
 
-    // SHELVES & GRID VIEW
+    // 4. SHELVES & GRID VIEW
     return (
       <div className="space-y-8 pb-4">
         {shelves.map((shelf) => (
@@ -373,6 +571,20 @@ export const LibraryGrid: React.FC = () => {
                     {shelf.books.length} {shelf.books.length === 1 ? 'book' : 'books'}
                   </span>
                 </div>
+
+                {shelf.icon === 'series' && shelf.id !== '__standalone__' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openSeriesJiten(shelf.title);
+                    }}
+                    className="px-2.5 py-1 rounded text-xs font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/30 transition-colors flex items-center space-x-1"
+                    title={`Match "${shelf.title}" on Jiten.moe`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>⚡ Jiten Match</span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -444,8 +656,17 @@ export const LibraryGrid: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Toggles: Visual Shelves, Hide Completed, Filter Exclusions */}
+        {/* Quick Toggles: Visual Shelves, Hide Completed, Filter Exclusions, Scan Folder */}
         <div className="flex items-center space-x-2">
+          <button
+            onClick={() => openScanModal()}
+            className="px-2.5 py-1 rounded bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 transition-opacity flex items-center space-x-1 shadow-sm"
+            title="Scan folder on disk to add EPUB books"
+          >
+            <FolderSearch className="w-3.5 h-3.5" />
+            <span>📁 Scan Folder</span>
+          </button>
+
           <button
             onClick={() => updateLibrarySettings({ enableShelves: !librarySettings.enableShelves })}
             className={`px-2 py-1 rounded text-xs border transition-colors flex items-center space-x-1 ${

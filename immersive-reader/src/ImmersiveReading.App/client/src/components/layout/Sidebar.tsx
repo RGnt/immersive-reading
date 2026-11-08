@@ -1,10 +1,20 @@
 import React from 'react';
 import { useLibraryStore } from '../../stores/useLibraryStore';
 import type { FolderNode } from '../../types/api';
-import { Folder, FolderOpen, Tag, BookCopy, RefreshCw } from 'lucide-react';
+import { Folder, FolderOpen, Tag, BookCopy, RefreshCw, FolderSearch } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
-  const { folders, activeFolderId, selectFolder, tags, selectedTagIds, toggleTag, totalBooks, fetchBooks } = useLibraryStore();
+  const {
+    folders,
+    activeFolderId,
+    selectFolder,
+    tags,
+    selectedTagIds,
+    toggleTag,
+    totalBooks,
+    fetchBooks,
+    openScanModal,
+  } = useLibraryStore();
 
   const renderFolderItem = (node: FolderNode, depth = 0) => {
     const isSelected = activeFolderId === node.folderId;
@@ -38,17 +48,27 @@ export const Sidebar: React.FC = () => {
     <aside className="sidebar w-64 shrink-0 bg-[var(--bg-primary)] border-r border-[var(--border-color)] flex flex-col h-full select-none text-sm">
       <div className="p-3 border-b border-[var(--border-color)] flex items-center justify-between">
         <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">Library</span>
-        <button
-          onClick={() => fetchBooks()}
-          className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-          title="Refresh Books"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center space-x-1.5">
+          <button
+            onClick={() => openScanModal()}
+            className="flex items-center space-x-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--accent-color)] text-black hover:opacity-90 shadow-sm transition-opacity"
+            title="Scan a directory for EPUB books"
+          >
+            <FolderSearch className="w-3 h-3" />
+            <span>Scan</span>
+          </button>
+          <button
+            onClick={() => fetchBooks()}
+            className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            title="Refresh Books"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-4">
-        <div>
+        <div className="space-y-1.5">
           <button
             onClick={() => selectFolder(null)}
             className={`w-full flex items-center justify-between px-2 py-1.5 rounded text-xs font-medium transition-colors ${
@@ -62,6 +82,15 @@ export const Sidebar: React.FC = () => {
               <span>All Books</span>
             </div>
             <span className="text-[10px]">{totalBooks}</span>
+          </button>
+
+          <button
+            onClick={() => openScanModal()}
+            className="w-full flex items-center space-x-2 px-2.5 py-1.5 rounded text-xs text-sky-400 hover:text-sky-300 hover:bg-sky-950/30 border border-dashed border-sky-500/40 transition-colors font-medium"
+            title="Scan a directory on disk to add books"
+          >
+            <FolderSearch className="w-3.5 h-3.5 text-sky-400" />
+            <span>Scan Folder for Books...</span>
           </button>
         </div>
 

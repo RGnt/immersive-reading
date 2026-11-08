@@ -62,12 +62,19 @@ export const BookInfoModal: React.FC = () => {
 
   // Jiten.moe Search State
   const [jitenQuery, setJitenQuery] = useState('');
+  const [jitenMediaType, setJitenMediaType] = useState<number | ''>(4); // Default to Novels / Light Novels
   const [isJitenSearching, setIsJitenSearching] = useState(false);
   const [jitenResults, setJitenResults] = useState<any[]>([]);
   const [jitenStatus, setJitenStatus] = useState<string | null>(null);
   const [hasDeckCsv, setHasDeckCsv] = useState(false);
   const [deckCsvFileName, setDeckCsvFileName] = useState<string | null>(null);
   const [isDownloadingDeck, setIsDownloadingDeck] = useState(false);
+  const [expandedVocabDeckId, setExpandedVocabDeckId] = useState<number | null>(null);
+  const [vocabPreview, setVocabPreview] = useState<Record<number, any[]>>({});
+  const [isLoadingVocab, setIsLoadingVocab] = useState(false);
+  const [expandedSubDecksId, setExpandedSubDecksId] = useState<number | null>(null);
+  const [subDecksMap, setSubDecksMap] = useState<Record<number, any[]>>({});
+  const [isLoadingSubDecks, setIsLoadingSubDecks] = useState(false);
 
   useEffect(() => {
     if (!activeBookDetail) return;
@@ -211,7 +218,10 @@ export const BookInfoModal: React.FC = () => {
     setIsJitenSearching(true);
     setJitenStatus(null);
     try {
-      const res = await rpc.call<any>('library.searchJitenMoe', { query });
+      const res = await rpc.call<any>('library.searchJitenMoe', {
+        query,
+        mediaType: jitenMediaType !== '' ? jitenMediaType : undefined,
+      });
       const items = res?.items || [];
       setJitenResults(items);
       if (items.length === 0) {
@@ -221,6 +231,44 @@ export const BookInfoModal: React.FC = () => {
       setJitenStatus(`Search failed: ${err.message || String(err)}`);
     } finally {
       setIsJitenSearching(false);
+    }
+  };
+
+  const handleToggleVocab = async (deckId: number) => {
+    if (expandedVocabDeckId === deckId) {
+      setExpandedVocabDeckId(null);
+      return;
+    }
+    setExpandedVocabDeckId(deckId);
+    if (!vocabPreview[deckId]) {
+      setIsLoadingVocab(true);
+      try {
+        const res = await rpc.call<any>('library.getJitenVocabularyPreview', { deckId, limit: 15 });
+        setVocabPreview((prev) => ({ ...prev, [deckId]: res?.words || [] }));
+      } catch (err: any) {
+        console.error('Failed to load vocab preview:', err);
+      } finally {
+        setIsLoadingVocab(false);
+      }
+    }
+  };
+
+  const handleToggleSubDecks = async (deckId: number) => {
+    if (expandedSubDecksId === deckId) {
+      setExpandedSubDecksId(null);
+      return;
+    }
+    setExpandedSubDecksId(deckId);
+    if (!subDecksMap[deckId]) {
+      setIsLoadingSubDecks(true);
+      try {
+        const res = await rpc.call<any>('library.getJitenDeckDetail', { deckId });
+        setSubDecksMap((prev) => ({ ...prev, [deckId]: res?.subDecks || [] }));
+      } catch (err: any) {
+        console.error('Failed to load sub-decks:', err);
+      } finally {
+        setIsLoadingSubDecks(false);
+      }
     }
   };
 
@@ -713,6 +761,17 @@ export const BookInfoModal: React.FC = () => {
                 </div>
 
                 <form onSubmit={handleJitenSearch} className="flex space-x-2">
+                  <select
+                    value={jitenMediaType}
+                    onChange={(e) => setJitenMediaType(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
+                    className="px-2.5 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
+                  >
+                    <option value="4">Novels / Light Novels</option>
+                    <option value="">All Formats</option>
+                    <option value="1">Manga</option>
+                    <option value="2">Visual Novels</option>
+                    <option value="3">Anime</option>
+                  </select>
                   <input
                     type="text"
                     value={jitenQuery}
@@ -738,71 +797,176 @@ export const BookInfoModal: React.FC = () => {
                 )}
 
                 {jitenResults.length > 0 && (
-                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1 pt-1">
-                    {jitenResults.map((item: any) => (
-                      <div
-                        key={item.deckId}
-                        className="p-3 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--accent-color)] transition-colors flex space-x-3 items-start"
-                      >
-                        {item.coverUrl && (
-                          <img
-                            src={item.coverUrl}
-                            alt=""
-                            className="w-12 h-16 rounded object-cover bg-black/40 shrink-0"
-                            onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
-                          />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <div className="font-semibold text-xs text-[var(--text-primary)] truncate">
-                            {item.originalTitle}
-                          </div>
-                          <div className="text-[11px] text-[var(--text-muted)] truncate">
-                            {[item.romajiTitle, item.englishTitle].filter(Boolean).join(' • ')}
-                          </div>
-                          <div className="flex items-center space-x-2.5 text-[10px] text-[var(--text-muted)] mt-1.5">
-                            {item.difficulty !== undefined && (
-                              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold">
-                                ★ Diff: {item.difficulty}/10
-                              </span>
+                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1 pt-1">
+                    {jitenResults.map((item: any) => {
+                      const isVocabOpen = expandedVocabDeckId === item.deckId;
+                      const isSubDecksOpen = expandedSubDecksId === item.deckId;
+                      const words = vocabPreview[item.deckId] || [];
+                      const subDecks = subDecksMap[item.deckId] || [];
+
+                      return (
+                        <div
+                          key={item.deckId}
+                          className="p-3.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--accent-color)]/60 transition-colors flex flex-col gap-2.5"
+                        >
+                          <div className="flex space-x-3 items-start">
+                            {item.coverUrl && (
+                              <img
+                                src={item.coverUrl}
+                                alt=""
+                                className="w-12 h-16 rounded object-cover bg-black/40 shrink-0 border border-white/10"
+                                onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
+                              />
                             )}
-                            <span>Words: {(item.wordCount || 0).toLocaleString()}</span>
-                            <span>Chars: {(item.characterCount || 0).toLocaleString()}</span>
-                            {item.childrenDeckCount > 0 && (
-                              <span className="text-[var(--accent-color)]">{item.childrenDeckCount} Volumes</span>
-                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-xs text-[var(--text-primary)] truncate">
+                                {item.originalTitle}
+                              </div>
+                              <div className="text-[11px] text-[var(--text-muted)] truncate">
+                                {[item.romajiTitle, item.englishTitle].filter(Boolean).join(' • ')}
+                              </div>
+                              <div className="flex items-center space-x-2.5 text-[10px] text-[var(--text-muted)] mt-1.5 flex-wrap gap-y-1">
+                                {item.difficulty !== undefined && item.difficulty !== null && (
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                                    ★ Diff: {item.difficulty.toFixed(1)}/10
+                                  </span>
+                                )}
+                                <span>Words: {(item.wordCount || 0).toLocaleString()}</span>
+                                <span>Chars: {(item.characterCount || 0).toLocaleString()}</span>
+                                {item.childrenDeckCount > 0 && (
+                                  <span className="text-[var(--accent-color)] font-semibold">
+                                    {item.childrenDeckCount} Volumes
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center space-x-2 mt-2 flex-wrap gap-y-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadDeck(item.deckId, item)}
+                                  disabled={isDownloadingDeck}
+                                  className="px-2.5 py-1 rounded bg-[var(--accent-color)] text-black text-[11px] font-semibold hover:opacity-90 flex items-center space-x-1"
+                                >
+                                  {isDownloadingDeck ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+                                  <span>⚡ Download Deck CSV</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => applyJitenDeck(item)}
+                                  className="px-2 py-1 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-[11px] hover:border-[var(--accent-color)]"
+                                >
+                                  Apply Metadata
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleVocab(item.deckId)}
+                                  className={`px-2 py-1 rounded border text-[11px] transition-colors ${
+                                    isVocabOpen
+                                      ? 'bg-sky-500/20 border-sky-400 text-sky-300'
+                                      : 'bg-[var(--bg-primary)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                  }`}
+                                >
+                                  📖 Vocab Preview
+                                </button>
+                                {item.childrenDeckCount > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleSubDecks(item.deckId)}
+                                    className={`px-2 py-1 rounded border text-[11px] transition-colors ${
+                                      isSubDecksOpen
+                                        ? 'bg-sky-500/20 border-sky-400 text-sky-300'
+                                        : 'bg-[var(--bg-primary)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                                    }`}
+                                  >
+                                    ▼ Volumes ({item.childrenDeckCount})
+                                  </button>
+                                )}
+                                {item.jitenUrl && (
+                                  <a
+                                    href={item.jitenUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-[11px] text-[var(--accent-color)] hover:underline inline-flex items-center space-x-0.5 ml-1"
+                                  >
+                                    <span>Jiten</span>
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                  </a>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex items-center space-x-2 mt-2">
-                            <button
-                              type="button"
-                              onClick={() => handleDownloadDeck(item.deckId, item)}
-                              disabled={isDownloadingDeck}
-                              className="px-2.5 py-1 rounded bg-[var(--accent-color)] text-black text-[11px] font-semibold hover:opacity-90 flex items-center space-x-1"
-                            >
-                              {isDownloadingDeck ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-                              <span>⚡ 1-Click Download CSV & Apply</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => applyJitenDeck(item)}
-                              className="px-2.5 py-1 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-[11px] hover:border-[var(--accent-color)]"
-                            >
-                              Apply Metadata Only
-                            </button>
-                            {item.jitenUrl && (
-                              <a
-                                href={item.jitenUrl}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[11px] text-[var(--accent-color)] hover:underline inline-flex items-center space-x-0.5 ml-1"
-                              >
-                                <span>View on jiten.moe</span>
-                                <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
-                            )}
-                          </div>
+
+                          {/* VOCABULARY PREVIEW DRAWER */}
+                          {isVocabOpen && (
+                            <div className="p-2.5 rounded bg-black/40 border border-[var(--border-color)] text-xs animate-in fade-in">
+                              <div className="font-semibold text-[11px] text-sky-300 uppercase mb-1.5 flex items-center justify-between">
+                                <span>Top 15 Vocabulary Words ({item.originalTitle})</span>
+                                {isLoadingVocab && <Loader2 className="w-3 h-3 animate-spin text-[var(--accent-color)]" />}
+                              </div>
+                              {words.length > 0 ? (
+                                <div className="max-h-48 overflow-y-auto border border-white/5 rounded">
+                                  <table className="w-full text-left text-[11px] border-collapse">
+                                    <thead>
+                                      <tr className="bg-black/30 border-b border-white/10 text-[var(--text-muted)] uppercase text-[9px]">
+                                        <th className="py-1 px-2">Word</th>
+                                        <th className="py-1 px-2">Reading</th>
+                                        <th className="py-1 px-2">Meaning</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                      {words.map((w: any, idx: number) => (
+                                        <tr key={idx} className="hover:bg-white/5">
+                                          <td className="py-1 px-2 font-medium text-[var(--text-primary)]">{w.expression || w.word || '—'}</td>
+                                          <td className="py-1 px-2 text-sky-300 font-mono">{w.reading || '—'}</td>
+                                          <td className="py-1 px-2 text-[var(--text-muted)] truncate max-w-xs">{w.meaning || w.gloss || '—'}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ) : !isLoadingVocab ? (
+                                <p className="text-[11px] text-[var(--text-muted)]">No vocabulary preview available for this deck.</p>
+                              ) : null}
+                            </div>
+                          )}
+
+                          {/* SUB-DECKS EXPLORER DRAWER */}
+                          {isSubDecksOpen && (
+                            <div className="p-2.5 rounded bg-black/40 border border-[var(--border-color)] text-xs animate-in fade-in space-y-2">
+                              <div className="font-semibold text-[11px] text-sky-300 uppercase flex items-center justify-between">
+                                <span>Volume Sub-Decks ({subDecks.length})</span>
+                                {isLoadingSubDecks && <Loader2 className="w-3 h-3 animate-spin text-[var(--accent-color)]" />}
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                                {subDecks.map((sub: any) => (
+                                  <div
+                                    key={sub.deckId}
+                                    className="p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] flex items-center justify-between"
+                                  >
+                                    <div className="min-w-0 flex-1 mr-2">
+                                      <div className="font-semibold text-[11px] text-[var(--text-primary)] truncate">
+                                        {sub.originalTitle || `Volume #${sub.deckId}`}
+                                      </div>
+                                      <div className="text-[10px] text-[var(--text-muted)] flex items-center space-x-1">
+                                        {sub.difficulty && <span className="text-amber-400 font-bold">★ {sub.difficulty.toFixed(1)}</span>}
+                                        <span>• {(sub.characterCount || 0).toLocaleString()} chars</span>
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDownloadDeck(sub.deckId, sub)}
+                                      disabled={isDownloadingDeck}
+                                      className="px-2 py-0.5 rounded bg-[var(--accent-color)] text-black text-[10px] font-semibold shrink-0 hover:opacity-90"
+                                    >
+                                      Apply Vol
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

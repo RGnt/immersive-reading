@@ -16,6 +16,9 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
 
   const isSelected = selectedBookIds.includes(book.bookId);
 
+  const jitenDiffRaw = book.customFields?.['jiten_difficulty'];
+  const jitenDiff = jitenDiffRaw ? parseFloat(jitenDiffRaw) : null;
+
   const coverUrl = book.coverCachePath
     ? `ir-app://covers/${book.bookId}.jpg`
     : '';
@@ -72,6 +75,23 @@ export const BookCard: React.FC<BookCardProps> = ({ book }) => {
           >
             <Sparkles className="w-3 h-3" />
             <span>STUDY</span>
+          </div>
+        )}
+
+        {jitenDiff !== null && !isNaN(jitenDiff) && (
+          <div
+            className={`absolute bottom-2 left-1.5 z-10 px-1.5 py-0.5 rounded text-[10px] font-bold border backdrop-blur-md shadow-sm ${
+              jitenDiff < 3.5
+                ? 'bg-emerald-950/85 text-emerald-300 border-emerald-500/40'
+                : jitenDiff < 6.0
+                ? 'bg-amber-950/85 text-amber-300 border-amber-500/40'
+                : jitenDiff < 8.0
+                ? 'bg-orange-950/85 text-orange-300 border-orange-500/40'
+                : 'bg-rose-950/85 text-rose-300 border-rose-500/40'
+            }`}
+            title={`Jiten.moe Difficulty Rating: ${jitenDiff.toFixed(2)} / 10`}
+          >
+            ★ {jitenDiff.toFixed(1)}
           </div>
         )}
 

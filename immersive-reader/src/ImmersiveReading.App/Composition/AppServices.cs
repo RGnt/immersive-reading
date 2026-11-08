@@ -259,14 +259,15 @@ public sealed class AppServices : IDisposable
 
     public IReadOnlyList<Rpc.IRpcModule> CreateRpcModules(
         Action<string>? sendMessageToUi = null,
-        Action<bool, string>? onSelfTestCompleted = null)
+        Action<bool, string>? onSelfTestCompleted = null,
+        Func<string?, string?>? folderPicker = null)
     {
         _forwardingEventSink.SetTarget(sendMessageToUi);
         var events = new Rpc.DelegateRpcEventSink(sendMessageToUi);
         return
         [
             new Rpc.Modules.BootstrapRpcModule(Library, Config, Paths.ExtractorBooksDir, DictDb),
-            new Rpc.Modules.LibraryRpcModule(Library, events),
+            new Rpc.Modules.LibraryRpcModule(Library, events, folderPicker),
             new Rpc.Modules.JitenRpcModule(Library),
             new Rpc.Modules.ReaderRpcModule(Library, BookScheme, LookupEngine, VocabTracker, Db, events),
             new Rpc.Modules.DictionaryRpcModule(DictDb, events: events),
