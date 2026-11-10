@@ -1,4 +1,5 @@
 using ImmersiveReading.App.Composition;
+using ImmersiveReading.App.Plugins;
 using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Config;
 using ImmersiveReading.Core.Extensions;
@@ -74,6 +75,21 @@ public sealed class AppServicesContainerTests : IDisposable
         var custom = services.ServiceProvider.GetService<TestCustomService>();
         Assert.NotNull(custom);
         Assert.Equal("injected-via-ioc", custom.Value);
+    }
+
+    [Fact]
+    public void Create_LoadsAllPluginsPolymorphicallyFromPluginCatalog()
+    {
+        var modules = PluginCatalog.CreateModules();
+        using var services = AppServices.Create(_paths, modules);
+
+        var pluginHost = services.PluginHostManager;
+        Assert.NotNull(pluginHost);
+
+        var plugins = pluginHost.Plugins;
+        Assert.Contains(plugins, p => p.Manifest.Id == "japanese");
+        Assert.Contains(plugins, p => p.Manifest.Id == "aiCompanion");
+        Assert.Contains(plugins, p => p.Manifest.Id == "posHighlighter");
     }
 
     public void Dispose()

@@ -20,6 +20,7 @@ public sealed class PluginConfigContext : IPluginConfigContext
 
     private JsonObject _defaultsJson = new();
     private JsonObject _mergedJson = new();
+    private JsonElement _cachedSnapshot;
     private JsonElement? _schemaJson;
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
@@ -73,6 +74,8 @@ public sealed class PluginConfigContext : IPluginConfigContext
         }
 
         _mergedJson = MergeJsonObjects(_defaultsJson, userOverrides);
+        using var snapshotDoc = JsonDocument.Parse(_mergedJson.ToJsonString());
+        _cachedSnapshot = snapshotDoc.RootElement.Clone();
     }
 
     public T Get<T>() where T : class, new()
@@ -87,7 +90,7 @@ public sealed class PluginConfigContext : IPluginConfigContext
     {
         lock (_sync)
         {
-            return JsonSerializer.Deserialize<JsonElement>(_mergedJson.ToJsonString());
+            return _cachedSnapshot.Clone();
         }
     }
 
@@ -102,7 +105,9 @@ public sealed class PluginConfigContext : IPluginConfigContext
         {
             var incomingObj = JsonNode.Parse(partialOrFullConfig.GetRawText())?.AsObject() ?? new JsonObject();
             _mergedJson = MergeJsonObjects(_mergedJson, incomingObj);
-            snapshot = JsonSerializer.Deserialize<JsonElement>(_mergedJson.ToJsonString());
+            using var snapshotDoc = JsonDocument.Parse(_mergedJson.ToJsonString());
+            _cachedSnapshot = snapshotDoc.RootElement.Clone();
+            snapshot = _cachedSnapshot.Clone();
             listeners = [.. _subscribers];
         }
 
@@ -114,27 +119,28 @@ public sealed class PluginConfigContext : IPluginConfigContext
         _onBroadcastConfigChanged(_pluginId, snapshot);
     }
 
-    public async ValueTask ResetToDefaultsAsync(CancellationToken ct = default)
+    public ValueTask ResetToDefaultsAsync(CancellationToken ct = default)
     {
         JsonElement snapshot;
         List<Action<JsonElement>> listeners;
 
         lock (_sync)
         {
-            _mergedJson = MergeJsonObjects(_defaultsJson, new JsonObject());
-            snapshot = JsonSerializer.Deserialize<JsonElement>(_mergedJson.ToJsonString());
+            _mergedJson = (JsonObject)_defaultsJson.DeepClone();
+            using var snapshotDoc = JsonDocument.Parse(_mergedJson.ToJsonString());
+            _cachedSnapshot = snapshotDoc.RootElement.Clone();
+            snapshot = _cachedSnapshot.Clone();
             listeners = [.. _subscribers];
         }
 
         if (File.Exists(_userConfigFilePath))
             File.Delete(_userConfigFilePath);
 
-        await Task.CompletedTask;
-
         foreach (var listener in listeners)
             listener(snapshot);
 
         _onBroadcastConfigChanged(_pluginId, snapshot);
+        return ValueTask.CompletedTask;
     }
 
     public IDisposable OnConfigChanged<T>(Action<T> onChanged) where T : class, new()
@@ -154,7 +160,7 @@ public sealed class PluginConfigContext : IPluginConfigContext
 
     private static JsonObject MergeJsonObjects(JsonObject baseObj, JsonObject overrides)
     {
-        var result = JsonNode.Parse(baseObj.ToJsonString())!.AsObject();
+        var result = (JsonObject)baseObj.DeepClone();
         foreach (var (key, value) in overrides)
         {
             if (value is JsonObject overrideChild && result[key] is JsonObject baseChild)

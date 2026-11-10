@@ -5,6 +5,7 @@ using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Extensions;
 using ImmersiveReading.Core.Library;
 using ImmersiveReading.Core.Plugins;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
 namespace ImmersiveReading.App.Tests;
@@ -96,6 +97,67 @@ public class UnifiedPluginSystemTests : IDisposable
 
         await cfgCtx.ResetToDefaultsAsync();
         Assert.Equal("qwen3-8b", cfgCtx.Get<TestSettings>().ModelId);
+    }
+
+    [Fact]
+    public async Task PluginConfigContext_DeepCloningAndCachedSnapshotPerformance()
+    {
+        var configDir = Path.Combine(_tempDir, "config-cache");
+        var defaultsStream = () => new MemoryStream(System.Text.Encoding.UTF8.GetBytes("""
+            { "endpointUrl": "http://localhost:8080", "modelId": "qwen3-8b", "timeout": 30 }
+            """));
+
+        var cfgCtx = new PluginConfigContext(
+            "cacheTestPlugin",
+            configDir,
+            assetName => assetName == "settings.defaults.json" ? defaultsStream() : null,
+            (pId, json) => { });
+
+        // Consecutive calls to GetRawJson return equivalent cached elements
+        var raw1 = cfgCtx.GetRawJson();
+        var raw2 = cfgCtx.GetRawJson();
+        Assert.Equal(raw1.GetProperty("endpointUrl").GetString(), raw2.GetProperty("endpointUrl").GetString());
+        Assert.Equal("qwen3-8b", raw1.GetProperty("modelId").GetString());
+
+        // Update mutates snapshot
+        using var doc = JsonDocument.Parse("""{ "timeout": 60 }""");
+        await cfgCtx.UpdateAsync(doc.RootElement);
+
+        var updatedRaw = cfgCtx.GetRawJson();
+        Assert.Equal(60, updatedRaw.GetProperty("timeout").GetInt32());
+        Assert.Equal("http://localhost:8080", updatedRaw.GetProperty("endpointUrl").GetString());
+
+        // Reset cleans up user config file
+        await cfgCtx.ResetToDefaultsAsync();
+        Assert.Equal(30, cfgCtx.GetRawJson().GetProperty("timeout").GetInt32());
+        string configFile = Path.Combine(configDir, "cacheTestPlugin.json");
+        Assert.False(File.Exists(configFile));
+    }
+
+    [Fact]
+    public void PluginModules_CanDeclareImmersivePlugins_Polymorphically()
+    {
+        var services = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        var module = new ImmersiveReading.Plugins.PosHighlighter.PosHighlighterModule();
+        module.ConfigureServices(services);
+        var provider = services.BuildServiceProvider();
+
+        var immersivePlugins = module.CreateImmersivePlugins(provider);
+        Assert.Single(immersivePlugins);
+        Assert.Equal(ImmersiveReading.Plugins.PosHighlighter.PosHighlighterPlugin.PluginIdValue, immersivePlugins[0].Manifest.Id);
+    }
+
+    [Fact]
+    public void PythonEnvironmentResolver_ResolvesExtractorDirAndPythonExe()
+    {
+        var resolver = ImmersiveReading.Core.Infrastructure.PythonEnvironmentResolver.Instance;
+        string? extractorDir = resolver.ResolveExtractorDir();
+        Assert.NotNull(extractorDir);
+        Assert.True(Directory.Exists(extractorDir));
+        Assert.True(File.Exists(Path.Combine(extractorDir, "pyproject.toml")) || Directory.Exists(Path.Combine(extractorDir, "immersive")));
+
+        string? pythonExe = resolver.ResolvePythonExe(extractorDir: extractorDir);
+        Assert.False(string.IsNullOrWhiteSpace(pythonExe));
     }
 
     [Fact]

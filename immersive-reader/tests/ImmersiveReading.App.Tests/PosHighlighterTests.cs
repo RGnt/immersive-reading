@@ -671,6 +671,32 @@ public class PosHighlighterTests : IDisposable
         public void Emit(string eventName, object data) => Emitted.Add((eventName, data));
     }
 
+    [Fact]
+    public void PosClassifier_FullPalette_ConjunctionAuxiliaryInterjection()
+    {
+        var tokConj = new AnalyzedToken(0, 3, "そして", "そして", "そして", "ソシテ", "ソシテ", "接続詞", "", "", RubySource.PluginGenerated, false, "*");
+        var tokAux = new AnalyzedToken(0, 2, "です", "です", "です", "デス", "デス", "助動詞", "", "", RubySource.PluginGenerated, false, "*");
+        var tokIntj = new AnalyzedToken(0, 2, "ああ", "ああ", "ああ", "アア", "アア", "感動詞", "", "", RubySource.PluginGenerated, false, "*");
+
+        Assert.Equal(PosCategory.Conjunction, PosClassifier.Classify(tokConj));
+        Assert.Equal(PosCategory.Auxiliary, PosClassifier.Classify(tokAux));
+        Assert.Equal(PosCategory.Interjection, PosClassifier.Classify(tokIntj));
+
+        var settings = new PosHighlighterSettings
+        {
+            ColorConjunction = "#fb7185",
+            ColorAuxiliary = "#38bdf8",
+            ColorInterjection = "#e879f9"
+        };
+        string css = PosDomEnrichmentStage.GenerateCss(settings);
+        Assert.Contains(".ir-tok.conjunction", css);
+        Assert.Contains("#fb7185", css);
+        Assert.Contains(".ir-tok.auxiliary", css);
+        Assert.Contains("#38bdf8", css);
+        Assert.Contains(".ir-tok.interjection", css);
+        Assert.Contains("#e879f9", css);
+    }
+
     private sealed class MockBookCatalog : IBookCatalog
     {
         public BookDetail? GetBookDetail(string bookId) => null;

@@ -1,13 +1,11 @@
 import React from 'react';
 import { useReaderStore } from '../../stores/useReaderStore';
-import { useCompanionStore } from '../../stores/useCompanionStore';
 import { useStudyPackStore } from '../../stores/useStudyPackStore';
 import { ReaderToolbarPluginSlot } from '../plugins/PluginSlots';
 import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
-  Bot,
   Sparkles,
   BookOpen,
   AlignVerticalSpaceAround,
@@ -40,7 +38,6 @@ export const ReaderTopBar: React.FC = () => {
     toggleChapterStudy,
   } = useReaderStore();
 
-  const openCompanion = useCompanionStore((s) => s.openCompanion);
   const openStudyPack = useStudyPackStore((s) => s.openDrawer);
 
   if (!bookDetail) return null;
@@ -187,16 +184,6 @@ export const ReaderTopBar: React.FC = () => {
         >
           <Sparkles className="w-3.5 h-3.5" />
           <span>Full Pack</span>
-        </button>
-
-        <button
-          onClick={() => openCompanion('quiz')}
-          id="btn-open-companion"
-          className="flex items-center space-x-1 px-2 py-1 rounded bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 shadow-sm"
-          title="AI Companion (Quiz & Chat)"
-        >
-          <Bot className="w-3.5 h-3.5" />
-          <span>AI Companion</span>
         </button>
 
         <ReaderToolbarPluginSlot />

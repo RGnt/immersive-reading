@@ -86,6 +86,27 @@
       "description": "Color for kanji and kana nouns (e.g. 本, 学校, 先生, 猫, 時間)",
       "default": "#93c5fd"
     },
+    "colorConjunction": {
+      "type": "string",
+      "format": "color",
+      "title": "Conjunctions (接続詞)",
+      "description": "Color for conjunctions (e.g. そして, しかし, だから, それで)",
+      "default": "#fb7185"
+    },
+    "colorAuxiliary": {
+      "type": "string",
+      "format": "color",
+      "title": "Auxiliary Verbs (助動詞)",
+      "description": "Color for auxiliary verbs (e.g. です, ます, ない, れる, られる, たい)",
+      "default": "#38bdf8"
+    },
+    "colorInterjection": {
+      "type": "string",
+      "format": "color",
+      "title": "Interjections (感動詞)",
+      "description": "Color for interjections (e.g. ああ, はい, いいえ, ええ, おはよう)",
+      "default": "#e879f9"
+    },
     "maxCacheSizeMb": {
       "type": "integer",
       "title": "Max POS Cache Size (MB)",

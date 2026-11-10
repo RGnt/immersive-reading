@@ -6,7 +6,6 @@ import { ReaderView } from './components/reader/ReaderView';
 import { BookInfoModal } from './components/library/BookInfoModal';
 import { ScanFolderModal } from './components/library/ScanFolderModal';
 import { SeriesJitenModal } from './components/library/SeriesJitenModal';
-import { AiCompanionDrawer } from './components/companion/AiCompanionDrawer';
 import { StudyPackDrawer } from './components/studypack/StudyPackDrawer';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { PluginModalHost } from './components/plugins/PluginSlots';
@@ -57,7 +56,6 @@ export const App: React.FC = () => {
       <BookInfoModal />
       <ScanFolderModal />
       <SeriesJitenModal />
-      <AiCompanionDrawer />
       <StudyPackDrawer />
       <SettingsModal />
       <PluginModalHost />

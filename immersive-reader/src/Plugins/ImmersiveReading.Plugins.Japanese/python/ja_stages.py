@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import csv
 import json
 import re
@@ -14,6 +15,25 @@ from immersive.sdk.stage import (
     PipelineStage,
     StudyItem,
 )
+
+
+@contextlib.contextmanager
+def managed_dictionary_db(ctx: Any = None):
+    """Context manager for safe, leak-free lifecycle management of dictionary SQLite connections."""
+    conn = _get_dictionaries_db(ctx)
+    try:
+        yield conn
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+# In-memory LRU / Memoization caches to prevent N+1 query overhead across chapters
+_WORD_RESOLUTION_CACHE: dict[tuple[str, str, str | None, str], tuple[str, str, str]] = {}
+_KANJI_DETAILS_CACHE: dict[str, dict[str, Any]] = {}
 
 
 def _load_csv_deck(deck_path: Path | None) -> dict[str, dict[str, str]]:
@@ -77,7 +97,12 @@ def _resolve_word_reading_and_meaning(
     1. CSV deck (Word, ReadingKana, Definitions)
     2. Yomitan dictionaries (reading & glossary)
     3. Lastly JMdict / KANJIDIC2 / Sudachi morphology
+    Uses in-memory cache to eliminate redundant SQLite queries across frequent words.
     """
+    cache_key = (lemma, surface, sudachi_reading, sudachi_pos)
+    if not csv_deck and cache_key in _WORD_RESOLUTION_CACHE:
+        return _WORD_RESOLUTION_CACHE[cache_key]
+
     # Priority 1: Prefer CSV deck
     for key in (lemma, surface):
         if key in csv_deck:
@@ -85,7 +110,9 @@ def _resolve_word_reading_and_meaning(
             reading = entry.get("reading") or sudachi_reading or ""
             meaning = entry.get("meaning") or ""
             if reading or meaning:
-                return reading, meaning, "CSV Deck"
+                res = (reading, meaning, "CSV Deck")
+                _WORD_RESOLUTION_CACHE[cache_key] = res
+                return res
 
     # Priority 2: Yomitan dictionaries (from dictionaries.db sources starting with yomitan-)
     if sqlite_conn:
@@ -104,7 +131,9 @@ def _resolve_word_reading_and_meaning(
             if row:
                 y_reading, y_gloss, y_title = row
                 reading = y_reading or sudachi_reading or ""
-                return reading, y_gloss or "", f"Yomitan ({y_title})"
+                res = (reading, y_gloss or "", f"Yomitan ({y_title})")
+                _WORD_RESOLUTION_CACHE[cache_key] = res
+                return res
         except Exception:
             pass
 
@@ -124,7 +153,9 @@ def _resolve_word_reading_and_meaning(
             if row:
                 jm_reading, jm_gloss, jm_title = row
                 reading = jm_reading or sudachi_reading or ""
-                return reading, jm_gloss or "", jm_title
+                res = (reading, jm_gloss or "", jm_title)
+                _WORD_RESOLUTION_CACHE[cache_key] = res
+                return res
         except Exception:
             pass
 
@@ -132,11 +163,16 @@ def _resolve_word_reading_and_meaning(
     fallback_meaning = sudachi_pos
     if sample_sentence:
         fallback_meaning += f": {sample_sentence}"
-    return sudachi_reading or "", fallback_meaning, "Sudachi"
+    res = (sudachi_reading or "", fallback_meaning, "Sudachi")
+    _WORD_RESOLUTION_CACHE[cache_key] = res
+    return res
 
 
 def _resolve_kanji_details(char: str, sqlite_conn: sqlite3.Connection | None) -> dict[str, Any]:
-    """Resolves kanji onyomi, kunyomi, primary meanings, and stroke count."""
+    """Resolves kanji onyomi, kunyomi, primary meanings, and stroke count with memoization."""
+    if char in _KANJI_DETAILS_CACHE:
+        return _KANJI_DETAILS_CACHE[char]
+
     if sqlite_conn:
         try:
             cur = sqlite_conn.cursor()
@@ -151,7 +187,7 @@ def _resolve_kanji_details(char: str, sqlite_conn: sqlite3.Connection | None) ->
                 on_list = json.loads(on_raw) if on_raw else []
                 kun_list = json.loads(kun_raw) if kun_raw else []
                 mean_list = json.loads(mean_raw) if mean_raw else []
-                return {
+                details = {
                     "character": char,
                     "onyomi": on_list,
                     "kunyomi": kun_list,
@@ -160,10 +196,12 @@ def _resolve_kanji_details(char: str, sqlite_conn: sqlite3.Connection | None) ->
                     "grade": grade,
                     "radical": radical,
                 }
+                _KANJI_DETAILS_CACHE[char] = details
+                return details
         except Exception:
             pass
 
-    return {
+    empty_details = {
         "character": char,
         "onyomi": [],
         "kunyomi": [],
@@ -172,6 +210,8 @@ def _resolve_kanji_details(char: str, sqlite_conn: sqlite3.Connection | None) ->
         "grade": None,
         "radical": None,
     }
+    _KANJI_DETAILS_CACHE[char] = empty_details
+    return empty_details
 
 
 def _find_yomitan_grammar_rules(sqlite_conn: sqlite3.Connection | None = None) -> list[dict[str, Any]]:
@@ -370,166 +410,160 @@ class JapaneseSudachiTokenizerStage(PipelineStage):
         # 1. Load CSV deck if provided (Priority 1)
         csv_deck = _load_csv_deck(ctx.deck_csv_path)
 
-        # 2. Connect to dictionaries.db for Yomitan & JMdict lookups (Priority 2 & 3)
-        db_conn = _get_dictionaries_db(ctx)
-
         chapter_words_map: dict[int, list[dict[str, Any]]] = {}
 
-        for ch_idx, chapter in enumerate(ctx.chapters):
-            text = chapter.text or ""
-            chapter_words_map[ch_idx] = []
-            if not text:
-                continue
+        # 2. Connect to dictionaries.db safely using context manager
+        with managed_dictionary_db(ctx) as db_conn:
+            for ch_idx, chapter in enumerate(ctx.chapters):
+                text = chapter.text or ""
+                chapter_words_map[ch_idx] = []
+                if not text:
+                    continue
 
-            sentences = [s.strip() for s in re.split(r"[。！？\n]+", text) if s.strip()]
-            ch_word_counts: dict[str, int] = {}
-            ch_word_items: dict[str, dict[str, Any]] = {}
+                sentences = [s.strip() for s in re.split(r"[。！？\n]+", text) if s.strip()]
+                ch_word_counts: dict[str, int] = {}
+                ch_word_items: dict[str, dict[str, Any]] = {}
 
-            for sent in sentences:
-                if tokenizer_obj is not None:
-                    morphemes = tokenizer_obj.tokenize(sent, split_mode)
-                    for m in morphemes:
-                        surface = m.surface()
-                        lemma = m.dictionary_form()
-                        raw_reading = m.reading_form()
-                        pos_tuple = m.part_of_speech()
-                        pos = pos_tuple[0] if pos_tuple else "UNK"
+                for sent in sentences:
+                    if tokenizer_obj is not None:
+                        morphemes = tokenizer_obj.tokenize(sent, split_mode)
+                        for m in morphemes:
+                            surface = m.surface()
+                            lemma = m.dictionary_form()
+                            raw_reading = m.reading_form()
+                            pos_tuple = m.part_of_speech()
+                            pos = pos_tuple[0] if pos_tuple else "UNK"
 
-                        if not surface.strip() or pos in ("補助記号", "空白"):
-                            continue
+                            if not surface.strip() or pos in ("補助記号", "空白"):
+                                continue
 
-                        # Resolve reading and definition according to priority:
-                        # 1. CSV deck -> 2. Yomitan -> 3. JMdict / KANJIDIC2
-                        reading, meaning, source_tag = _resolve_word_reading_and_meaning(
-                            lemma, surface, raw_reading, pos, sent, csv_deck, db_conn
-                        )
-
-                        token = ExtractedToken(
-                            surface=surface,
-                            lemma=lemma,
-                            reading=reading,
-                            pos=pos,
-                            chapter_index=ch_idx,
-                            sentence_text=sent,
-                            features={
-                                "pos_full": list(pos_tuple),
-                                "reading": reading,
-                                "source": source_tag,
-                            },
-                        )
-                        ctx.tokens.append(token)
-
-                        # Global study item
-                        item = ctx.study_items.get(lemma)
-                        if item is None:
-                            item = StudyItem(
-                                key=lemma,
-                                headword=surface,
-                                reading=reading,
-                                pos=meaning or pos,
-                                book_occurrences=1,
-                                sample_sentences=[sent],
+                            # Resolve reading and definition according to priority:
+                            # 1. CSV deck -> 2. Yomitan -> 3. JMdict / KANJIDIC2
+                            reading, meaning, source_tag = _resolve_word_reading_and_meaning(
+                                lemma, surface, raw_reading, pos, sent, csv_deck, db_conn
                             )
-                            item.metadata["chapters"] = [ch_idx]
-                            item.metadata["chapter_occurrences"] = {str(ch_idx): 1}
-                            item.metadata["source"] = source_tag
-                            item.metadata["meaning"] = meaning
-                            ctx.study_items[lemma] = item
-                        else:
-                            item.book_occurrences += 1
-                            ch_set = item.metadata.setdefault("chapters", [])
-                            if ch_idx not in ch_set:
-                                ch_set.append(ch_idx)
-                            ch_occ = item.metadata.setdefault("chapter_occurrences", {})
-                            ch_occ[str(ch_idx)] = ch_occ.get(str(ch_idx), 0) + 1
-                            if len(item.sample_sentences) < 3 and sent not in item.sample_sentences:
-                                item.sample_sentences.append(sent)
 
-                        # Chapter tracking
-                        ch_word_counts[lemma] = ch_word_counts.get(lemma, 0) + 1
-                        if lemma not in ch_word_items:
-                            ch_word_items[lemma] = {
-                                "lemma": lemma,
-                                "word": surface,
-                                "reading": reading,
-                                "partOfSpeech": pos,
-                                "definition": meaning,
-                                "source": source_tag,
-                                "sampleSentence": sent,
-                            }
-                else:
-                    words = re.findall(r"[\u4e00-\u9faf\u3040-\u309f\u30a0-\u30ff]+", sent)
-                    for w in words:
-                        reading, meaning, source_tag = _resolve_word_reading_and_meaning(
-                            w, w, None, "Word", sent, csv_deck, db_conn
-                        )
-                        token = ExtractedToken(
-                            surface=w,
-                            lemma=w,
-                            reading=reading,
-                            pos="Word",
-                            chapter_index=ch_idx,
-                            sentence_text=sent,
-                        )
-                        ctx.tokens.append(token)
-                        item = ctx.study_items.get(w)
-                        if item is None:
-                            item = StudyItem(
-                                key=w,
-                                headword=w,
+                            token = ExtractedToken(
+                                surface=surface,
+                                lemma=lemma,
                                 reading=reading,
-                                pos=meaning or "Word",
-                                book_occurrences=1,
-                                sample_sentences=[sent],
+                                pos=pos,
+                                chapter_index=ch_idx,
+                                sentence_text=sent,
+                                features={
+                                    "pos_full": list(pos_tuple),
+                                    "reading": reading,
+                                    "source": source_tag,
+                                },
                             )
-                            item.metadata["chapters"] = [ch_idx]
-                            item.metadata["chapter_occurrences"] = {str(ch_idx): 1}
-                            item.metadata["source"] = source_tag
-                            item.metadata["meaning"] = meaning
-                            ctx.study_items[w] = item
-                        else:
-                            item.book_occurrences += 1
-                            ch_set = item.metadata.setdefault("chapters", [])
-                            if ch_idx not in ch_set:
-                                ch_set.append(ch_idx)
-                            ch_occ = item.metadata.setdefault("chapter_occurrences", {})
-                            ch_occ[str(ch_idx)] = ch_occ.get(str(ch_idx), 0) + 1
-                            if len(item.sample_sentences) < 3 and sent not in item.sample_sentences:
-                                item.sample_sentences.append(sent)
+                            ctx.tokens.append(token)
 
-                        ch_word_counts[w] = ch_word_counts.get(w, 0) + 1
-                        if w not in ch_word_items:
-                            ch_word_items[w] = {
-                                "lemma": w,
-                                "word": w,
-                                "reading": reading,
-                                "partOfSpeech": "Word",
-                                "definition": meaning,
-                                "source": source_tag,
-                                "sampleSentence": sent,
-                            }
+                            # Global study item
+                            item = ctx.study_items.get(lemma)
+                            if item is None:
+                                item = StudyItem(
+                                    key=lemma,
+                                    headword=surface,
+                                    reading=reading,
+                                    pos=meaning or pos,
+                                    book_occurrences=1,
+                                    sample_sentences=[sent],
+                                )
+                                item.metadata["chapters"] = [ch_idx]
+                                item.metadata["chapter_occurrences"] = {str(ch_idx): 1}
+                                item.metadata["source"] = source_tag
+                                item.metadata["meaning"] = meaning
+                                ctx.study_items[lemma] = item
+                            else:
+                                item.book_occurrences += 1
+                                ch_set = item.metadata.setdefault("chapters", [])
+                                if ch_idx not in ch_set:
+                                    ch_set.append(ch_idx)
+                                ch_occ = item.metadata.setdefault("chapter_occurrences", {})
+                                ch_occ[str(ch_idx)] = ch_occ.get(str(ch_idx), 0) + 1
+                                if len(item.sample_sentences) < 3 and sent not in item.sample_sentences:
+                                    item.sample_sentences.append(sent)
 
-            # Build chapter word list sorted by occurrence count
-            ch_list = []
-            for lemma, info in sorted(ch_word_items.items(), key=lambda kv: ch_word_counts.get(kv[0], 0), reverse=True):
-                ch_list.append({
-                    "lemma": info["lemma"],
-                    "word": info["word"],
-                    "reading": info["reading"],
-                    "partOfSpeech": info["partOfSpeech"],
-                    "definition": info["definition"],
-                    "source": info["source"],
-                    "occurrences": ch_word_counts.get(lemma, 1),
-                    "sampleSentence": info["sampleSentence"],
-                })
-            chapter_words_map[ch_idx] = ch_list
+                            # Chapter tracking
+                            ch_word_counts[lemma] = ch_word_counts.get(lemma, 0) + 1
+                            if lemma not in ch_word_items:
+                                ch_word_items[lemma] = {
+                                    "lemma": lemma,
+                                    "word": surface,
+                                    "reading": reading,
+                                    "partOfSpeech": pos,
+                                    "definition": meaning,
+                                    "source": source_tag,
+                                    "sampleSentence": sent,
+                                }
+                    else:
+                        words = re.findall(r"[\u4e00-\u9faf\u3040-\u309f\u30a0-\u30ff]+", sent)
+                        for w in words:
+                            reading, meaning, source_tag = _resolve_word_reading_and_meaning(
+                                w, w, None, "Word", sent, csv_deck, db_conn
+                            )
+                            token = ExtractedToken(
+                                surface=w,
+                                lemma=w,
+                                reading=reading,
+                                pos="Word",
+                                chapter_index=ch_idx,
+                                sentence_text=sent,
+                            )
+                            ctx.tokens.append(token)
+                            item = ctx.study_items.get(w)
+                            if item is None:
+                                item = StudyItem(
+                                    key=w,
+                                    headword=w,
+                                    reading=reading,
+                                    pos=meaning or "Word",
+                                    book_occurrences=1,
+                                    sample_sentences=[sent],
+                                )
+                                item.metadata["chapters"] = [ch_idx]
+                                item.metadata["chapter_occurrences"] = {str(ch_idx): 1}
+                                item.metadata["source"] = source_tag
+                                item.metadata["meaning"] = meaning
+                                ctx.study_items[w] = item
+                            else:
+                                item.book_occurrences += 1
+                                ch_set = item.metadata.setdefault("chapters", [])
+                                if ch_idx not in ch_set:
+                                    ch_set.append(ch_idx)
+                                ch_occ = item.metadata.setdefault("chapter_occurrences", {})
+                                ch_occ[str(ch_idx)] = ch_occ.get(str(ch_idx), 0) + 1
+                                if len(item.sample_sentences) < 3 and sent not in item.sample_sentences:
+                                    item.sample_sentences.append(sent)
+
+                            ch_word_counts[w] = ch_word_counts.get(w, 0) + 1
+                            if w not in ch_word_items:
+                                ch_word_items[w] = {
+                                    "lemma": w,
+                                    "word": w,
+                                    "reading": reading,
+                                    "partOfSpeech": "Word",
+                                    "definition": meaning,
+                                    "source": source_tag,
+                                    "sampleSentence": sent,
+                                }
+
+                # Build chapter word list sorted by occurrence count
+                ch_list = []
+                for lemma, info in sorted(ch_word_items.items(), key=lambda kv: ch_word_counts.get(kv[0], 0), reverse=True):
+                    ch_list.append({
+                        "lemma": info["lemma"],
+                        "word": info["word"],
+                        "reading": info["reading"],
+                        "partOfSpeech": info["partOfSpeech"],
+                        "definition": info["definition"],
+                        "source": info["source"],
+                        "occurrences": ch_word_counts.get(lemma, 1),
+                        "sampleSentence": info["sampleSentence"],
+                    })
+                chapter_words_map[ch_idx] = ch_list
 
         ctx.artifacts["chapter_words"] = chapter_words_map
-        if db_conn:
-            try:
-                db_conn.close()
-            except Exception:
-                pass
 
 
 class JapaneseKanjiEnrichmentStage(PipelineStage):
@@ -546,8 +580,6 @@ class JapaneseKanjiEnrichmentStage(PipelineStage):
     ) -> None:
         ctx.emit_progress("ja.kanji_enrichment", "Enriching Japanese kanji metadata from KANJIDIC2...", 45)
 
-        db_conn = _get_dictionaries_db(ctx)
-
         # 1. Global vocabulary kanji metadata
         for key, item in ctx.study_items.items():
             kanji_chars = [c for c in item.headword if "\u4e00" <= c <= "\u9faf"]
@@ -562,53 +594,50 @@ class JapaneseKanjiEnrichmentStage(PipelineStage):
         # 2. Extract per-chapter kanji distribution with dictionary definitions (Source-grounded to book text)
         seen_kanji: set[str] = set()
         chapter_kanji_map: dict[int, list[dict[str, Any]]] = {}
-        for ch_idx, chapter in enumerate(ctx.chapters):
-            text = chapter.text or ""
-            kanji_counts: dict[str, int] = {}
-            kanji_words: dict[str, list[str]] = {}
 
-            # Strict source grounding: only kanji that actually appear in this chapter's text
-            for token in ctx.tokens:
-                if token.chapter_index == ch_idx:
-                    for char in token.surface:
+        with managed_dictionary_db(ctx) as db_conn:
+            for ch_idx, chapter in enumerate(ctx.chapters):
+                text = chapter.text or ""
+                kanji_counts: dict[str, int] = {}
+                kanji_words: dict[str, list[str]] = {}
+
+                # Strict source grounding: only kanji that actually appear in this chapter's text
+                for token in ctx.tokens:
+                    if token.chapter_index == ch_idx:
+                        for char in token.surface:
+                            if "\u4e00" <= char <= "\u9faf":
+                                kanji_counts[char] = kanji_counts.get(char, 0) + 1
+                                w_list = kanji_words.setdefault(char, [])
+                                if token.surface not in w_list and len(w_list) < 4:
+                                    w_list.append(token.surface)
+
+                if not kanji_counts and text:
+                    for char in text:
                         if "\u4e00" <= char <= "\u9faf":
                             kanji_counts[char] = kanji_counts.get(char, 0) + 1
-                            w_list = kanji_words.setdefault(char, [])
-                            if token.surface not in w_list and len(w_list) < 4:
-                                w_list.append(token.surface)
 
-            if not kanji_counts and text:
-                for char in text:
-                    if "\u4e00" <= char <= "\u9faf":
-                        kanji_counts[char] = kanji_counts.get(char, 0) + 1
+                kanji_list = []
+                for char, count in sorted(kanji_counts.items(), key=lambda kv: kv[1], reverse=True):
+                    is_first = char not in seen_kanji
+                    if is_first:
+                        seen_kanji.add(char)
 
-            kanji_list = []
-            for char, count in sorted(kanji_counts.items(), key=lambda kv: kv[1], reverse=True):
-                is_first = char not in seen_kanji
-                if is_first:
-                    seen_kanji.add(char)
-
-                info = _resolve_kanji_details(char, db_conn)
-                kanji_list.append({
-                    "character": char,
-                    "occurrences": count,
-                    "words": kanji_words.get(char, []),
-                    "codepointHex": f"{ord(char):04X}",
-                    "onyomi": info.get("onyomi", []),
-                    "kunyomi": info.get("kunyomi", []),
-                    "meanings": info.get("meanings", []),
-                    "strokeCount": info.get("strokeCount"),
-                    "grade": info.get("grade"),
-                    "firstAppearance": is_first,
-                })
-            chapter_kanji_map[ch_idx] = kanji_list
+                    info = _resolve_kanji_details(char, db_conn)
+                    kanji_list.append({
+                        "character": char,
+                        "occurrences": count,
+                        "words": kanji_words.get(char, []),
+                        "codepointHex": f"{ord(char):04X}",
+                        "onyomi": info.get("onyomi", []),
+                        "kunyomi": info.get("kunyomi", []),
+                        "meanings": info.get("meanings", []),
+                        "strokeCount": info.get("strokeCount"),
+                        "grade": info.get("grade"),
+                        "firstAppearance": is_first,
+                    })
+                chapter_kanji_map[ch_idx] = kanji_list
 
         ctx.artifacts["chapter_kanji"] = chapter_kanji_map
-        if db_conn:
-            try:
-                db_conn.close()
-            except Exception:
-                pass
 
 
 class JapaneseGrammarDetectionStage(PipelineStage):
@@ -626,264 +655,268 @@ class JapaneseGrammarDetectionStage(PipelineStage):
     ) -> None:
         ctx.emit_progress("ja.grammar", "Scanning for bilingual Yomitan & curated grammar rules...", 65)
 
-        db_conn = _get_dictionaries_db(ctx)
-        rules = _load_grammar_rules(db_conn)
         chapter_grammar_map: dict[int, list[dict[str, Any]]] = {}
 
-        compiled_rules: list[tuple[dict[str, Any], Any]] = []
-        for r in rules:
-            if "regex" in r:
-                try:
-                    compiled_rules.append((r, re.compile(r["regex"])))
-                except Exception:
-                    pass
+        with managed_dictionary_db(ctx) as db_conn:
+            rules = _load_grammar_rules(db_conn)
 
-        for ch_idx, chapter in enumerate(ctx.chapters):
-            text = chapter.text or ""
-            if not text:
-                chapter_grammar_map[ch_idx] = []
-                continue
+            compiled_rules: list[tuple[dict[str, Any], Any]] = []
+            for r in rules:
+                if "regex" in r:
+                    try:
+                        compiled_rules.append((r, re.compile(r["regex"])))
+                    except Exception:
+                        pass
 
-            sentences = [s.strip() for s in re.split(r"[。！？\n]+", text) if s.strip()]
-            rule_counts: dict[str, int] = {}
-            rule_examples: dict[str, list[str]] = {}
+            for ch_idx, chapter in enumerate(ctx.chapters):
+                text = chapter.text or ""
+                if not text:
+                    chapter_grammar_map[ch_idx] = []
+                    continue
 
-            for sent in sentences:
-                for rule_meta, rx in compiled_rules:
+                sentences = [s.strip() for s in re.split(r"[。！？\n]+", text) if s.strip()]
+                rule_counts: dict[str, int] = {}
+                rule_examples: dict[str, list[str]] = {}
+
+                for sent in sentences:
+                    for rule_meta, rx in compiled_rules:
+                        rule_id = rule_meta["id"]
+                        if rx.search(sent):
+                            rule_counts[rule_id] = rule_counts.get(rule_id, 0) + 1
+                            ex_list = rule_examples.setdefault(rule_id, [])
+                            if sent not in ex_list and len(ex_list) < 2:
+                                ex_list.append(sent)
+
+                g_list = []
+                for rule_meta, _ in compiled_rules:
                     rule_id = rule_meta["id"]
-                    if rx.search(sent):
-                        rule_counts[rule_id] = rule_counts.get(rule_id, 0) + 1
-                        ex_list = rule_examples.setdefault(rule_id, [])
-                        if sent not in ex_list and len(ex_list) < 2:
-                            ex_list.append(sent)
+                    count = rule_counts.get(rule_id, 0)
+                    if count > 0:
+                        g_list.append({
+                            "id": rule_id,
+                            "label": rule_meta.get("label", rule_id),
+                            "meaning": rule_meta.get("meaning", ""),
+                            "occurrences": count,
+                            "examples": rule_examples.get(rule_id, []),
+                            "note": rule_meta.get("note", ""),
+                            "source": rule_meta.get("source", "Grammar Rule"),
+                        })
 
-            g_list = []
-            for rule_meta, _ in compiled_rules:
-                rule_id = rule_meta["id"]
-                count = rule_counts.get(rule_id, 0)
-                if count > 0:
-                    g_list.append({
-                        "id": rule_id,
-                        "label": rule_meta.get("label", rule_id),
-                        "meaning": rule_meta.get("meaning", ""),
-                        "occurrences": count,
-                        "examples": rule_examples.get(rule_id, []),
-                        "note": rule_meta.get("note", ""),
-                        "source": rule_meta.get("source", "Grammar Rule"),
-                    })
-
-            g_list.sort(key=lambda g: g["occurrences"], reverse=True)
-            chapter_grammar_map[ch_idx] = g_list
+                g_list.sort(key=lambda g: g["occurrences"], reverse=True)
+                chapter_grammar_map[ch_idx] = g_list
 
         ctx.artifacts["chapter_grammar"] = chapter_grammar_map
-        if db_conn:
-            try:
-                db_conn.close()
-            except Exception:
-                pass
 
 
 # =========================================================================
-# PDF SECTION RENDERERS (Clean Japanese font, grouped by chapter)
+# PDF SECTION RENDERERS (Template Method Pattern, grouped by chapter)
 # =========================================================================
 
-class JapaneseVocabularySectionRenderer:
+class JapanesePdfSectionRendererBase:
+    """Base class applying Template Method pattern for Japanese PDF section renderers."""
+
+    section_id: str = ""
+    kind: str = ""
+    title: str = ""
+
+    def build_flowables(self, ctx: PipelineContext, style_sheet: Any) -> list[Any]:
+        try:
+            from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak
+            from reportlab.lib import colors
+        except ImportError:
+            return []
+
+        story = []
+        for ch_idx, chapter in enumerate(ctx.chapters):
+            items = self.get_chapter_items(ctx, ch_idx)
+            if not items:
+                continue
+
+            if story:
+                story.append(PageBreak())
+
+            ch_title = chapter.title or f"Chapter {ch_idx + 1}"
+            header_text = self.format_chapter_header(ch_idx, ch_title, len(items))
+            story.append(Paragraph(header_text, style_sheet["Heading2"]))
+            story.append(Spacer(1, 8))
+
+            table_data = [self.get_table_headers()]
+            for idx, item in enumerate(items):
+                table_data.append(self.format_row(idx + 1, item))
+
+            t = Table(table_data, colWidths=self.get_col_widths())
+            t.setStyle(
+                TableStyle(
+                    [
+                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(self.get_header_color())),
+                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                        ("FONTNAME", (0, 0), (-1, -1), "Japanese"),
+                        ("FONTSIZE", (0, 0), (-1, -1), self.get_font_size()),
+                        ("BOTTOMPADDING", (0, 0), (-1, 0), 4),
+                        ("TOPPADDING", (0, 0), (-1, -1), 3),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+                    ]
+                )
+            )
+            story.append(t)
+            story.append(Spacer(1, 14))
+
+        return story
+
+    def get_chapter_items(self, ctx: PipelineContext, ch_idx: int) -> list[Any]:
+        return []
+
+    def format_chapter_header(self, ch_idx: int, title: str, count: int) -> str:
+        return f"Chapter {ch_idx + 1} — {title} ({count} Items)"
+
+    def get_table_headers(self) -> list[str]:
+        return []
+
+    def format_row(self, row_num: int, item: Any) -> list[str]:
+        return []
+
+    def get_col_widths(self) -> list[int]:
+        return []
+
+    def get_header_color(self) -> str:
+        return "#1e293b"
+
+    def get_font_size(self) -> float:
+        return 8.0
+
+
+class JapaneseVocabularySectionRenderer(JapanesePdfSectionRendererBase):
     """PDF Section Renderer for Vocabulary Master Sheet, organized by chapter."""
 
     section_id = "ja.vocabulary_master"
     kind = "vocabulary"
     title = "Vocabulary Master Sheet by Chapter"
 
-    def build_flowables(self, ctx: PipelineContext, style_sheet: Any) -> list[Any]:
-        try:
-            from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak
-            from reportlab.lib import colors
-        except ImportError:
-            return []
-
-        story = []
+    def get_chapter_items(self, ctx: PipelineContext, ch_idx: int) -> list[Any]:
         chapter_words = ctx.artifacts.get("chapter_words", {})
+        return chapter_words.get(ch_idx, [])
 
-        for ch_idx, chapter in enumerate(ctx.chapters):
-            words = chapter_words.get(ch_idx, [])
-            if not words:
-                continue
+    def format_chapter_header(self, ch_idx: int, title: str, count: int) -> str:
+        return f"Chapter {ch_idx + 1} — {title} ({count} Words)"
 
-            if story:
-                story.append(PageBreak())
+    def get_table_headers(self) -> list[str]:
+        return ["Nr.", "Headword", "Reading", "PoS", "Count", "Definition / Context"]
 
-            ch_title = chapter.title or f"Chapter {ch_idx + 1}"
-            story.append(Paragraph(f"Chapter {ch_idx + 1} — {ch_title} ({len(words)} Words)", style_sheet["Heading2"]))
-            story.append(Spacer(1, 8))
+    def format_row(self, row_num: int, item: Any) -> list[str]:
+        meaning = item.get("definition", "") or item.get("partOfSpeech", "")
+        if len(meaning) > 42:
+            meaning = meaning[:39] + "..."
+        return [
+            str(row_num),
+            item.get("word", ""),
+            item.get("reading", ""),
+            item.get("partOfSpeech", ""),
+            str(item.get("occurrences", 1)),
+            meaning,
+        ]
 
-            table_data = [["Nr.", "Headword", "Reading", "PoS", "Count", "Definition / Context"]]
-            for idx, w in enumerate(words):
-                meaning = w.get("definition", "") or w.get("partOfSpeech", "")
-                if len(meaning) > 42:
-                    meaning = meaning[:39] + "..."
-                table_data.append([
-                    str(idx + 1),
-                    w.get("word", ""),
-                    w.get("reading", ""),
-                    w.get("partOfSpeech", ""),
-                    str(w.get("occurrences", 1)),
-                    meaning,
-                ])
+    def get_col_widths(self) -> list[int]:
+        return [24, 76, 76, 45, 36, 220]
 
-            t = Table(table_data, colWidths=[24, 76, 76, 45, 36, 220])
-            t.setStyle(
-                TableStyle(
-                    [
-                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1e293b")),
-                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                        ("FONTNAME", (0, 0), (-1, -1), "Japanese"),
-                        ("FONTSIZE", (0, 0), (-1, -1), 8),
-                        ("BOTTOMPADDING", (0, 0), (-1, 0), 4),
-                        ("TOPPADDING", (0, 0), (-1, -1), 3),
-                        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-                        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                    ]
-                )
-            )
-            story.append(t)
-            story.append(Spacer(1, 14))
+    def get_header_color(self) -> str:
+        return "#1e293b"
 
-        return story
+    def get_font_size(self) -> float:
+        return 8.0
 
 
-class JapaneseKanjiSectionRenderer:
+class JapaneseKanjiSectionRenderer(JapanesePdfSectionRendererBase):
     """PDF Section Renderer for Kanji Master Sheet, organized by chapter."""
 
     section_id = "ja.kanji_master"
     kind = "kanji"
     title = "Kanji Master Sheet by Chapter"
 
+    def __init__(self) -> None:
+        self._seen_renderer_kanji: set[str] = set()
+
     def build_flowables(self, ctx: PipelineContext, style_sheet: Any) -> list[Any]:
-        try:
-            from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak
-            from reportlab.lib import colors
-        except ImportError:
-            return []
+        # Reset seen set per compilation
+        self._seen_renderer_kanji = set()
+        return super().build_flowables(ctx, style_sheet)
 
-        story = []
+    def get_chapter_items(self, ctx: PipelineContext, ch_idx: int) -> list[Any]:
         chapter_kanji = ctx.artifacts.get("chapter_kanji", {})
-        seen_renderer_kanji = set()
+        kanji_list = chapter_kanji.get(ch_idx, [])
+        new_kanji = [
+            k for k in kanji_list
+            if k.get("character") and (k.get("firstAppearance", False) or k["character"] not in self._seen_renderer_kanji)
+        ]
+        for k in new_kanji:
+            self._seen_renderer_kanji.add(k["character"])
+        return new_kanji
 
-        for ch_idx, chapter in enumerate(ctx.chapters):
-            kanji_list = chapter_kanji.get(ch_idx, [])
-            # In the Kanji Master sheet: ONLY kanji from the book and chapter on their first appearance!
-            new_kanji = [
-                k for k in kanji_list
-                if k.get("character") and (k.get("firstAppearance", False) or k["character"] not in seen_renderer_kanji)
-            ]
-            for k in new_kanji:
-                seen_renderer_kanji.add(k["character"])
+    def format_chapter_header(self, ch_idx: int, title: str, count: int) -> str:
+        return f"Chapter {ch_idx + 1} — {title} ({count} New Kanji)"
 
-            if not new_kanji:
-                continue
+    def get_table_headers(self) -> list[str]:
+        return ["Nr.", "Kanji", "Meanings", "On / Kun", "Count", "In Chapter Words"]
 
-            if story:
-                story.append(PageBreak())
+    def format_row(self, row_num: int, item: Any) -> list[str]:
+        words_str = "、 ".join(item.get("words", []))
+        meanings_str = ", ".join(item.get("meanings", [])) if item.get("meanings") else f"U+{item.get('codepointHex', '')}"
+        readings_str = "/".join((item.get("onyomi", [])[:2] + item.get("kunyomi", [])[:2]))
+        return [
+            str(row_num),
+            item.get("character", ""),
+            meanings_str[:35],
+            readings_str[:25],
+            str(item.get("occurrences", 1)),
+            words_str[:30],
+        ]
 
-            ch_title = chapter.title or f"Chapter {ch_idx + 1}"
-            story.append(Paragraph(f"Chapter {ch_idx + 1} — {ch_title} ({len(new_kanji)} New Kanji)", style_sheet["Heading2"]))
-            story.append(Spacer(1, 8))
+    def get_col_widths(self) -> list[int]:
+        return [24, 45, 130, 95, 36, 140]
 
-            table_data = [["Nr.", "Kanji", "Meanings", "On / Kun", "Count", "In Chapter Words"]]
-            for idx, k in enumerate(new_kanji):
-                words_str = "、 ".join(k.get("words", []))
-                meanings_str = ", ".join(k.get("meanings", [])) if k.get("meanings") else f"U+{k.get('codepointHex', '')}"
-                readings_str = "/".join((k.get("onyomi", [])[:2] + k.get("kunyomi", [])[:2]))
-                table_data.append([
-                    str(idx + 1),
-                    k.get("character", ""),
-                    meanings_str[:35],
-                    readings_str[:25],
-                    str(k.get("occurrences", 1)),
-                    words_str[:30],
-                ])
+    def get_header_color(self) -> str:
+        return "#0f766e"
 
-            t = Table(table_data, colWidths=[24, 45, 130, 95, 36, 140])
-            t.setStyle(
-                TableStyle(
-                    [
-                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f766e")),
-                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                        ("FONTNAME", (0, 0), (-1, -1), "Japanese"),
-                        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-                        ("BOTTOMPADDING", (0, 0), (-1, 0), 4),
-                        ("TOPPADDING", (0, 0), (-1, -1), 3),
-                        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-                        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                    ]
-                )
-            )
-            story.append(t)
-            story.append(Spacer(1, 14))
-
-        return story
+    def get_font_size(self) -> float:
+        return 8.5
 
 
-class JapaneseGrammarSectionRenderer:
+class JapaneseGrammarSectionRenderer(JapanesePdfSectionRendererBase):
     """PDF Section Renderer for Grammar Master Sheet, organized by chapter."""
 
     section_id = "ja.grammar_master"
     kind = "grammar"
     title = "Grammar Master Sheet by Chapter"
 
-    def build_flowables(self, ctx: PipelineContext, style_sheet: Any) -> list[Any]:
-        try:
-            from reportlab.platypus import Paragraph, Spacer, Table, TableStyle, PageBreak
-            from reportlab.lib import colors
-        except ImportError:
-            return []
-
-        story = []
+    def get_chapter_items(self, ctx: PipelineContext, ch_idx: int) -> list[Any]:
         chapter_grammar = ctx.artifacts.get("chapter_grammar", {})
+        return chapter_grammar.get(ch_idx, [])
 
-        for ch_idx, chapter in enumerate(ctx.chapters):
-            grammar_list = chapter_grammar.get(ch_idx, [])
-            if not grammar_list:
-                continue
+    def format_chapter_header(self, ch_idx: int, title: str, count: int) -> str:
+        return f"Chapter {ch_idx + 1} — {title} ({count} Patterns Detected)"
 
-            if story:
-                story.append(PageBreak())
+    def get_table_headers(self) -> list[str]:
+        return ["Pattern", "Function & Meaning", "Count", "Sample Sentence from Chapter"]
 
-            ch_title = chapter.title or f"Chapter {ch_idx + 1}"
-            story.append(Paragraph(f"Chapter {ch_idx + 1} — {ch_title} ({len(grammar_list)} Patterns Detected)", style_sheet["Heading2"]))
-            story.append(Spacer(1, 8))
+    def format_row(self, row_num: int, item: Any) -> list[str]:
+        example = item.get("examples", [""])[0] if item.get("examples") else ""
+        if len(example) > 40:
+            example = example[:37] + "..."
+        return [
+            item.get("label", ""),
+            item.get("meaning", ""),
+            str(item.get("occurrences", 1)),
+            example,
+        ]
 
-            table_data = [["Pattern", "Function & Meaning", "Count", "Sample Sentence from Chapter"]]
-            for g in grammar_list:
-                example = g.get("examples", [""])[0] if g.get("examples") else ""
-                if len(example) > 40:
-                    example = example[:37] + "..."
-                table_data.append([
-                    g.get("label", ""),
-                    g.get("meaning", ""),
-                    str(g.get("occurrences", 1)),
-                    example,
-                ])
+    def get_col_widths(self) -> list[int]:
+        return [110, 140, 42, 185]
 
-            t = Table(table_data, colWidths=[110, 140, 42, 185])
-            t.setStyle(
-                TableStyle(
-                    [
-                        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#4338ca")),
-                        ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-                        ("FONTNAME", (0, 0), (-1, -1), "Japanese"),
-                        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
-                        ("BOTTOMPADDING", (0, 0), (-1, 0), 4),
-                        ("TOPPADDING", (0, 0), (-1, -1), 3),
-                        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-                        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
-                    ]
-                )
-            )
-            story.append(t)
-            story.append(Spacer(1, 14))
+    def get_header_color(self) -> str:
+        return "#4338ca"
 
-        return story
+    def get_font_size(self) -> float:
+        return 8.5
 
 
 class JapanesePdfSectionsStage(PipelineStage):

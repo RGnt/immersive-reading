@@ -213,10 +213,6 @@ public sealed class AppServices : IDisposable
             rpcEvents: forwardingSink);
 
         var unifiedPlugins = new List<IImmersivePlugin>();
-        if (languages.Resolve(LanguageCodes.Japanese) is IImmersivePlugin jaImmersive)
-        {
-            unifiedPlugins.Add(jaImmersive);
-        }
         foreach (var p in pluginHost.Plugins)
         {
             if (p is IImmersivePlugin ip && !unifiedPlugins.Contains(ip))
@@ -224,7 +220,16 @@ public sealed class AppServices : IDisposable
                 unifiedPlugins.Add(ip);
             }
         }
-        unifiedPlugins.Add(new ImmersiveReading.Plugins.PosHighlighter.PosHighlighterPlugin());
+        foreach (var module in moduleList)
+        {
+            foreach (var plugin in module.CreateImmersivePlugins(provider))
+            {
+                if (!unifiedPlugins.Contains(plugin))
+                {
+                    unifiedPlugins.Add(plugin);
+                }
+            }
+        }
 
         pluginHostManager.InitializePluginsAsync(unifiedPlugins).GetAwaiter().GetResult();
 

@@ -171,7 +171,7 @@ export const ShortcutsModal: React.FC = () => {
               </div>
             </div>
             <div className="shortcut-row">
-              <span className="text-[var(--text-primary)]">AI Companion (Quiz / Chat)</span>
+              <span className="text-[var(--text-primary)]">Plugin Drawers (e.g. Companion / Quiz)</span>
               <div className="shortcut-keys">
                 <kbd>a</kbd> or <kbd>c</kbd>
               </div>

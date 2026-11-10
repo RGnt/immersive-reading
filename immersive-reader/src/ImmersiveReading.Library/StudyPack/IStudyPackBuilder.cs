@@ -41,19 +41,7 @@ public sealed class PythonBuildRunner : IStudyPackBuilder
             return new StudyPackBuildResult(false, -1, "enrichement-extractor root directory not found.", null);
         }
 
-        string pythonExe = _configuredPythonExe ?? "";
-        if (string.IsNullOrWhiteSpace(pythonExe) || !File.Exists(pythonExe))
-        {
-            pythonExe = Path.Combine(_extractorRoot, ".venv", "Scripts", "python.exe");
-            if (!File.Exists(pythonExe))
-            {
-                pythonExe = Path.Combine(_extractorRoot, ".venv", "bin", "python");
-            }
-            if (!File.Exists(pythonExe))
-            {
-                pythonExe = "python3";
-            }
-        }
+        string pythonExe = ImmersiveReading.Core.Infrastructure.PythonEnvironmentResolver.Instance.ResolvePythonExe(_configuredPythonExe, _extractorRoot) ?? "python";
 
         string subCommand = readerOnly ? "enrich" : "build";
         var psi = new ProcessStartInfo

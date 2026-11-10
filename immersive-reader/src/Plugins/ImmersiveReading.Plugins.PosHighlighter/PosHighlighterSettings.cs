@@ -41,6 +41,15 @@ public sealed class PosHighlighterSettings
     [JsonPropertyName("colorNoun")]
     public string ColorNoun { get; set; } = "#93c5fd";
 
+    [JsonPropertyName("colorConjunction")]
+    public string ColorConjunction { get; set; } = "#fb7185";
+
+    [JsonPropertyName("colorAuxiliary")]
+    public string ColorAuxiliary { get; set; } = "#38bdf8";
+
+    [JsonPropertyName("colorInterjection")]
+    public string ColorInterjection { get; set; } = "#e879f9";
+
     [JsonPropertyName("maxCacheSizeMb")]
     public int MaxCacheSizeMb { get; set; } = 500;
 

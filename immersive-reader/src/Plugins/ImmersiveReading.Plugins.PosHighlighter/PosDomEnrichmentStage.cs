@@ -372,6 +372,9 @@ public sealed class PosDomEnrichmentStage : IDomEnrichmentStage
         AppendRule(".ir-tok.particle-multi, .particle-multi, .ir-tok.ir-pos-prt-multi, .ir-pos-prt-multi", s.ColorParticleMulti);
         AppendRule(".ir-tok.adverb, .adverb, .ir-tok.ir-pos-adverb, .ir-pos-adverb", s.ColorAdverb);
         AppendRule(".ir-tok.noun, .noun, .ir-tok.ir-pos-noun, .ir-pos-noun", s.ColorNoun);
+        AppendRule(".ir-tok.conjunction, .conjunction, .ir-tok.ir-pos-conj, .ir-pos-conj", s.ColorConjunction);
+        AppendRule(".ir-tok.auxiliary, .auxiliary, .ir-tok.ir-pos-aux, .ir-pos-aux", s.ColorAuxiliary);
+        AppendRule(".ir-tok.interjection, .interjection, .ir-tok.ir-pos-intj, .ir-pos-intj", s.ColorInterjection);
 
         return sb.ToString();
     }

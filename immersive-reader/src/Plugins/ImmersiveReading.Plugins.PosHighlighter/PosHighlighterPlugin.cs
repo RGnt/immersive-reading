@@ -6,7 +6,7 @@ using ImmersiveReading.Core.Plugins;
 
 namespace ImmersiveReading.Plugins.PosHighlighter;
 
-public sealed class PosHighlighterPlugin : IImmersivePlugin
+public sealed class PosHighlighterPlugin : IImmersivePlugin, IDisposable
 {
     public const string PluginIdValue = "posHighlighter";
 
@@ -121,13 +121,18 @@ public sealed class PosHighlighterPlugin : IImmersivePlugin
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask DisposeAsync()
+    public void Dispose()
     {
         _configSub?.Dispose();
         _configSub = null;
         _stage = null;
         _cache?.Dispose();
         _cache = null;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
         return ValueTask.CompletedTask;
     }
 }

@@ -62,6 +62,8 @@ public sealed class PluginHostManager : IPythonStageRegistryProvider, IAsyncDisp
         }
     }
 
+    public IReadOnlyCollection<IImmersivePlugin> Plugins => _plugins.Values.Select(e => e.Instance).ToList();
+
     public sealed class PluginEntry
     {
         public required IImmersivePlugin Instance { get; init; }

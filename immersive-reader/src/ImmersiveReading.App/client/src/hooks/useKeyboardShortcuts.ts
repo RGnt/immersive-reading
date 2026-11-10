@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useReaderStore } from '../stores/useReaderStore';
-import { useCompanionStore } from '../stores/useCompanionStore';
+import { usePluginStore } from '../stores/usePluginStore';
 import { useStudyPackStore } from '../stores/useStudyPackStore';
 import { useConfigStore } from '../stores/useConfigStore';
 
@@ -26,7 +26,7 @@ export const useKeyboardShortcuts = () => {
       preventDefault?: () => void;
     }) => {
       const reader = useReaderStore.getState();
-      const companion = useCompanionStore.getState();
+      const plugin = usePluginStore.getState();
       const studyPack = useStudyPackStore.getState();
       const config = useConfigStore.getState();
 
@@ -87,8 +87,12 @@ export const useKeyboardShortcuts = () => {
           reader.toggleBookmarks();
           return true;
         }
-        if (companion.isOpen) {
-          companion.closeCompanion();
+        if (plugin.activeDrawerId) {
+          plugin.toggleDrawer(null);
+          return true;
+        }
+        if (plugin.activeModal) {
+          plugin.closeModal();
           return true;
         }
         if (studyPack.isOpen) {
@@ -318,12 +322,15 @@ export const useKeyboardShortcuts = () => {
           reader.showToast('Font Size Reset (22px)');
           return true;
 
-        // Companion & Study Drawers
+        // Plugin Drawers
         case 'a':
         case 'c':
           e.preventDefault?.();
-          if (companion.isOpen) companion.closeCompanion();
-          else companion.openCompanion('quiz');
+          if (plugin.activeDrawerId) {
+            plugin.toggleDrawer(null);
+          } else if (plugin.drawers.length > 0) {
+            plugin.toggleDrawer(plugin.drawers[0].id);
+          }
           return true;
 
         case 's':

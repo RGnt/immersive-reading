@@ -60,6 +60,12 @@ public sealed class AiCompanionModule : IPluginModule
         return [plugin];
     }
 
+    public IReadOnlyList<IImmersivePlugin> CreateImmersivePlugins(IServiceProvider provider)
+    {
+        var plugin = provider.GetRequiredService<AiCompanionPlugin>();
+        return [plugin];
+    }
+
     public IReadOnlyList<IFeaturePlugin> CreateFeaturePlugins(PluginServices services)
     {
         var db = (services.Extra.GetService(typeof(IDbConnectionFactory)) as IDbConnectionFactory)

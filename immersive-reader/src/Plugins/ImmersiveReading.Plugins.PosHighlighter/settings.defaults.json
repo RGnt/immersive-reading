@@ -11,6 +11,9 @@
   "colorParticleMulti": "#2dd4bf",
   "colorAdverb": "#a3e635",
   "colorNoun": "#93c5fd",
+  "colorConjunction": "#fb7185",
+  "colorAuxiliary": "#38bdf8",
+  "colorInterjection": "#e879f9",
   "maxCacheSizeMb": 500,
   "usePythonNlp": true
 }

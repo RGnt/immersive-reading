@@ -4,69 +4,26 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using ImmersiveReading.Core.Abstractions;
+using ImmersiveReading.Core.Infrastructure;
 using ImmersiveReading.Core.Plugins;
 
 namespace ImmersiveReading.Plugins.PosHighlighter;
 
 public sealed class PythonChapterPosTagger
 {
-    private string? _cachedPythonExe;
-    private string? _cachedExtractorDir;
+    private readonly IPythonEnvironmentResolver _envResolver;
+
+    public PythonChapterPosTagger(IPythonEnvironmentResolver? envResolver = null)
+    {
+        _envResolver = envResolver ?? PythonEnvironmentResolver.Instance;
+    }
 
     public string? ResolvePythonExe(string? configuredPython = null)
-    {
-        if (!string.IsNullOrWhiteSpace(configuredPython) && File.Exists(configuredPython))
-        {
-            return configuredPython;
-        }
-
-        if (!string.IsNullOrEmpty(_cachedPythonExe) && File.Exists(_cachedPythonExe))
-        {
-            return _cachedPythonExe;
-        }
-
-        string? extractorDir = ResolveExtractorDir();
-        if (!string.IsNullOrEmpty(extractorDir))
-        {
-            string winVenv = Path.Combine(extractorDir, ".venv", "Scripts", "python.exe");
-            if (File.Exists(winVenv))
-            {
-                _cachedPythonExe = winVenv;
-                return winVenv;
-            }
-
-            string nixVenv = Path.Combine(extractorDir, ".venv", "bin", "python");
-            if (File.Exists(nixVenv))
-            {
-                _cachedPythonExe = nixVenv;
-                return nixVenv;
-            }
-        }
-
-        return "python";
-    }
+        => _envResolver.ResolvePythonExe(configuredPython);
 
     public string? ResolveExtractorDir()
-    {
-        if (!string.IsNullOrEmpty(_cachedExtractorDir) && Directory.Exists(_cachedExtractorDir))
-        {
-            return _cachedExtractorDir;
-        }
-
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null)
-        {
-            string candidate = Path.Combine(dir.FullName, "enrichement-extractor");
-            if (Directory.Exists(candidate))
-            {
-                _cachedExtractorDir = candidate;
-                return candidate;
-            }
-            dir = dir.Parent;
-        }
-
-        return null;
-    }
+        => _envResolver.ResolveExtractorDir();
 
     public (IReadOnlyDictionary<int, PosClassification>? Classifications, string? RawJson) TagChapter(
         string bookId,

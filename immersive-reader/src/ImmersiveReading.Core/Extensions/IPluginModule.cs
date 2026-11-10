@@ -37,6 +37,9 @@ public interface IPluginModule : IDisposable
     /// <summary>Called once, after the host service provider is built. Return the feature plugins to register.</summary>
     IReadOnlyList<IFeaturePlugin> CreateFeaturePlugins(IServiceProvider provider) => [];
 
+    /// <summary>Called once, after the host service provider is built. Return modern unified plugins (IImmersivePlugin).</summary>
+    IReadOnlyList<IImmersivePlugin> CreateImmersivePlugins(IServiceProvider provider) => [];
+
     /// <summary>Legacy overload for backwards compatibility.</summary>
     IReadOnlyList<IFeaturePlugin> CreateFeaturePlugins(PluginServices services) => [];
 }
