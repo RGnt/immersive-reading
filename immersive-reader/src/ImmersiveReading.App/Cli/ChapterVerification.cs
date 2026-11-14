@@ -21,7 +21,7 @@ public static partial class ChapterVerification
 
     private sealed record BookRow(string BookId, string Title, string Path, string FileName);
     private sealed record Result(string BookId, string Title, int Before, int After, int GeneratedBefore, int GeneratedAfter,
-        int MaxMembers, int BigChapters, string? Failure, string? CoverageProblem);
+        int MaxMembers, int BigChapters, string? Failure, string? CoverageProblem, string? ImageOnlyReason = null);
 
     public static int Run(AppServices services)
     {
@@ -58,6 +58,10 @@ public static partial class ChapterVerification
         var big = ok.Where(r => r.BigChapters > 0).OrderByDescending(r => r.MaxMembers).ToList();
         Console.WriteLine($"books with a chapter of more than {BigChapterFiles} files: {big.Count}");
         foreach (var r in big.Take(8)) Console.WriteLine($"  {r.MaxMembers} files in one chapter ({r.BigChapters} big): {r.Title}");
+        var imageOnly = ok.Where(r => r.ImageOnlyReason is not null).OrderBy(r => r.Title, StringComparer.OrdinalIgnoreCase).ToList();
+        Console.WriteLine($"image-only books already in the library (an import would now skip them, spec 13): {imageOnly.Count}");
+        foreach (var r in imageOnly.Take(10)) Console.WriteLine($"  {r.Title}: {r.ImageOnlyReason}");
+        if (imageOnly.Count > 10) Console.WriteLine($"  ... and {imageOnly.Count - 10} more");
         foreach (var r in failed.Take(5)) Console.WriteLine($"  FAILED {r.Title}: {r.Failure}");
         foreach (var r in mismatched.Take(5)) Console.WriteLine($"  COVERAGE {r.Title}: {r.CoverageProblem}");
 
@@ -115,7 +119,8 @@ public static partial class ChapterVerification
                 pkg.Chapters.Count(c => GeneratedTitle().IsMatch(c.Title)),
                 pkg.Chapters.Count == 0 ? 0 : pkg.Chapters.Max(c => c.Members.Count),
                 pkg.Chapters.Count(c => c.Members.Count > BigChapterFiles),
-                null, coverage);
+                null, coverage,
+                pkg.Content is { IsImageOnly: true } content ? content.Describe() : null);
         }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException)
         {

@@ -25,7 +25,8 @@ public sealed record ExtractedEpubPackage(
     string? CoverExtension,
     IReadOnlyList<BookChapterRecord> Chapters,
     int TotalCharCount,
-    bool StatsComputed
+    bool StatsComputed,
+    BookContentProfile? Content = null
 );
 
 public static class EpubMetadataExtractor
@@ -109,6 +110,9 @@ public static class EpubMetadataExtractor
             writingMode = rawOpf.WritingMode;
         }
 
+        // 4b. Profile the spine documents (image-only detection, spec 13)
+        var content = BookContentAnalyzer.Analyze(archive, spineHrefs, opfXml);
+
         // 5. Extract Cover Image
         var (coverBytes, coverExt) = EpubCoverExtractor.ExtractCoverImage(archive, opfDoc, manifest);
 
@@ -149,7 +153,8 @@ public static class EpubMetadataExtractor
             CoverExtension: coverExt,
             Chapters: chapters,
             TotalCharCount: totalChars,
-            StatsComputed: computeDeepChapterStats);
+            StatsComputed: computeDeepChapterStats,
+            Content: content);
     }
 
     // Public helper delegations for backwards compatibility

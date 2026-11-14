@@ -16,6 +16,7 @@
 | **[wiki/plugin-ui-authoring.md](wiki/plugin-ui-authoring.md)** | **Plugin UI work:** blob loader, supported imports, JSX build (`npm run build:plugins`), slots, debugging |
 | **[specs/11-plugin-ui-loading-spec.md](specs/11-plugin-ui-loading-spec.md)** | Plugin UI loading fix: evidence, design, [plan](specs/11-plugin-ui-loading-implementation-plan.md), [feature file](specs/features/09-plugin-ui-loading.feature) |
 | **[specs/12-chapter-grouping-spec.md](specs/12-chapter-grouping-spec.md)** | EPUB chapters: one chapter per ToC entry, merged rendering, lazy upgrade of existing books; [plan](specs/12-chapter-grouping-implementation-plan.md), [feature file](specs/features/10-chapter-grouping.feature) |
+| **[specs/13-image-only-book-skip-spec.md](specs/13-image-only-book-skip-spec.md)** | Image-only books (comics, scanned) are skipped at import with a warning; detection rule + evidence; [plan](specs/13-image-only-book-skip-implementation-plan.md), [feature file](specs/features/11-image-only-book-skip.feature) |
 | **[wiki/dotnet-code-review.md](wiki/dotnet-code-review.md)** | C# review log: fixes made, open findings, scan commands |
 | **[wiki/troubleshooting-and-lessons.md](wiki/troubleshooting-and-lessons.md)** | **Check first when something breaks:** symptom, why, cause, fix |
 | **[wiki/index.md](wiki/index.md)** | Topic index, glossary of domain terms, and cross-reference directory |

@@ -12,6 +12,13 @@
 
 ---
 
+### Image-only books (manga, scanned books) in the library (fixed at import: spec 13)
+- Why it mattered: image EPUBs have no text, so tokenizing, lookups, vocabulary and study packs are meaningless, yet they imported as hundreds of "chapters" (one chapter held 266 image files).
+- Cause: import had no notion of content type. Detection was also non-obvious: the share of image pages is a poor signal because picture books and diagram-heavy books sit at 50-90% (547 of 2,223 books).
+- Fix / how: at import, profile each spine document; image-only means >= 90% image pages AND < 80 visible characters per document (clean gap in the real data between 60 and 100). Scans skip and warn; single import throws `UnsupportedBookException`; nothing is written. 55 existing library books match (listed by `--verify-chapters`, untouched).
+- Prevent: `BookContentProfileTests` (boundaries 89/90% and 70/100 chars, light novels, fixed-layout-with-text), `ImageOnlyImportTests`. When changing thresholds, re-run the library analysis (`--verify-chapters`) and check the gap.
+- Method note: the thresholds came from analyzing every EPUB in the real library first (a throwaway Python script over the zips, 18 s), then confirmed that the C# detector flags the identical 55 books.
+
 ### Chapters: too many, split around images (fixed: spec 12)
 - Why it mattered: 39% of all chapter records in the library (34,278 of 88,460) were generated `(Part N)` / `(Illustration)` entries; books showed chapters like *text, (Illustration), (Part 2), (Illustration), (Part 3)*.
 - Cause: `ChapterListBuilder` emitted one chapter per **spine file**; files without their own ToC entry (split files like `part0005_split_001.html`, illustration pages) became continuation records.

@@ -106,6 +106,7 @@ Known limitation: duplicate `id` attributes across members are possible but harm
 - `ChapterStore` (shared insert) was extracted so import and upgrade write chapter rows identically.
 - Merged chapters mark `<img>` as `loading="lazy"` because image-only books produce chapters of 100+ files (22 of 2,223 books above 40 files; max 266).
 - Re-importing an existing book does not set version 2 (chapters are rewritten, version left as is); the lazy upgrade then runs once more, remapping by href, which is harmless.
+- The 100+-file chapters come from image-only books; [spec 13](13-image-only-book-skip-spec.md) now skips such books at import (existing ones are untouched and only reported).
 - Not done (out of scope): splitting one XHTML file into several chapters by ToC fragment; a cap/split for very large image-only chapters; bookmarks in continuation files keep text/note but lose their exact position.
 
 ## 5. Edge cases

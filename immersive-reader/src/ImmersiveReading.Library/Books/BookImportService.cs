@@ -57,6 +57,12 @@ public sealed class BookImportService
 
         var pkg = await EpubMetadataExtractor.ExtractFromFileAsync(fullPath, computeDeepChapterStats, ct).ConfigureAwait(false);
 
+        // Image-only books (comics, scanned books) are not supported (spec 13). Refuse before anything is written.
+        if (pkg.Content is { IsImageOnly: true } content)
+        {
+            throw new UnsupportedBookException(Path.GetFileName(fullPath), content);
+        }
+
         string bookDir = Path.GetDirectoryName(fullPath) ?? "";
         string epubFileName = Path.GetFileName(fullPath);
 
@@ -135,7 +141,9 @@ public sealed class BookImportService
         int importedNew = 0;
         int deduplicated = 0;
         int failed = 0;
+        int skippedImageOnly = 0;
         var errors = new ConcurrentBag<string>();
+        var warnings = new ConcurrentBag<string>();
 
         // Preload existing book IDs & SHA256s for fast deduplication detection
         var existingBookIds = LoadExistingBookIds();
@@ -169,6 +177,14 @@ public sealed class BookImportService
                             filePath,
                             computeDeepChapterStats: false,
                             ct: token).ConfigureAwait(false);
+
+                        // Skip image-only books: no cover cache, no upsert, not a failure (spec 13).
+                        if (pkg.Content is { IsImageOnly: true } content)
+                        {
+                            Interlocked.Increment(ref skippedImageOnly);
+                            warnings.Add(UnsupportedBookException.BuildMessage(Path.GetFileName(filePath), content));
+                            return;
+                        }
 
                         string? coverPath = SaveCoverToCache(pkg.BookId, pkg.CoverImageBytes, pkg.CoverExtension);
                         bool hasPack = CheckStudyPackExists(pkg.BookId);
@@ -243,12 +259,13 @@ public sealed class BookImportService
 
             string lastFile = chunk.Count > 0 ? Path.GetFileName(chunk[^1]) : "";
             progress?.Report(new ScanBatchProgress(
-                ScannedFiles: scanned + failed,
+                ScannedFiles: scanned + failed + skippedImageOnly,
                 TotalFiles: totalFiles,
                 ImportedNew: importedNew,
                 DeduplicatedExisting: deduplicated,
                 FailedFiles: failed,
-                CurrentFile: lastFile));
+                CurrentFile: lastFile,
+                SkippedFiles: skippedImageOnly));
         }
 
         sw.Stop();
@@ -258,7 +275,9 @@ public sealed class BookImportService
             DeduplicatedExisting: deduplicated,
             FailedFiles: failed,
             ElapsedSeconds: Math.Round(sw.Elapsed.TotalSeconds, 3),
-            Errors: errors.ToList());
+            Errors: errors.ToList(),
+            SkippedImageOnly: skippedImageOnly,
+            Warnings: warnings.OrderBy(w => w, StringComparer.OrdinalIgnoreCase).ToList());
     }
 
     public HashSet<string> LoadExistingBookIds()

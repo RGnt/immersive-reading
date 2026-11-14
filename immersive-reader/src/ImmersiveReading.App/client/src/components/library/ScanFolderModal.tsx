@@ -28,6 +28,7 @@ export const ScanFolderModal: React.FC = () => {
     importedNew?: number;
     deduplicatedExisting?: number;
     failedFiles?: number;
+    skippedFiles?: number;
     currentFile?: string;
   } | null>(null);
 
@@ -38,6 +39,9 @@ export const ScanFolderModal: React.FC = () => {
     failedFiles: number;
     elapsedSeconds: number;
     errors: string[];
+    /** Image-only books (comics, scanned books) deliberately not imported (spec 13). */
+    skippedImageOnly: number;
+    warnings: string[];
   } | null>(null);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -66,6 +70,7 @@ export const ScanFolderModal: React.FC = () => {
         importedNew: data.importedNew ?? data.ImportedNew ?? 0,
         deduplicatedExisting: data.deduplicatedExisting ?? data.DeduplicatedExisting ?? 0,
         failedFiles: data.failedFiles ?? data.FailedFiles ?? 0,
+        skippedFiles: data.skippedFiles ?? data.SkippedFiles ?? 0,
         currentFile: data.currentFile ?? data.CurrentFile ?? '',
       });
     });
@@ -118,6 +123,7 @@ export const ScanFolderModal: React.FC = () => {
       importedNew: 0,
       deduplicatedExisting: 0,
       failedFiles: 0,
+      skippedFiles: 0,
       currentFile: 'Starting scan...',
     });
 
@@ -137,6 +143,8 @@ export const ScanFolderModal: React.FC = () => {
           failedFiles: res.failedFiles ?? res.FailedFiles ?? 0,
           elapsedSeconds: res.elapsedSeconds ?? res.ElapsedSeconds ?? 0,
           errors: res.errors ?? res.Errors ?? [],
+          skippedImageOnly: res.skippedImageOnly ?? res.SkippedImageOnly ?? 0,
+          warnings: res.warnings ?? res.Warnings ?? [],
         });
         // Immediately reload library catalog and folders
         await loadBootstrap();
@@ -298,6 +306,7 @@ export const ScanFolderModal: React.FC = () => {
               <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)]">
                 <span>New: <b className="text-emerald-400 font-bold">{scanProgress?.importedNew ?? 0}</b></span>
                 <span>Existing: <b className="text-sky-400 font-bold">{scanProgress?.deduplicatedExisting ?? 0}</b></span>
+                <span>Skipped: <b className="text-amber-400 font-bold">{scanProgress?.skippedFiles ?? 0}</b></span>
                 <span>Failed: <b className="text-rose-400 font-bold">{scanProgress?.failedFiles ?? 0}</b></span>
               </div>
 
@@ -347,6 +356,29 @@ export const ScanFolderModal: React.FC = () => {
               {scanResult.failedFiles > 0 && (
                 <div className="text-[11px] text-rose-300">
                   ⚠️ {scanResult.failedFiles} files could not be imported (non-standard EPUB or corrupted).
+                </div>
+              )}
+
+              {scanResult.skippedImageOnly > 0 && (
+                <div
+                  role="alert"
+                  className="p-3 rounded-md bg-amber-950/40 border border-amber-700/60 text-[11px] text-amber-200 space-y-1.5"
+                >
+                  <div className="font-semibold">
+                    ⚠️ {scanResult.skippedImageOnly} image-only {scanResult.skippedImageOnly === 1 ? 'book was' : 'books were'} skipped
+                  </div>
+                  <p className="text-amber-200/80">
+                    Comics and scanned books have no text to read, so they are not imported. They belong in a comic
+                    format (.cbz or similar), which is not supported yet.
+                  </p>
+                  <details>
+                    <summary className="cursor-pointer text-amber-300 hover:text-amber-200">Show skipped files</summary>
+                    <ul className="mt-1 space-y-1 max-h-32 overflow-y-auto font-mono text-[10px] text-amber-100/90">
+                      {scanResult.warnings.map((w) => (
+                        <li key={w} className="break-words">{w}</li>
+                      ))}
+                    </ul>
+                  </details>
                 </div>
               )}
             </div>

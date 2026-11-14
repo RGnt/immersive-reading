@@ -18,7 +18,7 @@ public static class GroupingEpubFactory
     public static GroupingPage Illustration(string href) =>
         new(href.Replace('/', '_'), href, "<div><img src=\"../images/pic.jpg\" alt=\"\"/></div>");
 
-    public static byte[] BuildBytes(IReadOnlyList<GroupingPage> spine, bool withToc = true, string title = "Grouping Test")
+    public static byte[] BuildBytes(IReadOnlyList<GroupingPage> spine, bool withToc = true, string title = "Grouping Test", string extraMetadata = "")
     {
         var manifest = new StringBuilder();
         var itemrefs = new StringBuilder();
@@ -42,6 +42,7 @@ public static class GroupingEpubFactory
                 <dc:title>{title}</dc:title>
                 <dc:language>ja</dc:language>
                 <dc:identifier id="pub-id">urn:uuid:{Guid.NewGuid()}</dc:identifier>
+                {extraMetadata}
               </metadata>
               <manifest>
                 {(withToc ? """<item id="nav" href="text/nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>""" : "")}
@@ -68,9 +69,9 @@ public static class GroupingEpubFactory
         return builder.Build();
     }
 
-    public static ExtractedEpubPackage Extract(IReadOnlyList<GroupingPage> spine, bool deepStats = false, bool withToc = true)
+    public static ExtractedEpubPackage Extract(IReadOnlyList<GroupingPage> spine, bool deepStats = false, bool withToc = true, string extraMetadata = "")
     {
-        using var ms = new MemoryStream(BuildBytes(spine, withToc));
+        using var ms = new MemoryStream(BuildBytes(spine, withToc, extraMetadata: extraMetadata));
         return EpubMetadataExtractor.ExtractFromStream(ms, "grouping.epub", computeDeepChapterStats: deepStats);
     }
 }

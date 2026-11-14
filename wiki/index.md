@@ -10,6 +10,7 @@ Welcome to the **Immersive Reading LLM Wiki**. This knowledge base documents [`e
 
 - **[.NET Architecture (`dotnet-architecture.md`)](dotnet-architecture.md)**: C# solution layout, dependency rules, RPC bridge, persistence, plugins, conventions, how to add an RPC method.
 - **EPUB chapter grouping**: see [dotnet-architecture.md](dotnet-architecture.md) section 8 and [spec 12](../specs/12-chapter-grouping-spec.md) (one chapter per ToC entry, lazy upgrade, `--verify-chapters`).
+- **Image-only book skip**: see [dotnet-architecture.md](dotnet-architecture.md) section 9 and [spec 13](../specs/13-image-only-book-skip-spec.md) (comics/scanned books are skipped at import with a warning).
 - **[Plugin UI Authoring (`plugin-ui-authoring.md`)](plugin-ui-authoring.md)**: how plugin UIs load, import rules, JSX build step, slots, debugging, new-plugin checklist.
 - **[.NET Code Review Log (`dotnet-code-review.md`)](dotnet-code-review.md)**: what was fixed and why, open prioritized findings, scan commands.
 - **[Troubleshooting & Lessons (`troubleshooting-and-lessons.md`)](troubleshooting-and-lessons.md)**: past bugs and gotchas with cause and fix. **Check before debugging.**
