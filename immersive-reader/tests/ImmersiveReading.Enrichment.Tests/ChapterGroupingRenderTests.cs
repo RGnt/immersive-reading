@@ -117,6 +117,53 @@ public sealed class ChapterGroupingRenderTests : IDisposable
         Assert.Contains("class=\"ir-spine-part plain\"", html);
     }
 
+    // ---- illustration parts (spec 14) ----
+
+    [Fact]
+    public void Compose_MarksIllustrationParts_ButNotTextParts()
+    {
+        string svgPage = "<div class=\"main\"><svg width=\"100%\" height=\"100%\" viewBox=\"0 0 716 1024\"><image width=\"716\" height=\"1024\" xlink:href=\"../images/a.jpg\"/></svg></div>";
+        string imgPage = "<div><img src=\"../images/b.jpg\" alt=\"\"/></div>";
+        string html = ChapterDocumentComposer.Compose("b1",
+        [
+            new("OEBPS/text/a.xhtml", Page(svgPage)),
+            new("OEBPS/text/b.xhtml", Page(imgPage)),
+            new("OEBPS/text/c.xhtml", Page("<p>" + new string('あ', 120) + "</p>")),
+            new("OEBPS/text/d.xhtml", Page("<p>" + new string('い', 120) + "</p><img src=\"../images/d.jpg\"/>")),
+        ]);
+
+        Assert.Equal(2, CountOccurrences(html, ChapterDocumentComposer.ImagePartClass));
+        Assert.Contains($"class=\"ir-spine-part {ChapterDocumentComposer.ImagePartClass}\" data-ir-spine-href=\"OEBPS/text/a.xhtml\"", html);
+        Assert.Contains($"class=\"ir-spine-part {ChapterDocumentComposer.ImagePartClass}\" data-ir-spine-href=\"OEBPS/text/b.xhtml\"", html);
+        Assert.Contains("class=\"ir-spine-part\" data-ir-spine-href=\"OEBPS/text/c.xhtml\"", html);
+        Assert.Contains("class=\"ir-spine-part\" data-ir-spine-href=\"OEBPS/text/d.xhtml\"", html);   // text with an inline picture stays in flow
+    }
+
+    [Fact]
+    public void Compose_RubyAnnotationsDoNotMakeAnIllustrationPartATextPart()
+    {
+        string caption = "<p><ruby>漢<rt>" + new string('か', 80) + "</rt></ruby></p><img src=\"../images/a.jpg\"/>";
+        string html = ChapterDocumentComposer.Compose("b1",
+        [
+            new("OEBPS/text/a.xhtml", Page(caption)),
+            new("OEBPS/text/b.xhtml", Page("<p>x</p>")),
+        ]);
+
+        Assert.Equal(1, CountOccurrences(html, ChapterDocumentComposer.ImagePartClass));
+    }
+
+    [Fact]
+    public void Compose_KeepsTheBodyClassNextToTheIllustrationClass()
+    {
+        string html = ChapterDocumentComposer.Compose("b1",
+        [
+            new("OEBPS/text/a.xhtml", "<html><head></head><body class=\"fit\"><img src=\"../images/a.jpg\"/></body></html>"),
+            new("OEBPS/text/b.xhtml", "<html><head></head><body><img src=\"../images/b.jpg\"/></body></html>"),
+        ]);
+
+        Assert.Contains($"class=\"ir-spine-part {ChapterDocumentComposer.ImagePartClass} fit\"", html);
+    }
+
     // ---- scheme handler integration ----
 
     private async Task<string> ImportSplitBookAsync()

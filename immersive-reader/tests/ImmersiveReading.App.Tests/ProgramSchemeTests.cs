@@ -150,6 +150,32 @@ public sealed class ProgramSchemeTests : IDisposable
     }
 
     /// <summary>
+    /// Spec 14: the composer marks illustration parts with <c>ir-image-part</c> and the injected reader CSS must size
+    /// them to one page in both writing modes. The CSS is a plain shipped asset, so guard the contract here.
+    /// </summary>
+    [Fact]
+    public void ReaderCss_SizesIllustrationPartsToOnePage_InBothWritingModes()
+    {
+        string? dir = AppContext.BaseDirectory;
+        while (dir is not null && !Directory.Exists(Path.Combine(dir, "immersive-reader", "src", "Plugins")))
+        {
+            dir = Path.GetDirectoryName(dir);
+        }
+        Assert.NotNull(dir);
+
+        string css = File.ReadAllText(Path.Combine(dir!, "immersive-reader", "src", "ImmersiveReading.App",
+            "wwwroot", "assets", "ir-reader-injected.css"));
+        string part = ImmersiveReading.Enrichment.Dom.ChapterDocumentComposer.ImagePartClass;
+
+        Assert.Contains($"html.ir-mode-vertical section.{part}", css);
+        Assert.Contains($"html.ir-mode-horizontal section.{part}", css);
+        Assert.Contains($"section.{part} svg", css);
+        Assert.Contains($"section.{part} img", css);
+        Assert.Contains("--ir-page-w", css);
+        Assert.Contains("--ir-page-h", css);
+    }
+
+    /// <summary>
     /// Plugin UI is loaded as a blob module whose bare imports are rewritten (client/src/services/
     /// pluginImportRewriter.ts). A first-party ui.js that imports anything outside that supported list
     /// would fail at load time, so check it here against the list in the TypeScript source itself.

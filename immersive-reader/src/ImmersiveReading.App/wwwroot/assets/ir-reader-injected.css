@@ -127,3 +127,46 @@ img, svg {
   object-fit: contain;
 }
 
+
+/* Illustration pages inside a merged chapter (spec 14): each one is exactly one reader page.
+   Sized from viewport units because publisher wrappers (<div class="main">) have no definite size.
+   Vertical mode lays pages out right-to-left (horizontal scroll), horizontal mode stacks them. */
+html.ir-mode-vertical section.ir-image-part {
+  --ir-page-w: calc(100vw - 80px);   /* body margin is 40px left/right */
+  --ir-page-h: calc(100vh - 40px);   /* same height as the vertical body */
+}
+
+html.ir-mode-horizontal section.ir-image-part {
+  --ir-page-w: 100vw;
+  --ir-page-h: calc(100vh - 60px);
+  margin-inline: calc(50% - 50vw);   /* break out of the 800px text column */
+}
+
+html.ir-mode-horizontal {
+  overflow-x: hidden;                /* 100vw includes the scrollbar */
+}
+
+section.ir-image-part {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--ir-page-w);
+  height: var(--ir-page-h);
+  overflow: hidden;
+}
+
+section.ir-image-part svg {
+  display: block;
+  width: var(--ir-page-w);
+  height: var(--ir-page-h);
+  max-width: none;
+  max-height: none;                  /* the SVG viewBox letterboxes the picture (preserveAspectRatio meet) */
+}
+
+section.ir-image-part img {
+  display: block;
+  max-width: var(--ir-page-w);
+  max-height: var(--ir-page-h);
+  object-fit: contain;
+}

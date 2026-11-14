@@ -18,6 +18,9 @@ public static class ChapterDocumentComposer
 {
     public const string PartClass = "ir-spine-part";
 
+    /// <summary>Extra class on a part that is a full-page illustration (spec 14); the reader CSS sizes it to one page.</summary>
+    public const string ImagePartClass = "ir-image-part";
+
     public static string Compose(string bookId, IReadOnlyList<ChapterMemberSource> members)
     {
         if (members.Count == 0) throw new ArgumentException("A chapter needs at least one member.", nameof(members));
@@ -83,11 +86,19 @@ public static class ChapterDocumentComposer
     {
         var section = owner.CreateElement("section");
         string bodyClass = sourceBody?.GetAttribute("class") ?? "";
-        section.SetAttribute("class", string.IsNullOrWhiteSpace(bodyClass) ? PartClass : $"{PartClass} {bodyClass}");
+        string partClass = IsIllustrationPage(sourceBody) ? $"{PartClass} {ImagePartClass}" : PartClass;
+        section.SetAttribute("class", string.IsNullOrWhiteSpace(bodyClass) ? partClass : $"{partClass} {bodyClass}");
         section.SetAttribute("data-ir-spine-href", href);
         string? style = sourceBody?.GetAttribute("style");
         if (!string.IsNullOrWhiteSpace(style)) section.SetAttribute("style", style);
         return section;
+    }
+
+    /// <summary>An image page by the same definition as spec 13: an image element and next to no visible text (ruby excluded).</summary>
+    private static bool IsIllustrationPage(IElement? body)
+    {
+        if (body is null || body.QuerySelector("img, svg, image") is null) return false;
+        return BookContentAnalyzer.CountVisibleChars(body.InnerHtml) <= ImageOnlyPolicy.ImagePageMaxChars;
     }
 
     private static bool IsStyleResource(IElement node) =>
