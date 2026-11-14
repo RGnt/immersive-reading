@@ -17,6 +17,11 @@ public static class Program
             return SmokeTest.RunAsync(services).GetAwaiter().GetResult();
         }
 
+        if (args.Contains("--verify-chapters", StringComparer.OrdinalIgnoreCase))
+        {
+            return ChapterVerification.Run(services);
+        }
+
         if (args.Contains("--verify-reader", StringComparer.OrdinalIgnoreCase))
         {
             return ReaderVerification.RunAsync(services, args).GetAwaiter().GetResult();

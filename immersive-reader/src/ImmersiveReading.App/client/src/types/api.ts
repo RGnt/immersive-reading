@@ -145,6 +145,8 @@ export interface BootstrapState {
 export interface ChapterSummary {
   chapterIndex: number;
   spineHref: string;
+  /** Every spine file rendered in this chapter, primary first; absent/null for single-file or legacy rows. */
+  memberSpineHrefs?: string[] | null;
   title: string;
   charCount: number;
   readProgressPercent: number;

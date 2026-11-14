@@ -56,7 +56,29 @@ public sealed class LibraryDatabase : IDbConnectionFactory, IDisposable
         cmd.CommandText = SchemaSql;
         cmd.ExecuteNonQuery();
 
+        // SchemaSql only creates missing tables. Columns added after a database already exists are
+        // added here, idempotently. (LibraryMigrations.All is not applied anywhere; do not rely on it.)
+        EnsureColumn(conn, "books", "chapter_model_version", "INTEGER NOT NULL DEFAULT 1");
+        EnsureColumn(conn, "book_chapters", "member_spine_hrefs", "TEXT NOT NULL DEFAULT '[]'");
+
         SeedDefaultCustomFields(conn);
+    }
+
+    private static void EnsureColumn(SqliteConnection conn, string table, string column, string definition)
+    {
+        using (var info = conn.CreateCommand())
+        {
+            info.CommandText = $"PRAGMA table_info({table});";
+            using var r = info.ExecuteReader();
+            while (r.Read())
+            {
+                if (string.Equals(r.GetString(1), column, StringComparison.OrdinalIgnoreCase)) return;
+            }
+        }
+
+        using var alter = conn.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition};";
+        alter.ExecuteNonQuery();
     }
 
     private static void SeedDefaultCustomFields(SqliteConnection conn)
@@ -142,6 +164,7 @@ public sealed class LibraryDatabase : IDbConnectionFactory, IDisposable
             chapter_count       INTEGER NOT NULL DEFAULT 0,
             total_char_count    INTEGER NOT NULL DEFAULT 0,
             stats_computed      INTEGER NOT NULL DEFAULT 0,
+            chapter_model_version INTEGER NOT NULL DEFAULT 1,
             writing_mode        TEXT NOT NULL DEFAULT 'auto',
             added_at_utc        TEXT NOT NULL,
             updated_at_utc      TEXT NOT NULL,
@@ -230,6 +253,7 @@ public sealed class LibraryDatabase : IDbConnectionFactory, IDisposable
             char_count          INTEGER NOT NULL DEFAULT 0,
             cumulative_chars    INTEGER NOT NULL DEFAULT 0,
             is_excluded         INTEGER NOT NULL DEFAULT 0,
+            member_spine_hrefs  TEXT NOT NULL DEFAULT '[]',
             PRIMARY KEY (book_id, chapter_index)
         );
 

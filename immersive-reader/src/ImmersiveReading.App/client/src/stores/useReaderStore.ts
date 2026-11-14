@@ -179,10 +179,16 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     const { chapters, bookDetail } = get();
     if (!bookDetail) return;
 
+    // A chapter is one ToC entry plus its member spine files (spec 12): links to a member file open the
+    // owning chapter, and everything keyed by spineHref (progress, iframe, insights) uses the primary href.
     let index = chapterIndex;
+    let effectiveHref = spineHref;
     if (index === undefined) {
-      index = chapters.findIndex((c) => c.spineHref === spineHref);
+      index = chapters.findIndex(
+        (c) => c.spineHref === spineHref || (c.memberSpineHrefs ?? []).includes(spineHref)
+      );
       if (index === -1) index = 0;
+      else effectiveHref = chapters[index].spineHref;
     }
 
     let html = preloadedHtml;
@@ -199,7 +205,7 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
     }
 
     set({
-      currentSpineHref: spineHref,
+      currentSpineHref: effectiveHref,
       currentChapterIndex: index,
       chapterHtml: html || '',
       popover: { ...get().popover, isOpen: false },

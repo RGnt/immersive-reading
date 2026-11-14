@@ -19,6 +19,7 @@ public sealed class LibraryManager : IBookCatalog
     private readonly BookQueryService _queries;
     private readonly BookMetadataService _metadata;
     private readonly BookImportService _import;
+    private readonly ChapterModelUpgrader _chapterUpgrader;
 
     public LibraryManager(LibraryDatabase db, string? enrichmentExtractorOutputDir = null, TimeProvider? timeProvider = null)
     {
@@ -27,6 +28,7 @@ public sealed class LibraryManager : IBookCatalog
         _folders = new FolderService(db, _customFields, timeProvider);
         _queries = new BookQueryService(db, _tags, _customFields);
         _metadata = new BookMetadataService(db, _queries, _tags, _customFields, timeProvider);
+        _chapterUpgrader = new ChapterModelUpgrader(db);
         _import = new BookImportService(db, _folders, _tags, _customFields, _queries, enrichmentExtractorOutputDir, timeProvider);
     }
 
@@ -57,7 +59,12 @@ public sealed class LibraryManager : IBookCatalog
     public PagedBookListResult ListBooks(BookListQuery query) => _queries.ListBooks(query);
     public BookSummary? GetBookSummary(string bookId) => _queries.GetBookSummary(bookId);
     public string? GetEpubFilePath(string bookId) => _queries.GetEpubFilePath(bookId);
-    public BookDetail? GetBookDetail(string bookId) => _queries.GetBookDetail(bookId);
+    public BookDetail? GetBookDetail(string bookId)
+    {
+        // Legacy books are converted to one-chapter-per-ToC-entry the first time they are read (spec 12).
+        _chapterUpgrader.EnsureCurrent(bookId);
+        return _queries.GetBookDetail(bookId);
+    }
 
     // ---- Book metadata & lifecycle ----
 

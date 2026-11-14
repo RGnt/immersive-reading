@@ -69,6 +69,28 @@ public static class ReaderVerification
             .ConfigureAwait(false);
 
         var detail = services.Library.GetBookDetail(bookId)!;
+
+        // Spec 12: chapters follow the ToC. No generated "(Part N)" / "(Illustration)" records, and any
+        // continuation file of a multi-file chapter must resolve to its owning chapter's merged document.
+        var generated = detail.Chapters.Where(c =>
+            System.Text.RegularExpressions.Regex.IsMatch(c.Title, @"\((Part \d+|Illustration)\)")).ToList();
+        if (generated.Count > 0)
+        {
+            Console.Error.WriteLine($"FAIL: {generated.Count} generated continuation chapters remain, e.g. '{generated[0].Title}'.");
+            return 1;
+        }
+
+        var multiFile = detail.Chapters.Where(c => c.Members.Count > 1).ToList();
+        if (multiFile.Count > 0)
+        {
+            var sample = multiFile[0];
+            var viaMember = services.BookScheme.GetEnrichedChapter(bookId, sample.Members[1]);
+            if (viaMember is null || !string.Equals(viaMember.TokenMap.ChapterHref, sample.SpineHref, StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Error.WriteLine($"FAIL: member '{sample.Members[1]}' did not resolve to chapter '{sample.SpineHref}'.");
+                return 1;
+            }
+        }
         var textChapter = detail.Chapters.FirstOrDefault(c => c.CharCount > 50 || c.ChapterIndex == 1) ?? detail.Chapters[0];
         string chJson = await dispatcher
             .DispatchJsonAsync($$$"""{"id":"v-3","method":"reader.getChapterContent","params":{"bookId":"{{{bookId}}}","spineHref":"{{{textChapter.SpineHref}}}"}}""")
@@ -123,7 +145,7 @@ public static class ReaderVerification
             return 1;
         }
 
-        Console.WriteLine($"VERIFY_READER_OK: book={bookId} ({detail.Summary.Title}), chapter={textChapter.SpineHref}, tokens={enriched.TokenMap.Tokens.Count}, lookupTop={lookupRes.Terms[0].Expression}[{lookupRes.Terms[0].Reading}], kanjiCards={lookupRes.Kanji.Count}, masterPdfs={studyPack.MasterPdfs.Count}, vocabSets={studyPack.VocabularySets.Count}");
+        Console.WriteLine($"VERIFY_READER_OK: book={bookId} ({detail.Summary.Title}), chapter={textChapter.SpineHref}, tokens={enriched.TokenMap.Tokens.Count}, lookupTop={lookupRes.Terms[0].Expression}[{lookupRes.Terms[0].Reading}], kanjiCards={lookupRes.Kanji.Count}, masterPdfs={studyPack.MasterPdfs.Count}, vocabSets={studyPack.VocabularySets.Count}, chapters={detail.Chapters.Count} (multiFile={multiFile.Count})");
         return 0;
     }
 }

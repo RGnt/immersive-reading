@@ -156,7 +156,8 @@ public sealed class BookQueryService : IBookCatalog
         {
             chCmd.CommandText = """
                 SELECT chapter_index, chapter_id, title, spine_href, fragment_id,
-                       end_spine_href, end_fragment_id, char_count, cumulative_chars, is_excluded
+                       end_spine_href, end_fragment_id, char_count, cumulative_chars, is_excluded,
+                       member_spine_hrefs
                 FROM book_chapters
                 WHERE book_id = $id
                 ORDER BY chapter_index ASC;
@@ -176,7 +177,8 @@ public sealed class BookQueryService : IBookCatalog
                     EndFragmentId: r.IsDBNull(6) ? null : r.GetString(6),
                     CharCount: r.GetInt32(7),
                     CumulativeChars: r.GetInt32(8),
-                    IsExcluded: r.GetInt32(9) != 0));
+                    IsExcluded: r.GetInt32(9) != 0,
+                    MemberSpineHrefs: ParseMembers(r.GetString(10))));
             }
         }
 
@@ -269,6 +271,19 @@ public sealed class BookQueryService : IBookCatalog
             OverallCompletion: r.GetDouble(29),
             Tags: tags,
             CustomFields: effFields.ToDictionary(f => f.FieldKey, StringComparer.OrdinalIgnoreCase));
+    }
+
+    private static IReadOnlyList<string>? ParseMembers(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json) || json == "[]") return null;
+        try
+        {
+            return JsonSerializer.Deserialize<string[]>(json);
+        }
+        catch (JsonException)
+        {
+            return null; // legacy/corrupt value: treat as a single-file chapter
+        }
     }
 }
 

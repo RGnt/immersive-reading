@@ -12,6 +12,19 @@
 
 ---
 
+### Chapters: too many, split around images (fixed: spec 12)
+- Why it mattered: 39% of all chapter records in the library (34,278 of 88,460) were generated `(Part N)` / `(Illustration)` entries; books showed chapters like *text, (Illustration), (Part 2), (Illustration), (Part 3)*.
+- Cause: `ChapterListBuilder` emitted one chapter per **spine file**; files without their own ToC entry (split files like `part0005_split_001.html`, illustration pages) became continuation records.
+- Fix / how: one chapter per ToC entry with member spine files, rendered as one merged document; legacy books upgrade lazily on first open. Details: [dotnet-architecture.md](dotnet-architecture.md) section 8, [spec 12](../specs/12-chapter-grouping-spec.md).
+- Prevent: `ChapterGroupingTests`, `ChapterModelUpgradeTests`, `ChapterGroupingRenderTests`, and `--verify-chapters` (dry run over the whole library; expect 0 coverage mismatches).
+- Method note: measure against the real library first (`library.db` is plain SQLite; open it read-only) before deciding a design. A dry-run CLI mode that reports before/after totals found a data shape (image-only books with 100+ files per chapter) that the synthetic tests never would.
+
+### Library schema changes silently did nothing (`LibraryMigrations` is dead code)
+- Why it mattered: spec 12 planned "migration v4" for new columns; it would have been a no-op for the existing database.
+- Cause: `LibraryMigrations.All` is not applied anywhere. The library schema only runs `CREATE TABLE IF NOT EXISTS` (`LibraryDatabase.SchemaSql`), which never alters an existing table. (The earlier version of dotnet-architecture.md wrongly said to "add a migration".)
+- Fix / how: `EnsureColumn` helper in `LibraryDatabase.InitializeSchema` (checks `PRAGMA table_info`, then `ALTER TABLE ... ADD COLUMN`), plus the column in `SchemaSql` for fresh databases.
+- Prevent: when adding a library column, update both places; add a test that opens a DB without it and calls `InitializeSchema`.
+
 ### Plugin UI bundles could not load (fixed: spec 11)
 - Why it mattered: no plugin UI (POS "Highlights" menu, AiCompanion drawer/page) could ever appear in the reader, and nothing said why.
 - Cause: (1) the SPA runs from `file://` (`MainWindowHost` calls `window.Load(dist/index.html)`), where the WebView blocks every `fetch()`/`import()` of an `ir-app://` URL, including the SDK shims. Loading the SPA through `ir-app://app/index.html` instead gives a **blank window** (module scripts from a custom-scheme origin don't load; `window.Load(string)` also treats the argument as a file path, use `Load(Uri)`). (2) AiCompanion's embedded `ui.js` was **raw JSX**, which no browser can run, so it could never have loaded. (3) Load errors were swallowed into `console.error`.

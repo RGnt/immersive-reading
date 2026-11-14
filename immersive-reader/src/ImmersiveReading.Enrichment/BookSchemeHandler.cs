@@ -1,3 +1,4 @@
+using ImmersiveReading.Enrichment.Dom;
 using System.IO.Compression;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -80,25 +81,44 @@ public sealed class BookSchemeHandler
             new FileStream(fullEpubPath, FileMode.Open, FileAccess.Read, FileShare.Read),
             ZipArchiveMode.Read);
 
-        var entry = EpubMetadataExtractor.GetEntryNormalized(archive, relativePath);
-        if (entry is null)
+        // A chapter is one ToC entry plus its member spine files (spec 12). Any member href resolves to the
+        // owning chapter, which is rendered as one document and keyed by its primary href.
+        var chapter = bookDetail.Chapters.FirstOrDefault(c => c.OwnsSpineHref(relativePath));
+        IReadOnlyList<string> memberHrefs = chapter?.Members ?? [relativePath];
+        string primaryHref = chapter?.SpineHref ?? relativePath;
+
+        var sources = new List<ChapterMemberSource>(memberHrefs.Count);
+        foreach (var memberHref in memberHrefs)
+        {
+            var memberEntry = EpubMetadataExtractor.GetEntryNormalized(archive, memberHref);
+            if (memberEntry is null)
+            {
+                // The requested file must exist; a missing continuation member is skipped, not fatal.
+                if (string.Equals(memberHref, primaryHref, StringComparison.OrdinalIgnoreCase)) return null;
+                continue;
+            }
+
+            using var stream = memberEntry.Open();
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            sources.Add(new ChapterMemberSource(memberHref, reader.ReadToEnd()));
+        }
+
+        if (sources.Count == 0)
         {
             return null;
         }
 
-        string rawXhtml;
-        using (var stream = entry.Open())
-        using (var reader = new StreamReader(stream, Encoding.UTF8))
-        {
-            rawXhtml = reader.ReadToEnd();
-        }
+        // Single-file chapters take exactly the pre-grouping path (identical output).
+        string rawXhtml = sources.Count == 1
+            ? sources[0].RawXhtml
+            : ChapterDocumentComposer.Compose(bookId, sources);
 
         var plugin = _pluginRegistry.Resolve(bookDetail.Summary.Language);
         var domStages = DomStagesProvider?.Invoke();
         var enriched = AngleSharpDomEnricher.EnrichChapter(
             rawXhtml,
             bookId,
-            relativePath,
+            primaryHref,
             plugin,
             _enrichmentOptions,
             getWordStatus: _getWordStatus,
