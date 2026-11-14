@@ -665,6 +665,216 @@ public class PosHighlighterTests : IDisposable
         Assert.Equal("adjective", dict[2].WordType);
     }
 
+    // ---- Spec 10: reader menu category selector ----
+
+    private static string Normalize(string s) => s.Replace("\r\n", "\n");
+
+    [Fact]
+    public void GenerateCss_AllCategoriesEnabled_MatchesGoldenOutput()
+    {
+        string golden = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Golden", "pos-css-all-enabled.txt"));
+        Assert.Equal(Normalize(golden), Normalize(PosDomEnrichmentStage.GenerateCss(new PosHighlighterSettings())));
+
+        // An explicit full list must be identical to the legacy "null = all" behavior.
+        var explicitAll = new PosHighlighterSettings { EnabledCategories = PosCategoryCatalog.All.Select(c => c.Id).ToList() };
+        Assert.Equal(Normalize(golden), Normalize(PosDomEnrichmentStage.GenerateCss(explicitAll)));
+    }
+
+    [Fact]
+    public void GenerateCss_OnlyParticles_ContainsParticleRulesAndNoVerbRules()
+    {
+        var settings = new PosHighlighterSettings { EnabledCategories = ["particleSingle", "particleMulti"] };
+        string css = PosDomEnrichmentStage.GenerateCss(settings);
+
+        Assert.Contains(".ir-pos-prt-single", css);
+        Assert.Contains(".ir-pos-prt-multi", css);
+        Assert.DoesNotContain(".verb-u", css);
+        Assert.DoesNotContain(".ir-pos-adj-i", css);
+        Assert.DoesNotContain(".ir-pos-noun", css);
+    }
+
+    [Fact]
+    public void GenerateCss_NoCategories_OnlyRubyGuardRule()
+    {
+        string css = PosDomEnrichmentStage.GenerateCss(new PosHighlighterSettings { EnabledCategories = [] });
+        Assert.Single(Normalize(css).Split('\n', StringSplitOptions.RemoveEmptyEntries));
+        Assert.StartsWith("rt {", css);
+    }
+
+    [Fact]
+    public void Settings_NullEnabledCategories_MeansAll_AndParsesJson()
+    {
+        var legacy = PosHighlighterSettings.FromJson(JsonDocument.Parse("""{"enabled":true,"colorAdjI":"#111111"}""").RootElement);
+        Assert.Null(legacy.EnabledCategories);
+        Assert.All(PosCategoryCatalog.All, c => Assert.True(legacy.IsCategoryEnabled(c.Id)));
+
+        var chosen = PosHighlighterSettings.FromJson(JsonDocument.Parse("""{"enabledCategories":["verbGodan"]}""").RootElement);
+        Assert.True(chosen.IsCategoryEnabled("verbGodan"));
+        Assert.False(chosen.IsCategoryEnabled("noun"));
+    }
+
+    [Fact]
+    public void Catalog_Has13UniqueIds_CoveringEveryPosCategory()
+    {
+        Assert.Equal(13, PosCategoryCatalog.All.Count);
+        Assert.Equal(13, PosCategoryCatalog.AllIds.Count);
+        var expected = Enum.GetValues<PosCategory>().Where(c => c != PosCategory.Unknown).ToHashSet();
+        Assert.Equal(expected, PosCategoryCatalog.All.Select(c => c.Category).ToHashSet());
+    }
+
+    [Fact]
+    public void Catalog_Sanitize_DropsUnknownIdsAndDuplicates()
+    {
+        var clean = PosCategoryCatalog.Sanitize(["noun", "bogus", "noun", null, "adjI"]);
+        Assert.Equal(["adjI", "noun"], clean);
+    }
+
+    private async Task<(PluginHostManager Host, PosHighlighterPlugin Plugin)> StartPluginAsync()
+    {
+        var host = new PluginHostManager(
+            dataRootDir: _tempDir,
+            bookCatalog: new MockBookCatalog(),
+            readerContext: new MockReaderContextService(),
+            vocabBudget: new MockVocabBudgetService(),
+            snippetEnricher: new MockSnippetEnricher(),
+            languageRegistry: new LanguagePluginRegistry(),
+            rpcEvents: _events);
+        var plugin = new PosHighlighterPlugin();
+        await host.InitializePluginsAsync([plugin]);
+        return (host, plugin);
+    }
+
+    private static async Task<JsonElement> CallAsync(PluginHostManager host, string method, string json)
+    {
+        Assert.True(host.TryGetRpcHandler($"ext.posHighlighter.{method}", out var handler));
+        object? result = await handler!(JsonDocument.Parse(json).RootElement, CancellationToken.None);
+        return JsonSerializer.SerializeToElement(result);
+    }
+
+    [Fact]
+    public async Task Rpc_GetCategories_ReturnsAll13WithEnabledFlags()
+    {
+        var (host, _) = await StartPluginAsync();
+        try
+        {
+            var state = await CallAsync(host, "getCategories", "{}");
+            Assert.True(state.GetProperty("enabled").GetBoolean());
+            var cats = state.GetProperty("categories").EnumerateArray().ToList();
+            Assert.Equal(13, cats.Count);
+            Assert.All(cats, c => Assert.True(c.GetProperty("enabled").GetBoolean()));
+            Assert.All(cats, c => Assert.StartsWith("#", c.GetProperty("color").GetString()));
+        }
+        finally { await host.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task Rpc_SetCategories_IgnoresUnknownIds_AppliesToStage_AndReturnsCss()
+    {
+        var (host, plugin) = await StartPluginAsync();
+        try
+        {
+            var result = await CallAsync(host, "setCategories", """{"enabledCategories":["particleSingle","bogus"]}""");
+
+            Assert.True(result.GetProperty("success").GetBoolean());
+            Assert.Equal(["particleSingle"], result.GetProperty("enabledCategories").EnumerateArray().Select(e => e.GetString()!).ToArray());
+            string css = result.GetProperty("css").GetString()!;
+            Assert.Contains(".ir-pos-prt-single", css);
+            Assert.DoesNotContain(".ir-pos-verb-u", css);
+
+            Assert.Equal(["particleSingle"], plugin.CurrentSettings.EnabledCategories);
+            Assert.Same(plugin.CurrentSettings, plugin.ActiveStage!.Settings);
+
+            var state = await CallAsync(host, "getCategories", "{}");
+            var enabled = state.GetProperty("categories").EnumerateArray()
+                .Where(c => c.GetProperty("enabled").GetBoolean()).Select(c => c.GetProperty("id").GetString()!).ToArray();
+            Assert.Equal(["particleSingle"], enabled);
+        }
+        finally { await host.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task Rpc_SetCategories_MasterSwitchOff_YieldsEmptyCss_AndKeepsSelection()
+    {
+        var (host, plugin) = await StartPluginAsync();
+        try
+        {
+            await CallAsync(host, "setCategories", """{"enabledCategories":["noun"]}""");
+            var off = await CallAsync(host, "setCategories", """{"enabled":false}""");
+            Assert.False(off.GetProperty("enabled").GetBoolean());
+            Assert.Equal("", off.GetProperty("css").GetString());
+            Assert.Equal(["noun"], plugin.CurrentSettings.EnabledCategories);
+
+            var on = await CallAsync(host, "setCategories", """{"enabled":true}""");
+            Assert.Contains(".ir-pos-noun", on.GetProperty("css").GetString());
+
+            var css = await CallAsync(host, "getCss", "{}");
+            Assert.Equal(on.GetProperty("css").GetString(), css.GetProperty("css").GetString());
+        }
+        finally { await host.DisposeAsync(); }
+    }
+
+    // ---- Spec 11: extensions.getAsset ----
+
+    [Fact]
+    public async Task GetAsset_ReturnsEmbeddedUiScript_ForPlugin()
+    {
+        var (host, _) = await StartPluginAsync();
+        try
+        {
+            var result = JsonSerializer.SerializeToElement(
+                ImmersiveReading.App.Rpc.Modules.ExtensionsRpcModule.ReadPluginAsset(host, "posHighlighter", "ui.js"));
+            Assert.Equal("ui.js", result.GetProperty("path").GetString());
+            Assert.Equal("text/javascript", result.GetProperty("contentType").GetString());
+            Assert.Contains("export function activate", result.GetProperty("text").GetString());
+        }
+        finally { await host.DisposeAsync(); }
+    }
+
+    [Theory]
+    [InlineData("../secret.json")]
+    [InlineData("a/../../secret.json")]
+    [InlineData("/ui.js")]
+    [InlineData("C:/Windows/win.ini")]
+    [InlineData("")]
+    [InlineData("native.dll")]
+    [InlineData("settings.schema")]
+    public async Task GetAsset_RejectsTraversalRootedAndDisallowedTypes(string path)
+    {
+        var (host, _) = await StartPluginAsync();
+        try
+        {
+            Assert.Throws<ArgumentException>(() =>
+                ImmersiveReading.App.Rpc.Modules.ExtensionsRpcModule.ReadPluginAsset(host, "posHighlighter", path));
+        }
+        finally { await host.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task GetAsset_UnknownPluginOrMissingAsset_ThrowsNotFound()
+    {
+        var (host, _) = await StartPluginAsync();
+        try
+        {
+            Assert.Throws<KeyNotFoundException>(() =>
+                ImmersiveReading.App.Rpc.Modules.ExtensionsRpcModule.ReadPluginAsset(host, "nope", "ui.js"));
+            Assert.Throws<KeyNotFoundException>(() =>
+                ImmersiveReading.App.Rpc.Modules.ExtensionsRpcModule.ReadPluginAsset(host, "posHighlighter", "missing.js"));
+        }
+        finally { await host.DisposeAsync(); }
+    }
+
+    [Fact]
+    public async Task GetAsset_IsRegisteredAsRpcMethod()
+    {
+        var (host, _) = await StartPluginAsync();
+        try
+        {
+            var module = new ImmersiveReading.App.Rpc.Modules.ExtensionsRpcModule(host);
+            Assert.Contains(module.Handlers, h => h.Method == "extensions.getAsset");
+        }
+        finally { await host.DisposeAsync(); }
+    }
+
     private sealed class TestRpcEventSink : IRpcEventSink
     {
         public List<(string Event, object Data)> Emitted { get; } = [];

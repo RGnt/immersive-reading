@@ -66,7 +66,9 @@ public sealed class AppSchemeHandler
                 return new MemoryStream([]);
             }
 
-            // 1. Virtual Plugin Asset Serving (ir-app://plugins/{pluginId}/{*assetPath})
+            // Virtual Plugin Asset Serving (ir-app://plugins/{pluginId}/{*assetPath}) for images/assets only.
+            // Plugin UI *code* is not loaded this way: the SPA runs from file:// where fetch/import of
+            // custom schemes is blocked (specs/11-plugin-ui-loading-spec.md).
             if (host == "plugins" || relativePath.StartsWith("plugins/", StringComparison.OrdinalIgnoreCase))
             {
                 var rel = host == "plugins" ? relativePath : relativePath["plugins/".Length..];
@@ -81,19 +83,6 @@ public sealed class AppSchemeHandler
                         contentType = GetMimeType(assetSubPath);
                         return stream;
                     }
-                }
-                return new MemoryStream([]);
-            }
-
-            // 2. Virtual SDK Bridge Modules (ir-app://sdk/{moduleName})
-            if (host == "sdk" || relativePath.StartsWith("sdk/", StringComparison.OrdinalIgnoreCase))
-            {
-                var rel = host == "sdk" ? relativePath : relativePath["sdk/".Length..];
-                var shim = GetSdkShim(rel);
-                if (shim != null)
-                {
-                    contentType = "application/javascript; charset=utf-8";
-                    return new MemoryStream(Encoding.UTF8.GetBytes(shim));
                 }
                 return new MemoryStream([]);
             }
@@ -164,57 +153,6 @@ public sealed class AppSchemeHandler
     {
         string normalizedRoot = rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
         return fullPath.StartsWith(normalizedRoot, StringComparison.OrdinalIgnoreCase);
-    }
-
-    public static string? GetSdkShim(string relativePath)
-    {
-        string name = Path.GetFileName(relativePath).ToLowerInvariant();
-        return name switch
-        {
-            "react.js" => """
-                const R = (typeof window !== 'undefined' ? window.__IR_RUNTIME__?.React : null) || {};
-                export default R;
-                export const {
-                    useState, useEffect, useLayoutEffect, useInsertionEffect, useMemo, useCallback, useRef,
-                    useContext, createContext, useReducer, useId, useTransition, useDeferredValue, useSyncExternalStore,
-                    startTransition, memo, forwardRef, lazy, Suspense, Fragment, Children, cloneElement, createElement,
-                    isValidElement, createRef
-                } = R;
-                """,
-            "react-dom.js" => """
-                const RD = (typeof window !== 'undefined' ? window.__IR_RUNTIME__?.ReactDOM : null) || {};
-                export default RD;
-                export const { createPortal, flushSync } = RD;
-                """,
-            "jsx-runtime.js" => """
-                const JX = (typeof window !== 'undefined' ? window.__IR_RUNTIME__?.JsxRuntime : null) || {};
-                export const jsx = JX.jsx;
-                export const jsxs = JX.jsxs;
-                export const Fragment = JX.Fragment;
-                export default JX;
-                """,
-            "lucide-react.js" => """
-                const L = (typeof window !== 'undefined' ? window.__IR_RUNTIME__?.LucideReact : null) || {};
-                export default L;
-                export const createLucideIcon = L.createLucideIcon;
-                export const {
-                    Bot, Sparkles, BrainCircuit, BookOpen, Settings, Layers, Languages, Check, X,
-                    ChevronRight, ChevronDown, ChevronLeft, ChevronUp, Play, Pause, RotateCcw,
-                    HelpCircle, Info, AlertCircle, MessageSquare, Send, Search, Folder, Tag,
-                    Filter, Sliders, Download, Upload, Trash, Edit, Plus, RefreshCw, FileText,
-                    Library, Volume2, VolumeX, Moon, Sun, Monitor, Maximize, Minimize
-                } = L;
-                """,
-            "host-sdk.js" => """
-                const SDK = (typeof window !== 'undefined' ? window.__IR_RUNTIME__?.HostSdk : null) || {};
-                export default SDK;
-                export const {
-                    usePluginRpc, usePluginConfig, useActiveBook, EnrichedText,
-                    PluginPageLayout, PluginDrawerShell, Button
-                } = SDK;
-                """,
-            _ => null
-        };
     }
 
     public static string GetMimeType(string filePath)

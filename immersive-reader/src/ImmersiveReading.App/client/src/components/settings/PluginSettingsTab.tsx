@@ -92,16 +92,25 @@ const PluginConfigurationPane: React.FC<{
   onReset: () => Promise<void>;
 }> = ({ plugin, customPanel, onUpdate, onReset }) => {
   const [actionStatus, setActionStatus] = useState<Record<string, string>>({});
+  const uiError = usePluginStore((s) => s.uiErrors[plugin.manifest.id]);
+  const loadError = uiError ?? plugin.lastError ?? null;
 
   if (customPanel) {
     const CustomComp = customPanel.component;
     return <CustomComp config={plugin.config} updateConfig={onUpdate} resetConfig={onReset} />;
   }
 
+  const errorBanner = loadError ? (
+    <div role="alert" className="rounded-md border border-rose-500/40 bg-rose-950/50 px-3 py-2 text-xs text-rose-200">
+      <span className="font-semibold">Plugin problem:</span> {loadError}
+    </div>
+  ) : null;
+
   const schema = plugin.schema as JsonSchemaObject | undefined;
   if (!schema || !schema.properties || Object.keys(schema.properties).length === 0) {
     return (
       <div className="space-y-4">
+        {errorBanner}
         <h4 className="font-semibold text-base text-white">{plugin.manifest.name}</h4>
         <p className="text-sm text-white/60">This plugin has no configurable settings.</p>
       </div>
@@ -126,6 +135,7 @@ const PluginConfigurationPane: React.FC<{
 
   return (
     <div className="space-y-5">
+      {errorBanner}
       <div className="flex items-center justify-between border-b border-white/10 pb-3">
         <h4 className="font-semibold text-base text-white">{plugin.manifest.name} Settings</h4>
         <Button variant="ghost" size="sm" onClick={onReset}>
@@ -134,7 +144,7 @@ const PluginConfigurationPane: React.FC<{
       </div>
 
       <div className="space-y-4">
-        {Object.entries(schema.properties).map(([key, prop]) => {
+        {Object.entries(schema.properties).filter(([, prop]) => !prop['x-hidden']).map(([key, prop]) => {
           const val = plugin.config?.[key] ?? prop.default;
 
           return (

@@ -88,7 +88,11 @@ public sealed class StudyPackRpcModule(
                     events?.Emit("library.bookUpdated", new { bookId, hasStudyPack = true });
                 }
             }
-            catch { }
+            catch (Microsoft.Data.Sqlite.SqliteException ex)
+            {
+                // Flag refresh is best-effort; the study pack itself already exists.
+                System.Diagnostics.Trace.TraceWarning($"Could not set has_study_pack for '{bookId}': {ex.Message}");
+            }
         }
 
         var minedCards = flashcardService?.ListBookCards(bookId) ?? [];

@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
+    "build:plugins": "node scripts/build-plugin-uis.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

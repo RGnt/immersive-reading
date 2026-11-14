@@ -60,13 +60,18 @@ export interface ToolbarActionContext {
   toggleDrawer: (drawerId: string) => void;
   navigateToView: (viewId: string, params?: Record<string, any>) => void;
   getPluginConfig: <T = Record<string, any>>() => T;
+  /** Calls `ext.<pluginId>.<actionName>` for the plugin that registered the action. */
+  rpc: <TResult = any>(actionName: string, payload?: Record<string, any>) => Promise<TResult>;
 }
 
 export interface PluginToolbarActionRegistration {
   id: string;
   label: string;
   icon: LucideIcon;
-  onClick: (ctx: ToolbarActionContext) => void;
+  /** Plain click handler. Ignored when `popover` is set. */
+  onClick?: (ctx: ToolbarActionContext) => void;
+  /** When set, the button toggles an anchored popover that renders this component. */
+  popover?: ComponentType<{ onClose: () => void }>;
 }
 
 export interface PluginBookTabRegistration {
@@ -94,7 +99,7 @@ export interface PluginUiContext {
 }
 
 export interface JsonSchemaProperty {
-  type: 'string' | 'number' | 'integer' | 'boolean';
+  type: 'string' | 'number' | 'integer' | 'boolean' | 'array';
   title: string;
   description?: string;
   default?: any;
@@ -103,6 +108,8 @@ export interface JsonSchemaProperty {
   minimum?: number;
   maximum?: number;
   format?: 'password' | 'uri' | 'textarea' | 'color';
+  /** Managed by a custom UI (e.g. a reader menu); the generic settings form must not render it. */
+  'x-hidden'?: boolean;
   'x-rpc-action'?: {
     label: string;
     actionName: string;

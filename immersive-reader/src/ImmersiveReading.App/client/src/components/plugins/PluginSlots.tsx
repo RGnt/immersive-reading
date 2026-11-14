@@ -1,5 +1,7 @@
 import React from 'react';
 import { usePluginStore } from '../../stores/usePluginStore';
+import { rpc } from '../../services/rpc';
+import type { PluginToolbarActionRegistration, ToolbarActionContext } from '../../sdk/types';
 
 export class PluginErrorBoundary extends React.Component<
   { pluginId: string; children: React.ReactNode },
@@ -23,6 +25,62 @@ export class PluginErrorBoundary extends React.Component<
     return this.props.children;
   }
 }
+
+// One toolbar button. With `popover` it toggles a panel anchored under the button that closes on
+// Escape, outside click, or re-click; otherwise it just runs `onClick`.
+const ToolbarActionButton: React.FC<{
+  action: PluginToolbarActionRegistration & { pluginId: string };
+  context: ToolbarActionContext;
+}> = ({ action, context }) => {
+  const [open, setOpen] = React.useState(false);
+  const rootRef = React.useRef<HTMLDivElement>(null);
+  const Icon = action.icon;
+  const Popover = action.popover;
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        title={action.label}
+        aria-haspopup={Popover ? 'dialog' : undefined}
+        aria-expanded={Popover ? open : undefined}
+        onClick={() => (Popover ? setOpen((o) => !o) : action.onClick?.(context))}
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium cursor-pointer ${
+          open ? 'bg-white/15 text-white' : 'hover:bg-white/10 text-white/80'
+        }`}
+      >
+        <Icon className="w-4 h-4" />
+        <span>{action.label}</span>
+      </button>
+      {Popover && open && (
+        <div
+          role="dialog"
+          aria-label={action.label}
+          className="absolute right-0 top-full mt-1 z-50 min-w-[18rem] rounded-lg border border-white/15 bg-[var(--bg-secondary,#18181b)] shadow-2xl"
+        >
+          <PluginErrorBoundary pluginId={action.pluginId}>
+            <Popover onClose={() => setOpen(false)} />
+          </PluginErrorBoundary>
+        </div>
+      )}
+    </div>
+  );
+};
 
 // 1. Reader Toolbar Slot (Mounted inside ReaderTopBar.tsx)
 export const ReaderToolbarPluginSlot: React.FC<{
@@ -55,28 +113,20 @@ export const ReaderToolbarPluginSlot: React.FC<{
         );
       })}
 
-      {/* Custom Toolbar Action Buttons */}
-      {toolbarActions.map((act) => {
-        const Icon = act.icon;
-        return (
-          <button
-            key={act.id}
-            title={act.label}
-            onClick={() =>
-              act.onClick({
-                openModal: (opts) => openModal({ ...opts, pluginId: act.pluginId }),
-                toggleDrawer: (id) => toggleDrawer(id),
-                navigateToView: onNavigateView || (() => {}),
-                getPluginConfig: () => (plugins[act.pluginId]?.config ?? {}) as any,
-              })
-            }
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium hover:bg-white/10 text-white/80 cursor-pointer"
-          >
-            <Icon className="w-4 h-4" />
-            <span>{act.label}</span>
-          </button>
-        );
-      })}
+      {/* Custom Toolbar Action Buttons (plain click or anchored popover) */}
+      {toolbarActions.map((act) => (
+        <ToolbarActionButton
+          key={`${act.pluginId}:${act.id}`}
+          action={act}
+          context={{
+            openModal: (opts) => openModal({ ...opts, pluginId: act.pluginId }),
+            toggleDrawer: (id) => toggleDrawer(id),
+            navigateToView: onNavigateView || (() => {}),
+            getPluginConfig: () => (plugins[act.pluginId]?.config ?? {}) as any,
+            rpc: (actionName, payload) => rpc.call(`ext.${act.pluginId}.${actionName}`, payload ?? {}),
+          }}
+        />
+      ))}
     </div>
   );
 };

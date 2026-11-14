@@ -8,12 +8,29 @@
       "description": "Highlight Japanese parts of speech with distinct grammar colors in the reader.",
       "default": true
     },
+    "enabledCategories": {
+      "type": "array",
+      "title": "Highlighted Categories",
+      "description": "Managed from the reader 'Highlights' menu.",
+      "items": {
+        "type": "string"
+      },
+      "x-hidden": true
+    },
     "highlightStyle": {
       "type": "string",
       "title": "Highlight Visual Style",
       "description": "Choose between colored text, subtle colored underlines, or soft background tint.",
-      "enum": ["text-color", "underline", "background"],
-      "enumLabels": ["Colored Text", "Colored Underline", "Background Tint"],
+      "enum": [
+        "text-color",
+        "underline",
+        "background"
+      ],
+      "enumLabels": [
+        "Colored Text",
+        "Colored Underline",
+        "Background Tint"
+      ],
       "default": "text-color"
     },
     "colorAdjI": {

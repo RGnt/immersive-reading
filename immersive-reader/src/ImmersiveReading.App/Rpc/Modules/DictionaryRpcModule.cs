@@ -124,6 +124,9 @@ public sealed class DictionaryRpcModule : IRpcModule
         return importer.Import(filePath, priority, ct);
     }
 
+    // One shared client: per-call `new HttpClient()` leaks sockets (TIME_WAIT) and skips connection reuse.
+    private static readonly HttpClient DownloadClient = new() { Timeout = TimeSpan.FromMinutes(5) };
+
     private async Task<object?> DownloadAndInstallAsync(RpcRequest req, CancellationToken ct)
     {
         if (_dictDb is null) throw new InvalidOperationException("Dictionary database not available.");
@@ -164,9 +167,8 @@ public sealed class DictionaryRpcModule : IRpcModule
 
         _events?.Emit("dictionaries.downloadProgress", new { status = "downloading", title, url });
 
-        using (var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
+        using (var response = await DownloadClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false))
         {
-            using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
             response.EnsureSuccessStatusCode();
 
             await using var contentStream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);

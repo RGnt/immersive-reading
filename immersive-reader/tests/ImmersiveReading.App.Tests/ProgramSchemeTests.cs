@@ -148,4 +148,69 @@ public sealed class ProgramSchemeTests : IDisposable
         Assert.Equal("<html>index</html>", Encoding.UTF8.GetString(ms.ToArray()));
         Assert.Equal("text/html; charset=utf-8", mime);
     }
+
+    /// <summary>
+    /// Plugin UI is loaded as a blob module whose bare imports are rewritten (client/src/services/
+    /// pluginImportRewriter.ts). A first-party ui.js that imports anything outside that supported list
+    /// would fail at load time, so check it here against the list in the TypeScript source itself.
+    /// </summary>
+    [Fact]
+    public void FirstPartyPluginUi_OnlyImportsSpecifiersTheHostProvides()
+    {
+        string? dir = AppContext.BaseDirectory;
+        while (dir is not null && !Directory.Exists(Path.Combine(dir, "immersive-reader", "src", "Plugins")))
+        {
+            dir = Path.GetDirectoryName(dir);
+        }
+        Assert.NotNull(dir);
+
+        string rewriter = File.ReadAllText(Path.Combine(dir!, "immersive-reader", "src", "ImmersiveReading.App",
+            "client", "src", "services", "pluginImportRewriter.ts"));
+        var arrayMatch = System.Text.RegularExpressions.Regex.Match(
+            rewriter, @"SUPPORTED_SPECIFIERS\s*=\s*\[(.*?)\]", System.Text.RegularExpressions.RegexOptions.Singleline);
+        Assert.True(arrayMatch.Success, "SUPPORTED_SPECIFIERS not found in pluginImportRewriter.ts");
+        var supported = System.Text.RegularExpressions.Regex.Matches(arrayMatch.Groups[1].Value, "'([^']+)'")
+            .Select(m => m.Groups[1].Value).ToHashSet();
+        Assert.Contains("react", supported);
+
+        var fromRe = new System.Text.RegularExpressions.Regex(@"from\s*['""]([^'""]+)['""]");
+        var uiFiles = Directory.GetFiles(Path.Combine(dir!, "immersive-reader", "src", "Plugins"), "ui.js", SearchOption.AllDirectories)
+            .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
+                        !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}"))
+            .ToList();
+        Assert.NotEmpty(uiFiles);
+
+        foreach (var file in uiFiles)
+        {
+            foreach (System.Text.RegularExpressions.Match m in fromRe.Matches(File.ReadAllText(file)))
+            {
+                Assert.True(supported.Contains(m.Groups[1].Value),
+                    $"{file}: imports '{m.Groups[1].Value}', which the plugin loader does not provide.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// The host loads plugin ui.js as a plain ES module, so JSX must be compiled first
+    /// (`npm run build:plugins`). A raw-JSX ui.js fails at load with "Unexpected token '&lt;'".
+    /// </summary>
+    [Fact]
+    public void FirstPartyPluginUi_IsPlainJavaScript_NotRawJsx()
+    {
+        string? dir = AppContext.BaseDirectory;
+        while (dir is not null && !Directory.Exists(Path.Combine(dir, "immersive-reader", "src", "Plugins")))
+        {
+            dir = Path.GetDirectoryName(dir);
+        }
+        Assert.NotNull(dir);
+
+        var jsxAtLineStart = new System.Text.RegularExpressions.Regex(@"^\s*</?[A-Za-z][\w.]*[\s/>]", System.Text.RegularExpressions.RegexOptions.Multiline);
+        foreach (var file in Directory.GetFiles(Path.Combine(dir!, "immersive-reader", "src", "Plugins"), "ui.js", SearchOption.AllDirectories)
+                     .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}") &&
+                                 !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")))
+        {
+            Assert.False(jsxAtLineStart.IsMatch(File.ReadAllText(file)),
+                $"{file} looks like raw JSX. Write ui.src.jsx and run `npm run build:plugins` in the client folder.");
+        }
+    }
 }

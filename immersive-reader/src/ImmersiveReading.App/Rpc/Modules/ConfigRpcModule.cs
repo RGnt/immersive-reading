@@ -285,13 +285,17 @@ public sealed class ConfigRpcModule(IConfigurationManager? configManager = null,
                 }
             };
             proc.Start();
-            string stdout = proc.StandardOutput.ReadToEnd().Trim();
-            string stderr = proc.StandardError.ReadToEnd().Trim();
+            // Read both streams asynchronously: synchronous ReadToEnd() blocks until the child exits,
+            // which made the WaitForExit timeout below unreachable for a hung interpreter.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
             if (!proc.WaitForExit(3000))
             {
-                try { proc.Kill(); } catch { }
+                try { proc.Kill(entireProcessTree: true); } catch (InvalidOperationException) { /* already exited */ }
                 return (false, "Timeout");
             }
+            string stdout = stdoutTask.GetAwaiter().GetResult().Trim();
+            string stderr = stderrTask.GetAwaiter().GetResult().Trim();
             string version = !string.IsNullOrWhiteSpace(stdout) ? stdout : stderr;
             return (proc.ExitCode == 0, version);
         }

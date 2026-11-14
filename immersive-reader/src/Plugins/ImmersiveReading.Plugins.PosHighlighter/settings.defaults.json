@@ -1,5 +1,20 @@
 {
   "enabled": true,
+  "enabledCategories": [
+    "adjI",
+    "adjNa",
+    "verbGodan",
+    "verbIchidan",
+    "verbIrregular",
+    "suffix",
+    "particleSingle",
+    "particleMulti",
+    "adverb",
+    "noun",
+    "conjunction",
+    "auxiliary",
+    "interjection"
+  ],
   "highlightStyle": "text-color",
   "colorAdjI": "#fb923c",
   "colorAdjNa": "#f472b6",

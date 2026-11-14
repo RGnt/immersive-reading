@@ -6,6 +6,13 @@ Welcome to the **Immersive Reading LLM Wiki**. This knowledge base documents [`e
 
 ## Wiki Pages & Guides
 
+> **Workflow:** (1) read this index, (2) check [Troubleshooting & Lessons](troubleshooting-and-lessons.md) for the symptom, (3) read the topic page for the area, (4) after the task, record why / what / how in the right page.
+
+- **[.NET Architecture (`dotnet-architecture.md`)](dotnet-architecture.md)**: C# solution layout, dependency rules, RPC bridge, persistence, plugins, conventions, how to add an RPC method.
+- **[Plugin UI Authoring (`plugin-ui-authoring.md`)](plugin-ui-authoring.md)**: how plugin UIs load, import rules, JSX build step, slots, debugging, new-plugin checklist.
+- **[.NET Code Review Log (`dotnet-code-review.md`)](dotnet-code-review.md)**: what was fixed and why, open prioritized findings, scan commands.
+- **[Troubleshooting & Lessons (`troubleshooting-and-lessons.md`)](troubleshooting-and-lessons.md)**: past bugs and gotchas with cause and fix. **Check before debugging.**
+
 -1. **[Comprehensive End-User Guide (`../USERGUIDE.md`)](../USERGUIDE.md)**
     - Complete guide for readers: library navigation, Vim motions, 1-click jiten.moe lookup, sub-5ms dictionary popover, 1-click Anki mining, and settings.
 0. **[Developer Onboarding & Connections (`../DEVELOPER_GUIDE.md`)](../DEVELOPER_GUIDE.md)**

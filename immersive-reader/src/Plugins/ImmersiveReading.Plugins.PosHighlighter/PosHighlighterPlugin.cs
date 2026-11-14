@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -98,6 +99,49 @@ public sealed class PosHighlighterPlugin : IImmersivePlugin, IDisposable
             return new { success = true, settings = _settings };
         });
 
+        // Reader menu (spec 10): catalog + current selection, live CSS, and selection updates.
+        context.RegisterRpcAction("getCategories", (payload, token) =>
+            Task.FromResult<object?>(BuildCategoriesState()));
+
+        context.RegisterRpcAction("getCss", (payload, token) =>
+            Task.FromResult<object?>(new { css = CurrentCss() }));
+
+        context.RegisterRpcAction("setCategories", async (payload, token) =>
+        {
+            if (payload.ValueKind == JsonValueKind.Object)
+            {
+                if (payload.TryGetProperty("enabledCategories", out var catsProp) && catsProp.ValueKind == JsonValueKind.Array)
+                {
+                    var ids = catsProp.EnumerateArray()
+                        .Where(e => e.ValueKind == JsonValueKind.String)
+                        .Select(e => e.GetString());
+                    _settings.EnabledCategories = PosCategoryCatalog.Sanitize(ids);
+                }
+
+                if (payload.TryGetProperty("enabled", out var enProp) &&
+                    enProp.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                {
+                    _settings.Enabled = enProp.GetBoolean();
+                }
+            }
+
+            if (_stage != null)
+            {
+                _stage.Settings = _settings;
+            }
+
+            using var doc = JsonDocument.Parse(JsonSerializer.Serialize(_settings));
+            await context.Config.UpdateAsync(doc.RootElement, token);
+
+            return new
+            {
+                success = true,
+                enabled = _settings.Enabled,
+                enabledCategories = _settings.EnabledCategories ?? PosCategoryCatalog.All.Select(c => c.Id).ToList(),
+                css = CurrentCss()
+            };
+        });
+
         // 4. Subscribe to runtime configuration updates from Settings UI
         _configSub = context.Config.OnConfigChanged<PosHighlighterSettings>(updated =>
         {
@@ -110,6 +154,24 @@ public sealed class PosHighlighterPlugin : IImmersivePlugin, IDisposable
 
         return ValueTask.CompletedTask;
     }
+
+    /// <summary>CSS for the open chapter; empty when highlighting is switched off.</summary>
+    private string CurrentCss() => _settings.Enabled ? PosDomEnrichmentStage.GenerateCss(_settings) : "";
+
+    private object BuildCategoriesState() => new
+    {
+        enabled = _settings.Enabled,
+        highlightStyle = _settings.HighlightStyle,
+        categories = PosCategoryCatalog.All.Select(c => new
+        {
+            id = c.Id,
+            label = c.Label,
+            jpLabel = c.JpLabel,
+            example = c.Example,
+            color = c.ColorOf(_settings),
+            enabled = _settings.IsCategoryEnabled(c.Id)
+        }).ToList()
+    };
 
     public ValueTask OnDisableAsync(CancellationToken ct = default)
     {

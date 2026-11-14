@@ -10,6 +10,7 @@ import type {
   PluginUiContext,
 } from '../sdk/types';
 import type { ComponentType } from 'react';
+import { loadPluginModule, loadPluginStyle } from '../services/pluginModuleLoader';
 
 type ScopedItem<T> = T & { pluginId: string };
 
@@ -32,6 +33,11 @@ interface PluginStoreState {
   bookTabs: ScopedItem<PluginBookTabRegistration>[];
   customSettingsPanels: Record<string, PluginSettingsPanelRegistration>;
 
+  /** Live CSS overrides pushed by plugins into the reader iframe: pluginId -> styleId -> css. */
+  readerStyles: Record<string, Record<string, string>>;
+  /** Last UI load failure per plugin (shown on its Settings card); absent when the UI loaded fine. */
+  uiErrors: Record<string, string>;
+
   // Active UI State
   activeDrawerId: string | null;
   activeModal: ActiveModalState | null;
@@ -44,7 +50,8 @@ interface PluginStoreState {
   toggleDrawer: (drawerId: string | null) => void;
   openModal: (modal: ActiveModalState) => void;
   closeModal: () => void;
-  loadPluginUiBundle: (pluginId: string, bundleUrl: string) => Promise<void>;
+  setReaderStyle: (pluginId: string, styleId: string, css: string | null) => void;
+  loadPluginUiBundle: (pluginId: string) => Promise<void>;
   unloadPluginUiRegistrations: (pluginId: string) => void;
 }
 
@@ -56,6 +63,8 @@ export const usePluginStore = create<PluginStoreState>((set, get) => ({
   toolbarActions: [],
   bookTabs: [],
   customSettingsPanels: {},
+  readerStyles: {},
+  uiErrors: {},
   activeDrawerId: null,
   activeModal: null,
 
@@ -73,8 +82,8 @@ export const usePluginStore = create<PluginStoreState>((set, get) => ({
 
       // Dynamically import UI bundles for all currently enabled plugins
       for (const p of Object.values(map)) {
-        if (p.state === 'Enabled' && p.uiBundleUrl) {
-          await get().loadPluginUiBundle(p.manifest.id, p.uiBundleUrl);
+        if (p.state === 'Enabled' && (p.manifest.uiEntry || p.manifest.styleEntry)) {
+          await get().loadPluginUiBundle(p.manifest.id);
         }
       }
 
@@ -93,8 +102,9 @@ export const usePluginStore = create<PluginStoreState>((set, get) => ({
           },
         }));
 
-        if (state === 'Enabled' && uiBundleUrl) {
-          await get().loadPluginUiBundle(pluginId, uiBundleUrl);
+        const manifest = get().plugins[pluginId]?.manifest;
+        if (state === 'Enabled' && (manifest?.uiEntry || manifest?.styleEntry)) {
+          await get().loadPluginUiBundle(pluginId);
         } else if (state === 'Disabled') {
           get().unloadPluginUiRegistrations(pluginId);
         }
@@ -117,7 +127,17 @@ export const usePluginStore = create<PluginStoreState>((set, get) => ({
     }
   },
 
-  loadPluginUiBundle: async (pluginId, bundleUrl) => {
+  loadPluginUiBundle: async (pluginId) => {
+    const manifest = get().plugins[pluginId]?.manifest;
+    if (!manifest) return;
+    const setUiError = (message: string | null) =>
+      set((s) => {
+        const next = { ...s.uiErrors };
+        if (message === null) delete next[pluginId];
+        else next[pluginId] = message;
+        return { uiErrors: next };
+      });
+
     // Prevent duplicate registrations before re-activating
     get().unloadPluginUiRegistrations(pluginId);
 
@@ -138,20 +158,45 @@ export const usePluginStore = create<PluginStoreState>((set, get) => ({
     };
 
     try {
-      const module = await import(/* @vite-ignore */ `${bundleUrl}?t=${Date.now()}`);
-      if (typeof module.activate === 'function') {
-        module.activate(ctx);
+      if (manifest.styleEntry) {
+        const css = await loadPluginStyle(pluginId, manifest.styleEntry);
+        const el = document.createElement('style');
+        el.setAttribute('data-ir-plugin', pluginId);
+        el.textContent = css;
+        document.head.appendChild(el);
+      }
+      if (manifest.uiEntry) {
+        const module = await loadPluginModule(pluginId, manifest.uiEntry);
+        if (typeof module.activate === 'function') {
+          (module.activate as (c: PluginUiContext) => void)(ctx);
+        }
       }
       set((s) => ({ loadedBundles: { ...s.loadedBundles, [pluginId]: true } }));
+      setUiError(null);
     } catch (err) {
-      console.error(`[PluginHost] Failed to load UI bundle for '${pluginId}':`, err);
+      get().unloadPluginUiRegistrations(pluginId); // never leave a half-activated plugin behind
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[PluginHost] Failed to load UI for '${pluginId}':`, err);
+      setUiError(message);
     }
   },
+
+  setReaderStyle: (pluginId, styleId, css) =>
+    set((s) => {
+      const forPlugin = { ...(s.readerStyles[pluginId] ?? {}) };
+      if (css === null) delete forPlugin[styleId];
+      else forPlugin[styleId] = css;
+      return { readerStyles: { ...s.readerStyles, [pluginId]: forPlugin } };
+    }),
 
   unloadPluginUiRegistrations: (pluginId) => {
     set((s) => {
       const nextCustomPanels = { ...s.customSettingsPanels };
       delete nextCustomPanels[pluginId];
+      // A disabled/unloaded plugin must not leave live style overrides behind.
+      const nextReaderStyles = { ...s.readerStyles };
+      delete nextReaderStyles[pluginId];
+      document.querySelectorAll(`style[data-ir-plugin="${pluginId}"]`).forEach((el) => el.remove());
 
       const isActiveDrawerFromPlugin = s.drawers.some(
         (d) => d.id === s.activeDrawerId && d.pluginId === pluginId
@@ -163,6 +208,7 @@ export const usePluginStore = create<PluginStoreState>((set, get) => ({
         toolbarActions: s.toolbarActions.filter((a) => a.pluginId !== pluginId),
         bookTabs: s.bookTabs.filter((t) => t.pluginId !== pluginId),
         customSettingsPanels: nextCustomPanels,
+        readerStyles: nextReaderStyles,
         activeDrawerId: isActiveDrawerFromPlugin ? null : s.activeDrawerId,
         activeModal: s.activeModal?.pluginId === pluginId ? null : s.activeModal,
       };

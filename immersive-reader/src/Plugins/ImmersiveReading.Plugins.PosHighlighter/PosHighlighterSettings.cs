@@ -8,6 +8,16 @@ public sealed class PosHighlighterSettings
     [JsonPropertyName("enabled")]
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// Category ids (see <see cref="PosCategoryCatalog"/>) that are highlighted. <c>null</c> means all,
+    /// which keeps configs saved before this setting existed unchanged.
+    /// </summary>
+    [JsonPropertyName("enabledCategories")]
+    public List<string>? EnabledCategories { get; set; }
+
+    public bool IsCategoryEnabled(string categoryId) =>
+        EnabledCategories is null || EnabledCategories.Contains(categoryId);
+
     [JsonPropertyName("highlightStyle")]
     public string HighlightStyle { get; set; } = "text-color";
 

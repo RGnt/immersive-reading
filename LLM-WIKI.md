@@ -11,6 +11,12 @@
 | **[USERGUIDE.md](USERGUIDE.md)** | **End-user manual:** Desktop app usage, library management, Vim motions, 1-click jiten.moe, instant dictionary lookup, sentence mining, and settings |
 | **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** | **Start here if you're new:** How `.NET 10` (`immersive-reader/`) and `Python` (`enrichement-extractor/`) connect, 5 end-to-end runtime flows, and "Where do I start to work on X?" |
 | **[LLM-WIKI.md](LLM-WIKI.md)** *(this file)* | Single-file master map: architecture, module index, invariants, contracts, and task playbooks |
+| **[wiki/dotnet-architecture.md](wiki/dotnet-architecture.md)** | **C# work:** project dependency rules, RPC bridge, persistence, plugins, conventions |
+| **[specs/10-pos-highlight-category-menu-spec.md](specs/10-pos-highlight-category-menu-spec.md)** | Reader menu-bar POS category selector: spec, [implementation plan](specs/10-pos-highlight-category-menu-implementation-plan.md), and [feature file](specs/features/08-pos-highlight-category-menu.feature) |
+| **[wiki/plugin-ui-authoring.md](wiki/plugin-ui-authoring.md)** | **Plugin UI work:** blob loader, supported imports, JSX build (`npm run build:plugins`), slots, debugging |
+| **[specs/11-plugin-ui-loading-spec.md](specs/11-plugin-ui-loading-spec.md)** | Plugin UI loading fix: evidence, design, [plan](specs/11-plugin-ui-loading-implementation-plan.md), [feature file](specs/features/09-plugin-ui-loading.feature) |
+| **[wiki/dotnet-code-review.md](wiki/dotnet-code-review.md)** | C# review log: fixes made, open findings, scan commands |
+| **[wiki/troubleshooting-and-lessons.md](wiki/troubleshooting-and-lessons.md)** | **Check first when something breaks:** symptom, why, cause, fix |
 | **[wiki/index.md](wiki/index.md)** | Topic index, glossary of domain terms, and cross-reference directory |
 | **[wiki/architecture-and-dataflow.md](wiki/architecture-and-dataflow.md)** | Pipeline stages, `reader` / `study` / `decks` modes, and base vs. `[print]` dependency boundaries |
 | **[wiki/module-reference.md](wiki/module-reference.md)** | Complete file-by-file and symbol-by-symbol breakdown of `immersive/`, `scripts/`, and `tests/` |

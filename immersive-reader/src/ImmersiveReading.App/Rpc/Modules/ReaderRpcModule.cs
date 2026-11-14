@@ -1,10 +1,13 @@
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using ImmersiveReading.Core.Library;
 using ImmersiveReading.Core.Plugins;
 using ImmersiveReading.Dictionaries;
 using ImmersiveReading.Enrichment;
 using ImmersiveReading.Library;
+using Microsoft.Data.Sqlite;
 
 namespace ImmersiveReading.App.Rpc.Modules;
 
@@ -37,6 +40,15 @@ public sealed class ReaderRpcModule(
             yield return ("vocab.setStatus", (req, _) => Task.FromResult<object?>(SetVocabStatus(req)));
         }
     }
+
+    /// <summary>
+    /// Picks the chapter a book should open on when there is no usable saved position:
+    /// non-excluded with text, then any non-excluded, then anything that is not obviously cover/TOC.
+    /// </summary>
+    private static BookChapterRecord? FindFirstStoryChapter(IReadOnlyList<BookChapterRecord> chapters) =>
+        chapters.FirstOrDefault(c => !c.IsExcluded && c.CharCount > 0)
+        ?? chapters.FirstOrDefault(c => !c.IsExcluded)
+        ?? chapters.FirstOrDefault(c => !c.Title.Contains("表紙") && !c.Title.Contains("Cover") && !c.Title.Contains("目次") && !c.Title.Contains("Contents"));
 
     private object? OpenBook(RpcRequest req)
     {
@@ -80,10 +92,7 @@ public sealed class ReaderRpcModule(
 
         if (string.IsNullOrEmpty(initialSpineHref) && detail.Chapters.Count > 0)
         {
-            var firstValid = detail.Chapters.FirstOrDefault(c => !c.IsExcluded && c.CharCount > 0)
-                ?? detail.Chapters.FirstOrDefault(c => !c.IsExcluded)
-                ?? detail.Chapters.FirstOrDefault(c => !c.Title.Contains("表紙") && !c.Title.Contains("Cover") && !c.Title.Contains("目次") && !c.Title.Contains("Contents"))
-                ?? detail.Chapters[0];
+            var firstValid = FindFirstStoryChapter(detail.Chapters) ?? detail.Chapters[0];
             initialSpineHref = firstValid.SpineHref;
             initialChapterIndex = firstValid.ChapterIndex;
         }
@@ -93,9 +102,7 @@ public sealed class ReaderRpcModule(
             var targetCh = detail.Chapters.FirstOrDefault(c => string.Equals(c.SpineHref, initialSpineHref, StringComparison.OrdinalIgnoreCase));
             if (targetCh is not null && targetCh.IsExcluded)
             {
-                var storyCh = detail.Chapters.FirstOrDefault(c => !c.IsExcluded && c.CharCount > 0)
-                    ?? detail.Chapters.FirstOrDefault(c => !c.IsExcluded)
-                    ?? detail.Chapters.FirstOrDefault(c => !c.Title.Contains("表紙") && !c.Title.Contains("Cover") && !c.Title.Contains("目次") && !c.Title.Contains("Contents"));
+                var storyCh = FindFirstStoryChapter(detail.Chapters);
                 if (storyCh is not null)
                 {
                     initialSpineHref = storyCh.SpineHref;
@@ -432,9 +439,10 @@ public sealed class ReaderRpcModule(
                         }
                     }
                 }
-                catch
+                catch (Exception ex) when (ex is IOException or JsonException or InvalidOperationException or FormatException)
                 {
-                    // Fall back to live extraction
+                    // study_data.json is an optional precomputed cache; fall back to live extraction.
+                    Trace.TraceWarning($"Ignoring unreadable study_data.json for '{bookId}': {ex.Message}");
                 }
             }
         }
@@ -619,7 +627,10 @@ public sealed class ReaderRpcModule(
                 }
             }
         }
-        catch { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Trace.TraceWarning($"Could not read CSV deck in '{folderPath}': {ex.Message}");
+        }
         return result;
     }
 
@@ -660,7 +671,10 @@ public sealed class ReaderRpcModule(
                 }
             }
         }
-        catch { }
+        catch (SqliteException ex)
+        {
+            Trace.TraceWarning($"Dictionary term enrichment failed: {ex.Message}");
+        }
     }
 
     private Dictionary<char, (List<string> Meanings, List<string> Onyomi, List<string> Kunyomi, int StrokeCount)> QueryKanjiDetails(IReadOnlyList<char> kanjiChars)
@@ -701,7 +715,10 @@ public sealed class ReaderRpcModule(
                 result[c] = (meanings, onyomi, kunyomi, strokes);
             }
         }
-        catch { }
+        catch (SqliteException ex)
+        {
+            Trace.TraceWarning($"Kanji detail query failed: {ex.Message}");
+        }
         return result;
     }
 
@@ -712,7 +729,7 @@ public sealed class ReaderRpcModule(
         {
             return JsonSerializer.Deserialize<List<string>>(json) ?? [];
         }
-        catch { return []; }
+        catch (JsonException) { return []; }
     }
 
     private static List<string> ParseMeanings(string raw)
@@ -724,7 +741,7 @@ public sealed class ReaderRpcModule(
             {
                 return JsonSerializer.Deserialize<List<string>>(raw) ?? [];
             }
-            catch { }
+            catch (JsonException) { /* not a JSON array after all; treat as comma-separated */ }
         }
         return raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
     }

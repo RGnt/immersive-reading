@@ -362,19 +362,13 @@ public sealed class PosDomEnrichmentStage : IDomEnrichmentStage
             }
         }
 
-        AppendRule(".ir-tok.adjective-i, .adjective-i, .ir-tok.ir-pos-adj-i, .ir-pos-adj-i, .ir-tok.adjective:not(.adjective-na)", s.ColorAdjI);
-        AppendRule(".ir-tok.adjective-na, .adjective-na, .ir-tok.ir-pos-adj-na, .ir-pos-adj-na", s.ColorAdjNa);
-        AppendRule(".ir-tok.verb-u, .verb-u, .ir-tok.ir-pos-verb-u, .ir-pos-verb-u, .ir-tok.verb:not(.verb-ru):not(.verb-irr)", s.ColorVerbGodan);
-        AppendRule(".ir-tok.verb-ru, .verb-ru, .ir-tok.ir-pos-verb-ru, .ir-pos-verb-ru", s.ColorVerbIchidan);
-        AppendRule(".ir-tok.verb-irr, .verb-irr, .ir-tok.ir-pos-verb-irr, .ir-pos-verb-irr", s.ColorVerbIrregular);
-        AppendRule(".ir-tok.suffix, .suffix, .ir-tok.ir-pos-suffix, .ir-pos-suffix", s.ColorSuffix);
-        AppendRule(".ir-tok.particle-single, .particle-single, .ir-tok.ir-pos-prt-single, .ir-pos-prt-single, .ir-tok.particle:not(.particle-multi)", s.ColorParticleSingle);
-        AppendRule(".ir-tok.particle-multi, .particle-multi, .ir-tok.ir-pos-prt-multi, .ir-pos-prt-multi", s.ColorParticleMulti);
-        AppendRule(".ir-tok.adverb, .adverb, .ir-tok.ir-pos-adverb, .ir-pos-adverb", s.ColorAdverb);
-        AppendRule(".ir-tok.noun, .noun, .ir-tok.ir-pos-noun, .ir-pos-noun", s.ColorNoun);
-        AppendRule(".ir-tok.conjunction, .conjunction, .ir-tok.ir-pos-conj, .ir-pos-conj", s.ColorConjunction);
-        AppendRule(".ir-tok.auxiliary, .auxiliary, .ir-tok.ir-pos-aux, .ir-pos-aux", s.ColorAuxiliary);
-        AppendRule(".ir-tok.interjection, .interjection, .ir-tok.ir-pos-intj, .ir-pos-intj", s.ColorInterjection);
+        foreach (var cat in PosCategoryCatalog.All)
+        {
+            if (s.IsCategoryEnabled(cat.Id))
+            {
+                AppendRule(cat.Selector, cat.ColorOf(s));
+            }
+        }
 
         return sb.ToString();
     }

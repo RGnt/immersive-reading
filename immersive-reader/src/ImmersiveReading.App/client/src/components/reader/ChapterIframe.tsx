@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { useReaderStore } from '../../stores/useReaderStore';
 import { useConfigStore } from '../../stores/useConfigStore';
+import { usePluginStore } from '../../stores/usePluginStore';
 
 export const ChapterIframe: React.FC = () => {
   const {
@@ -16,6 +17,32 @@ export const ChapterIframe: React.FC = () => {
   } = useReaderStore();
   const config = useConfigStore((s) => s.config);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const readerStyles = usePluginStore((s) => s.readerStyles);
+
+  // Plugins push live CSS (e.g. POS highlight categories). Applied on change and after every iframe load.
+  const applyPluginStyles = useCallback(() => {
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      if (!doc?.head) return;
+      for (const styles of Object.values(readerStyles)) {
+        for (const [styleId, css] of Object.entries(styles)) {
+          let el = doc.getElementById(styleId) as HTMLStyleElement | null;
+          if (!el) {
+            el = doc.createElement('style');
+            el.id = styleId;
+            doc.head.appendChild(el);
+          }
+          if (el.textContent !== css) el.textContent = css;
+        }
+      }
+    } catch {
+      // Cross-origin guard
+    }
+  }, [readerStyles]);
+
+  useEffect(() => {
+    applyPluginStyles();
+  }, [applyPluginStyles]);
 
   const applyReaderThemeToIframe = useCallback(() => {
     const iframe = iframeRef.current;
@@ -163,6 +190,7 @@ export const ChapterIframe: React.FC = () => {
         title="EPUB Chapter View"
         onLoad={() => {
           applyReaderThemeToIframe();
+          applyPluginStyles();
           const cw = iframeRef.current?.contentWindow;
           if (cw) {
             cw.postMessage({ type: 'ir-set-furigana-mode', mode: furiganaMode }, '*');

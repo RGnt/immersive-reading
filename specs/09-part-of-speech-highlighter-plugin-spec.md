@@ -161,6 +161,8 @@ In `AppServices.cs`:
 - `ColorAdverb`: string hex (default: `"#a3e635"`)
 
 ### 4.3 RPC Endpoints
+> Extended by [spec 10](10-pos-highlight-category-menu-spec.md): `getCategories`, `setCategories`, `getCss`, and the `enabledCategories` setting.
+
 - `ext.posHighlighter.getSettings` -> `{ enabled: bool, highlightStyle: string, ...colors }`
 - `ext.posHighlighter.toggle` -> `{ enabled: bool }` (toggles on/off and broadcasts change)
 - `ext.posHighlighter.updateSettings` -> `{ success: bool }`

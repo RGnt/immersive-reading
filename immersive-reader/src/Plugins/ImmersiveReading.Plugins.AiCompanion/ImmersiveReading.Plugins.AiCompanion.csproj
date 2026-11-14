@@ -13,6 +13,8 @@
     <EmbeddedResource Include="settings.schema.json" />
     <EmbeddedResource Include="Migrations\*.sql" />
     <EmbeddedResource Include="Assets\**\*" />
+    <!-- UI source is compiled to Assets\ui.js by `npm run build:plugins`; only the output ships. -->
+    <EmbeddedResource Remove="Assets\**\*.src.*" />
   </ItemGroup>
 
   <PropertyGroup>

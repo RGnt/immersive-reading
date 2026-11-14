@@ -43,6 +43,13 @@ export function usePluginConfig<T extends Record<string, any>>(pluginId: string)
   };
 }
 
+// 2b. Live reader style injection. Replaces (or with `null` removes) <style id=styleId> in the open
+// chapter without reloading it. Using the same id the server injected replaces that style; pass '' to
+// blank a style. `null` forgets the override (the DOM style stays until the next chapter load).
+export function setReaderStyle(pluginId: string, styleId: string, css: string | null): void {
+  usePluginStore.getState().setReaderStyle(pluginId, styleId, css);
+}
+
 // 3. Active Reader Context Hook (Zero-Spoiler Safe)
 export function useActiveBook() {
   return useReaderStore((s) => ({
