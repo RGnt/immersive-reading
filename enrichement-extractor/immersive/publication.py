@@ -436,8 +436,8 @@ class Publication(AbstractContextManager):
                     if not source.is_file():
                         continue
                     local = source.relative_to(source_root).as_posix()
-                    recognized = ((category == "html" and (local in {"index.html", "dictionary.html", "vocabulary.html", "grammar.html", "kanji.html", "review.html", "assets/style.css", "assets/lookup.js"} or re.fullmatch(r"chapters/chapter-\d+-(kanji|vocabulary)\.html", local)))
-                                  or (category == "pdf" and re.fullmatch(r"(chapter-\d+-(kanji|vocabulary)|(kanji|vocabulary|grammar)-master)\.pdf", local))
+                    recognized = ((category == "html" and (local in {"index.html", "dictionary.html", "vocabulary.html", "grammar.html", "function-words.html", "kanji.html", "review.html", "assets/style.css", "assets/lookup.js"} or re.fullmatch(r"chapters/chapter-\d+-(kanji|vocabulary)\.html", local)))
+                                  or (category == "pdf" and re.fullmatch(r"(chapter-\d+-(kanji|vocabulary|grammar|function-words)|(kanji|vocabulary|grammar|function-words)-master)\.pdf", local))
                                   or (category == "previews" and re.fullmatch(r"book-[a-f0-9]{16}-contact-\d+\.png", local))
                                   or (category == "data" and (local in {*CORE_FILES, "kanji-context.json", "vocabulary-sets.json"} or re.fullmatch(r"assets/kanjivg/([a-f0-9]+\.svg|ATTRIBUTION\.txt)", local) or re.fullmatch(r"print/(chapter-\d+-(kanji|vocabulary)|(kanji|vocabulary|grammar)-master)\.(layout|sources|vocabulary)\.json", local))))
                     if not recognized:

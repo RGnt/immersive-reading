@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ImmersiveReading.Core\ImmersiveReading.Core.csproj" />
     <ProjectReference Include="..\..\src\ImmersiveReading.Library\ImmersiveReading.Library.csproj" />
+    <ProjectReference Include="..\..\src\Plugins\ImmersiveReading.Plugins.JitenMoe\ImmersiveReading.Plugins.JitenMoe.csproj" />
   </ItemGroup>
 
 </Project>

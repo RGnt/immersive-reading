@@ -225,7 +225,7 @@ export const ChapterStudyPanel: React.FC = () => {
                 )}
 
                 {item.sampleSentence && (
-                  <div className="text-[10px] text-[var(--text-muted)] bg-black/20 p-1.5 rounded border border-white/5 font-japanese leading-relaxed italic">
+                  <div className="text-[10px] text-[var(--text-muted)] bg-black/20 p-1.5 rounded border border-[var(--border-color)] font-japanese leading-relaxed italic">
                     "{item.sampleSentence}"
                   </div>
                 )}
@@ -342,7 +342,7 @@ export const ChapterStudyPanel: React.FC = () => {
                 )}
 
                 {item.examples && item.examples.length > 0 && (
-                  <div className="text-[10px] text-[var(--text-muted)] bg-black/20 p-1.5 rounded border border-white/5 font-japanese leading-relaxed italic">
+                  <div className="text-[10px] text-[var(--text-muted)] bg-black/20 p-1.5 rounded border border-[var(--border-color)] font-japanese leading-relaxed italic">
                     "{item.examples[0]}"
                   </div>
                 )}

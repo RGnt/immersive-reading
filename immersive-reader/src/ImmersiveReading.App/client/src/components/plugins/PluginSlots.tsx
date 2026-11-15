@@ -61,7 +61,7 @@ const ToolbarActionButton: React.FC<{
         aria-expanded={Popover ? open : undefined}
         onClick={() => (Popover ? setOpen((o) => !o) : action.onClick?.(context))}
         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium cursor-pointer ${
-          open ? 'bg-white/15 text-white' : 'hover:bg-white/10 text-white/80'
+          open ? 'bg-[var(--hover-bg-strong)] text-[var(--text-primary)]' : 'hover:bg-[var(--hover-bg)] text-[var(--text-primary)]'
         }`}
       >
         <Icon className="w-4 h-4" />
@@ -71,7 +71,7 @@ const ToolbarActionButton: React.FC<{
         <div
           role="dialog"
           aria-label={action.label}
-          className="absolute right-0 top-full mt-1 z-50 min-w-[18rem] rounded-lg border border-white/15 bg-[var(--bg-secondary,#18181b)] shadow-2xl"
+          className="absolute right-0 top-full mt-1 z-50 min-w-[18rem] rounded-[var(--radius-modal)] border border-[var(--border-color)] bg-[var(--bg-surface)] shadow-2xl"
         >
           <PluginErrorBoundary pluginId={action.pluginId}>
             <Popover onClose={() => setOpen(false)} />
@@ -105,7 +105,7 @@ export const ReaderToolbarPluginSlot: React.FC<{
             title={d.title}
             onClick={() => toggleDrawer(d.id)}
             className={`p-2 rounded-md transition-colors cursor-pointer ${
-              isOpen ? 'bg-indigo-600 text-white' : 'hover:bg-white/10 text-white/80'
+              isOpen ? 'bg-indigo-600 text-white' : 'hover:bg-[var(--hover-bg)] text-[var(--text-primary)]'
             }`}
           >
             <Icon className="w-4 h-4" />
@@ -144,7 +144,7 @@ export const ReaderDrawerPluginSlot: React.FC = () => {
   const width = activeDrawer.defaultSize ?? 380;
 
   return (
-    <div style={{ width }} className="h-full shrink-0 border-l border-white/10 bg-[var(--bg-secondary)]">
+    <div style={{ width }} className="h-full shrink-0 border-l border-[var(--border-color)] bg-[var(--bg-secondary)]">
       <PluginErrorBoundary pluginId={activeDrawer.pluginId}>
         <Component onClose={() => toggleDrawer(null)} />
       </PluginErrorBoundary>
@@ -170,10 +170,10 @@ export const PluginModalHost: React.FC = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-      <div className={`w-full ${maxWidth} rounded-xl bg-[var(--bg-secondary,#18181b)] border border-white/15 shadow-2xl overflow-hidden`}>
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10">
-          <h3 className="font-semibold text-base text-white">{activeModal.title}</h3>
-          <button onClick={closeModal} className="p-1 rounded hover:bg-white/10 text-white/70 hover:text-white cursor-pointer">
+      <div className={`w-full ${maxWidth} modal-surface rounded-[var(--radius-modal)] bg-[var(--bg-surface)] border border-[var(--border-color)] shadow-2xl overflow-hidden`}>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border-color)]">
+          <h3 className="font-semibold text-base text-[var(--text-primary)]">{activeModal.title}</h3>
+          <button onClick={closeModal} className="p-1 rounded hover:bg-[var(--hover-bg)] text-[var(--text-muted)] hover:text-[var(--text-primary)] cursor-pointer">
             ✕
           </button>
         </div>
@@ -184,5 +184,65 @@ export const PluginModalHost: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+// 4. Library slots (BookCard / LibraryGrid): badges and series actions contributed by plugins.
+export const BookBadgeSlot: React.FC<{ books: any[]; context: 'card' | 'row' | 'series' }> = ({ books, context }) => {
+  const badges = usePluginStore((s) => s.bookBadges);
+  if (badges.length === 0 || books.length === 0) return null;
+  return (
+    <>
+      {badges.map((b) => {
+        const Badge = b.component;
+        return (
+          <PluginErrorBoundary key={`${b.pluginId}:${b.id}`} pluginId={b.pluginId}>
+            <Badge books={books} context={context} />
+          </PluginErrorBoundary>
+        );
+      })}
+    </>
+  );
+};
+
+const SERIES_ACTION_STYLES = {
+  full: 'flex items-center space-x-1.5 px-3.5 py-1.5 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 text-xs font-semibold shadow-sm transition-colors',
+  chip: 'p-1 px-2 rounded-lg bg-sky-500/15 border border-sky-500/30 text-sky-300 hover:bg-sky-500/30 text-xs font-semibold transition-colors flex items-center space-x-1',
+  inline: 'px-2.5 py-1 rounded text-xs font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/30 transition-colors flex items-center space-x-1',
+} as const;
+
+export const SeriesActionsSlot: React.FC<{ seriesName: string; variant: keyof typeof SERIES_ACTION_STYLES }> = ({
+  seriesName,
+  variant,
+}) => {
+  const actions = usePluginStore((s) => s.seriesActions);
+  const plugins = usePluginStore((s) => s.plugins);
+  const openModal = usePluginStore((s) => s.openModal);
+  return (
+    <>
+      {actions.map((a) => {
+        const Icon = a.icon;
+        return (
+          <button
+            key={`${a.pluginId}:${a.id}`}
+            type="button"
+            title={a.title ?? a.label}
+            className={SERIES_ACTION_STYLES[variant]}
+            onClick={(e) => {
+              e.stopPropagation();
+              a.onClick({
+                seriesName,
+                openModal: (opts) => openModal({ ...opts, pluginId: a.pluginId }),
+                rpc: (actionName, payload) => rpc.call(`ext.${a.pluginId}.${actionName}`, payload ?? {}),
+                getPluginConfig: () => (plugins[a.pluginId]?.config ?? {}) as any,
+              });
+            }}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            <span>{a.label}</span>
+          </button>
+        );
+      })}
+    </>
   );
 };

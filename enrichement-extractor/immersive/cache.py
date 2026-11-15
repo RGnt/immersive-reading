@@ -23,7 +23,7 @@ CACHE_FORMAT = 1
 CACHE_ENABLED = ContextVar("immersive_persistent_cache_enabled", default=True)
 READER_FILES = ("__init__.py", "build.py", "enrichment.py", "epub.py", "matching.py", "japanese.py", "furigana.py",
                 "tokenization.py", "resources.py", "kanji_meanings.py", "yomitan.py", "examples.py",
-                "validation.py", "reader.schema.json", "config.schema.json", "cache.py", "text_index.py", "ambiguity.py", "provenance.py")
+                "validation.py", "reader.schema.json", "config.schema.json", "cache.py", "text_index.py", "ambiguity.py", "provenance.py", "deck_grammar.py")
 
 
 def canonical(value):
@@ -169,6 +169,13 @@ def reader_inputs(folder, store, *, cancel=None):
             records[(path.name, number)] = row
             rows.append({k: v for k, v in row.items() if k != "first_appearance"})
         semantic.append({"file": path.name, "columns": [f for f in fields if f != "first_appearance"], "rows": rows})
+    # Optional LLM-made grammar notes next to the deck. They change the reader bundle, so they must change the cache key,
+    # but they are not a tracked source file (the EPUB/CSV stamps in source_files stay unchanged).
+    from . import deck_grammar
+    grammar_path = deck_grammar.path_for(folder)
+    if grammar_path.exists():
+        check_cancelled(cancel)
+        semantic.append({"file": deck_grammar.FILE_NAME, "sha256": hashlib.sha256(grammar_path.read_bytes()).hexdigest()})
     from . import __version__
     inputs = {"format": CACHE_FORMAT, "pipeline_version": __version__, "schema_version": "1.0.0", "sources": semantic, "config": config,
               "resources": store.reader_manifest(cancel=cancel), "code": code_revision(),

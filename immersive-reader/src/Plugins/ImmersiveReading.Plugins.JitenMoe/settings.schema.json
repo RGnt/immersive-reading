@@ -1,0 +1,21 @@
+{
+  "type": "object",
+  "title": "jiten.moe Integration",
+  "properties": {
+    "apiKey": {
+      "type": "string",
+      "title": "jiten.moe API key",
+      "description": "Optional. Sent as X-Api-Key / Bearer when set. Falls back to the JITEN_API_KEY environment variable or .env file.",
+      "format": "password",
+      "default": ""
+    },
+    "defaultMediaType": {
+      "type": "integer",
+      "title": "Default media type for searches",
+      "description": "0 = all formats, 1 = Manga, 2 = Visual Novels, 3 = Anime, 4 = Novels / Light Novels.",
+      "default": 4,
+      "minimum": 0,
+      "maximum": 10
+    }
+  }
+}

@@ -90,6 +90,9 @@ public sealed class AppServicesContainerTests : IDisposable
         Assert.Contains(plugins, p => p.Manifest.Id == "japanese");
         Assert.Contains(plugins, p => p.Manifest.Id == "aiCompanion");
         Assert.Contains(plugins, p => p.Manifest.Id == "posHighlighter");
+        Assert.Contains(plugins, p => p.Manifest.Id == "jitenMoe");
+        Assert.Contains(plugins, p => p.Manifest.Id == "deckBuilder");
+        Assert.Contains(plugins, p => p.Manifest.Id == "characterKnowledge");
     }
 
     public void Dispose()

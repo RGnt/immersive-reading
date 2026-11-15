@@ -2,6 +2,10 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { useReaderStore } from '../../stores/useReaderStore';
 import { useConfigStore } from '../../stores/useConfigStore';
 import { usePluginStore } from '../../stores/usePluginStore';
+import { applyUserCssTo, effectiveUserCss, useAppearanceStore } from '../../stores/useAppearanceStore';
+
+/** macOS keeps its own overlay scroll bars (thin, hidden while idle); styling them would make them permanent. */
+const isMacHost = /Mac|iPhone|iPad/i.test(navigator.userAgent);
 
 export const ChapterIframe: React.FC = () => {
   const {
@@ -43,6 +47,21 @@ export const ChapterIframe: React.FC = () => {
   useEffect(() => {
     applyPluginStyles();
   }, [applyPluginStyles]);
+
+  // The user's own stylesheet (Settings -> Custom CSS) also reaches the book page; it goes in last, after the app's reader styles.
+  const userCss = useAppearanceStore(effectiveUserCss);
+  const applyUserCss = useCallback(() => {
+    try {
+      const doc = iframeRef.current?.contentDocument;
+      if (doc?.documentElement) applyUserCssTo(doc, userCss);
+    } catch {
+      // Cross-origin guard
+    }
+  }, [userCss]);
+
+  useEffect(() => {
+    applyUserCss();
+  }, [applyUserCss]);
 
   const applyReaderThemeToIframe = useCallback(() => {
     const iframe = iframeRef.current;
@@ -105,6 +124,11 @@ export const ChapterIframe: React.FC = () => {
         rt {
           color: ${rubyColor} !important;
         }
+        ${isMacHost ? '' : `
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+        ::-webkit-scrollbar-thumb { background-color: color-mix(in srgb, ${textPrimary} 28%, transparent); border: 2px solid transparent; background-clip: padding-box; border-radius: 0; }
+        ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, ${textPrimary} 55%, transparent); }`}
         ${(modeStr === 'Off' || modeStr === 'None') ? 'rt { display: none !important; }' : ''}
       `;
 
@@ -179,7 +203,7 @@ export const ChapterIframe: React.FC = () => {
     : undefined;
 
   return (
-    <div className="flex-1 relative w-full h-full overflow-hidden bg-[var(--bg-primary)]">
+    <div data-ir="chapter-frame" className="flex-1 relative w-full h-full overflow-hidden bg-[var(--bg-primary)]">
       <iframe
         key={`${bookDetail.summary.bookId}-${currentSpineHref}`}
         ref={iframeRef}
@@ -191,6 +215,7 @@ export const ChapterIframe: React.FC = () => {
         onLoad={() => {
           applyReaderThemeToIframe();
           applyPluginStyles();
+          applyUserCss();
           const cw = iframeRef.current?.contentWindow;
           if (cw) {
             cw.postMessage({ type: 'ir-set-furigana-mode', mode: furiganaMode }, '*');

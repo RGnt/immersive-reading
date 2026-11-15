@@ -52,7 +52,9 @@ public static class StudyPackOverviewBuilder
                 {
                     ("kanji-master.pdf", "Kanji Master Sheet (A4)"),
                     ("vocabulary-master.pdf", "Vocabulary Master Sheet (A4)"),
-                    ("grammar-master.pdf", "Grammar Master Sheet (A4)")
+                    ("grammar-master.pdf", "Grammar Master Sheet (A4)"),
+                    // only present when the deck has particles / auxiliary verbs (spec 16)
+                    ("function-words-master.pdf", "Particles & Function Words Master Sheet (A4)")
                 };
 
                 foreach (var (fileName, title) in masterSpec)
@@ -75,7 +77,7 @@ public static class StudyPackOverviewBuilder
                 {
                     var fi = new FileInfo(file);
                     string fName = fi.Name;
-                    string kind = fName.Contains("kanji", StringComparison.OrdinalIgnoreCase) ? "chapter-kanji" : "chapter-vocabulary";
+                    string kind = ChapterPdfKind(fName);
                     chapterPdfs.Add(new StudyPackPdfArtifact(
                         FileName: fName,
                         Title: FormatChapterPdfTitle(fName),
@@ -104,6 +106,8 @@ public static class StudyPackOverviewBuilder
                         ? "Kanji Master Sheet (A4)"
                         : fName.Equals("grammar-master.pdf", StringComparison.OrdinalIgnoreCase)
                         ? "Grammar Master Sheet (A4)"
+                        : fName.Equals("function-words-master.pdf", StringComparison.OrdinalIgnoreCase)
+                        ? "Particles & Function Words Master Sheet (A4)"
                         : FormatChapterPdfTitle(fName);
 
                     masterPdfs.Add(new StudyPackPdfArtifact(
@@ -236,6 +240,16 @@ public static class StudyPackOverviewBuilder
         }
 
         return result;
+    }
+
+    /// <summary>Kind of a per-chapter booklet from its file name: chapter-NNN-(kanji|vocabulary|grammar|function-words).pdf.</summary>
+    public static string ChapterPdfKind(string fileName)
+    {
+        string stem = Path.GetFileNameWithoutExtension(fileName);
+        if (stem.EndsWith("-function-words", StringComparison.OrdinalIgnoreCase)) return "chapter-function-words";
+        if (stem.EndsWith("-grammar", StringComparison.OrdinalIgnoreCase)) return "chapter-grammar";
+        if (stem.EndsWith("-kanji", StringComparison.OrdinalIgnoreCase)) return "chapter-kanji";
+        return "chapter-vocabulary";
     }
 
     public static string FormatChapterPdfTitle(string fileName)

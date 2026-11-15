@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ImmersiveReading.Core.Library;
 using ImmersiveReading.Library;
+using ImmersiveReading.Library.Duplicates;
 
 namespace ImmersiveReading.App.Rpc.Modules;
 
@@ -21,6 +22,12 @@ public sealed class LibraryRpcModule(
             yield return ("library.pickDirectory", (req, ct) => PickDirectoryAsync(req, ct));
             yield return ("library.updateBookMetadata", (req, _) => Task.FromResult<object?>(UpdateBookMetadata(req)));
             yield return ("library.bulkUpdateBooks", (req, _) => Task.FromResult<object?>(BulkUpdateBooks(req)));
+            yield return ("library.previewBulkUpdate", (req, _) => Task.FromResult<object?>(PreviewBulkUpdate(req)));
+            yield return ("library.listBookIds", (req, _) => Task.FromResult<object?>(ListBookIds(req)));
+            yield return ("library.setBookFlags", (req, _) => Task.FromResult<object?>(SetBookFlags(req)));
+            yield return ("library.setSeriesFlags", (req, _) => Task.FromResult<object?>(SetSeriesFlags(req)));
+            yield return ("library.getReadingListCounts", (req, _) => Task.FromResult<object?>(library.GetReadingListCounts()));
+            yield return ("library.listSeriesNames", (req, _) => Task.FromResult<object?>(library.ListSeriesNames()));
             yield return ("library.resetBookMetadataToOpf", (req, _) => Task.FromResult<object?>(ResetBookMetadataToOpf(req)));
             yield return ("library.deleteBook", (req, _) => Task.FromResult<object?>(DeleteBook(req)));
             yield return ("library.bulkDeleteBooks", (req, _) => Task.FromResult<object?>(BulkDeleteBooks(req)));
@@ -36,9 +43,42 @@ public sealed class LibraryRpcModule(
             yield return ("library.deleteTag", (req, _) => Task.FromResult<object?>(DeleteTag(req)));
             yield return ("library.listCustomFieldDefs", (req, _) => Task.FromResult<object?>(library.ListCustomFieldDefinitions()));
             yield return ("library.saveCustomFieldDef", (req, _) => Task.FromResult<object?>(SaveCustomFieldDef(req)));
+            yield return ("library.findDuplicates", (req, ct) => Task.Run<object?>(() => FindDuplicates(req), ct));
+            yield return ("library.resolveDuplicates", (req, _) => Task.FromResult<object?>(ResolveDuplicates(req)));
+            yield return ("library.resolveDuplicatesBatch", (req, ct) => Task.Run<object?>(() => ResolveDuplicatesBatch(req), ct));
+            yield return ("library.dismissDuplicates", (req, _) => Task.FromResult<object?>(DismissDuplicates(req)));
+            yield return ("library.listRemovedBooks", (req, _) => Task.FromResult<object?>(library.ListRemovedBooks()));
+            yield return ("library.forgetRemovedBook", (req, _) => Task.FromResult<object?>(new { ok = library.ForgetRemovedBook(req.RequiredString("bookId")) }));
             yield return ("library.setCustomFieldValue", (req, _) => Task.FromResult<object?>(SetCustomFieldValue(req)));
         }
     }
+
+    private object? FindDuplicates(RpcRequest req)
+    {
+        int? min = req.OptionalInt("minScore");
+        var result = library.FindDuplicates(min is null ? null : new DuplicateOptions { MinScore = Math.Clamp(min.Value, 0, 100) });
+        return result;
+    }
+
+    private object? ResolveDuplicates(RpcRequest req)
+    {
+        string keep = req.RequiredString("keepBookId");
+        var remove = req.StringList("removeBookIds");
+        bool merge = req.OptionalBool("mergeData") ?? true;
+        return library.ResolveDuplicates(keep, remove, merge);
+    }
+
+    private sealed record BatchPayload(List<ResolveGroupRequest>? Groups, bool? MergeData);
+
+    private object? ResolveDuplicatesBatch(RpcRequest req)
+    {
+        var payload = req.Bind<BatchPayload>();
+        if (payload?.Groups is not { Count: > 0 } groups) throw new ArgumentException("groups is required and must not be empty.");
+        return library.ResolveDuplicatesBatch(groups, payload.MergeData ?? true);
+    }
+
+    private object? DismissDuplicates(RpcRequest req)
+        => new { pairs = library.DismissDuplicates(req.StringList("bookIds")) };
 
     private object? ListBooks(RpcRequest req)
     {
@@ -150,6 +190,34 @@ public sealed class LibraryRpcModule(
             ?? throw new ArgumentException("Invalid bulkUpdateBooks payload.");
         int updatedCount = library.BulkUpdateBooks(patch);
         return new { updatedCount };
+    }
+
+    private object? PreviewBulkUpdate(RpcRequest req)
+    {
+        var patch = req.Bind<BulkBookUpdatePatch>()
+            ?? throw new ArgumentException("Invalid previewBulkUpdate payload.");
+        return library.PreviewBulkUpdate(patch);
+    }
+
+    /// <summary>All books matching a list query, not just the visible page (for "select all N matching").</summary>
+    /// <summary>Favourite and reading list of one or many books. A flag that is absent is left as it is; a status of "" clears it.</summary>
+    private object? SetBookFlags(RpcRequest req)
+    {
+        int updated = library.SetBookFlags(req.StringList("bookIds"), req.OptionalBool("favorite"), req.OptionalString("readingStatus"));
+        return new { updated, counts = library.GetReadingListCounts() };
+    }
+
+    private object? SetSeriesFlags(RpcRequest req)
+    {
+        library.SetSeriesFlags(req.RequiredString("seriesName"), req.OptionalBool("favorite"), req.OptionalString("readingStatus"));
+        return new { ok = true, counts = library.GetReadingListCounts() };
+    }
+
+    private object? ListBookIds(RpcRequest req)
+    {
+        var query = req.Bind<BookListQuery>() ?? new BookListQuery();
+        var ids = library.ListBookIds(query);
+        return new { bookIds = ids, total = ids.Count };
     }
 
     private object? ResetBookMetadataToOpf(RpcRequest req)

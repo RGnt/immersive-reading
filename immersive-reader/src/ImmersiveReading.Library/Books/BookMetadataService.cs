@@ -102,6 +102,54 @@ public sealed class BookMetadataService
         return _bookQueryService.GetBookDetail(req.BookId)!;
     }
 
+    private static string? Clean(string? value) => value?.Trim();
+
+    private static List<NumberingInput> LoadNumberingInputs(SqliteConnection conn, SqliteTransaction? tx, IReadOnlyList<string> ids)
+    {
+        var inputs = new List<NumberingInput>(ids.Count);
+        foreach (string id in ids.Distinct(StringComparer.Ordinal))
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = "SELECT title, sort_title, epub_file_name FROM books WHERE book_id = $id;";
+            cmd.Parameters.AddWithValue("$id", id);
+            using var r = cmd.ExecuteReader();
+            if (r.Read()) inputs.Add(new NumberingInput(id, r.GetString(0), r.IsDBNull(1) ? "" : r.GetString(1), r.IsDBNull(2) ? "" : r.GetString(2)));
+        }
+        return inputs;
+    }
+
+    /// <summary>What <see cref="BulkUpdateBooks"/> would do to series and volume numbers, computed by the same code. Nothing is written.</summary>
+    public BulkPreview PreviewBulkUpdate(BulkBookUpdatePatch patch, int maxRows = 300)
+    {
+        if (patch.BookIds is null || patch.BookIds.Count == 0) return new BulkPreview(0, 0, 0, 0, []);
+        using var conn = _db.OpenConnection();
+        var inputs = LoadNumberingInputs(conn, null, patch.BookIds);
+        string? mode = BulkNumbering.EffectiveMode(patch.NumberingMode, patch.AutoNumberVolumes);
+        var numbers = BulkNumbering.Compute(inputs, mode, patch.AutoNumberStart, patch.AutoNumberStep);
+        string? newSeries = Clean(patch.SeriesName);
+
+        var rows = new List<BulkPreviewRow>();
+        int seriesChanges = 0, indexChanges = 0, withoutNumber = 0;
+        foreach (var input in inputs)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT series_name, series_index FROM books WHERE book_id = $id;";
+            cmd.Parameters.AddWithValue("$id", input.BookId);
+            using var r = cmd.ExecuteReader();
+            if (!r.Read()) continue;
+            string currentSeries = r.IsDBNull(0) ? "" : r.GetString(0);
+            double? currentIndex = r.IsDBNull(1) ? null : r.GetDouble(1);
+            string nextSeries = newSeries ?? currentSeries;
+            double? nextIndex = patch.ClearSeriesIndex ? null : numbers.TryGetValue(input.BookId, out var n) ? n : currentIndex;
+            if (nextSeries != currentSeries) seriesChanges++;
+            if (nextIndex != currentIndex) indexChanges++;
+            if (mode == BulkNumbering.FromTitle && !numbers.ContainsKey(input.BookId)) withoutNumber++;
+            if (rows.Count < maxRows) rows.Add(new BulkPreviewRow(input.BookId, input.Title, input.FileName, currentSeries, currentIndex, nextSeries, nextIndex));
+        }
+        return new BulkPreview(inputs.Count, seriesChanges, indexChanges, withoutNumber, rows);
+    }
+
     public int BulkUpdateBooks(BulkBookUpdatePatch patch)
     {
         if (patch.BookIds is null || patch.BookIds.Count == 0) return 0;
@@ -111,10 +159,12 @@ public sealed class BookMetadataService
         string now = _timeProvider.GetUtcNow().UtcDateTime.ToString("O");
         int updated = 0;
 
-        for (int i = 0; i < patch.BookIds.Count; i++)
+        string? mode = BulkNumbering.EffectiveMode(patch.NumberingMode, patch.AutoNumberVolumes);
+        var numbers = BulkNumbering.Compute(LoadNumberingInputs(conn, tx, patch.BookIds), mode, patch.AutoNumberStart, patch.AutoNumberStep);
+
+        foreach (string bookId in patch.BookIds.Distinct(StringComparer.Ordinal))
         {
-            string bookId = patch.BookIds[i];
-            double? volumeNumber = patch.AutoNumberVolumes ? (patch.AutoNumberStart + i) : null;
+            double? volumeNumber = numbers.TryGetValue(bookId, out var assigned) ? assigned : null;
 
             using (var cmd = conn.CreateCommand())
             {
@@ -123,7 +173,7 @@ public sealed class BookMetadataService
                     UPDATE books
                     SET folder_id = CASE WHEN $clearFolder = 1 THEN NULL ELSE COALESCE($folderId, folder_id) END,
                         series_name = COALESCE($seriesName, series_name),
-                        series_index = COALESCE($volNum, series_index),
+                        series_index = CASE WHEN $clearIndex = 1 THEN NULL ELSE COALESCE($volNum, series_index) END,
                         authors = COALESCE($authors, authors),
                         author_sort = COALESCE($authorSort, author_sort),
                         publisher = COALESCE($publisher, publisher),
@@ -136,13 +186,14 @@ public sealed class BookMetadataService
                 cmd.Parameters.AddWithValue("$id", bookId);
                 cmd.Parameters.AddWithValue("$clearFolder", patch.ClearFolderId ? 1 : 0);
                 cmd.Parameters.AddWithValue("$folderId", (object?)patch.FolderId ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$seriesName", (object?)patch.SeriesName ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$seriesName", (object?)Clean(patch.SeriesName) ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$volNum", (object?)volumeNumber ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$authors", (object?)patch.Authors ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$authorSort", (object?)patch.AuthorSort ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$publisher", (object?)patch.Publisher ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$imprint", (object?)patch.Imprint ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("$lang", (object?)patch.Language ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$clearIndex", patch.ClearSeriesIndex ? 1 : 0);
+                cmd.Parameters.AddWithValue("$authors", (object?)Clean(patch.Authors) ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$authorSort", (object?)Clean(patch.AuthorSort) ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$publisher", (object?)Clean(patch.Publisher) ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$imprint", (object?)Clean(patch.Imprint) ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("$lang", (object?)Clean(patch.Language) ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("$now", now);
                 updated += cmd.ExecuteNonQuery();
             }
@@ -258,31 +309,7 @@ public sealed class BookMetadataService
     {
         using var conn = _db.OpenConnection();
         using var tx = conn.BeginTransaction();
-
-        using (var delFts = conn.CreateCommand())
-        {
-            delFts.Transaction = tx;
-            delFts.CommandText = "DELETE FROM books_fts WHERE book_id = $id;";
-            delFts.Parameters.AddWithValue("$id", bookId);
-            delFts.ExecuteNonQuery();
-        }
-
-        using (var delCf = conn.CreateCommand())
-        {
-            delCf.Transaction = tx;
-            delCf.CommandText = "DELETE FROM custom_field_values WHERE entity_type = 'book' AND entity_id = $id;";
-            delCf.Parameters.AddWithValue("$id", bookId);
-            delCf.ExecuteNonQuery();
-        }
-
-        using (var delB = conn.CreateCommand())
-        {
-            delB.Transaction = tx;
-            delB.CommandText = "DELETE FROM books WHERE book_id = $id;";
-            delB.Parameters.AddWithValue("$id", bookId);
-            delB.ExecuteNonQuery();
-        }
-
+        DeleteBookInTransaction(conn, tx, bookId);
         tx.Commit();
     }
 
@@ -293,35 +320,33 @@ public sealed class BookMetadataService
         using var tx = conn.BeginTransaction();
 
         int count = 0;
-        foreach (string bookId in bookIds)
-        {
-            using (var delFts = conn.CreateCommand())
-            {
-                delFts.Transaction = tx;
-                delFts.CommandText = "DELETE FROM books_fts WHERE book_id = $id;";
-                delFts.Parameters.AddWithValue("$id", bookId);
-                delFts.ExecuteNonQuery();
-            }
-
-            using (var delCf = conn.CreateCommand())
-            {
-                delCf.Transaction = tx;
-                delCf.CommandText = "DELETE FROM custom_field_values WHERE entity_type = 'book' AND entity_id = $id;";
-                delCf.Parameters.AddWithValue("$id", bookId);
-                delCf.ExecuteNonQuery();
-            }
-
-            using (var delB = conn.CreateCommand())
-            {
-                delB.Transaction = tx;
-                delB.CommandText = "DELETE FROM books WHERE book_id = $id;";
-                delB.Parameters.AddWithValue("$id", bookId);
-                count += delB.ExecuteNonQuery();
-            }
-        }
+        foreach (string bookId in bookIds) count += DeleteBookInTransaction(conn, tx, bookId);
 
         tx.Commit();
         return count;
+    }
+
+    /// <summary>Removes the library entry (search index, custom fields and, by cascade, chapters, progress and tags). Files on disk are untouched.</summary>
+    internal static int DeleteBookInTransaction(SqliteConnection conn, SqliteTransaction tx, string bookId)
+    {
+        foreach (string sql in new[]
+        {
+            "DELETE FROM books_fts WHERE book_id = $id;",
+            "DELETE FROM custom_field_values WHERE entity_type = 'book' AND entity_id = $id;"
+        })
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = sql;
+            cmd.Parameters.AddWithValue("$id", bookId);
+            cmd.ExecuteNonQuery();
+        }
+
+        using var delBook = conn.CreateCommand();
+        delBook.Transaction = tx;
+        delBook.CommandText = "DELETE FROM books WHERE book_id = $id;";
+        delBook.Parameters.AddWithValue("$id", bookId);
+        return delBook.ExecuteNonQuery();
     }
 
     public void ReorderBooks(IReadOnlyList<string> orderedBookIds)

@@ -96,7 +96,7 @@ To keep large libraries clean and uncluttered, Immersive Reading automatically g
 - **Folded Series Cards & Rows**: Multi-volume series (2 or more volumes) appear as stacked cards (in Grid View) or highlighted series rows (in Table View) displaying:
   - The cover artwork and bibliographic details of the **1st volume**.
   - A prominent volume count badge (e.g. `📚 15 Vols`).
-  - Quick action buttons: `📚 View All (N)` and `⚡ Jiten`.
+  - Quick action buttons: `📚 View All (N)` and, with the jiten.moe plugin enabled, `Match on jiten.moe`.
 - **Standalone Display**: Single-volume books or books without a series name are displayed individually as regular books.
 - **Series Drill-Down View**: Clicking any series card or row opens the series view, displaying all volumes ordered by volume number (`#1`, `#2`, `#3`...). A top banner provides one-click navigation back to the library, as well as series-wide batch actions (`⚡ 1-Press Match on jiten.moe` and `📥 Download All Decks (.csv)`).
 
@@ -115,6 +115,30 @@ Manage dozens or hundreds of books simultaneously:
 - **Select Multiple**: Hold `Ctrl` and click individual books, or hold `Shift` and click to select a continuous range.
 - **Batch Drag-and-Drop**: Drag any book in the selection to move all selected books together into a target folder.
 - **Batch Context Menu**: Right-click any selected book to apply tags, change reading status, or move the entire batch.
+- **Select everything a filter matches**: the list shows 100 books per page. In the selection bar at the bottom, **select all N** selects every book the current folder, tag and search filters match, on all pages.
+- **Edit… (bulk metadata editing)**: with books selected, press **Edit…** in the selection bar to change many books at once instead of typing into each one. Tick the fields that should change; everything you do not tick stays as it is.
+  - **Series**: type a name (existing series are suggested with their book counts) and pick how to number the volumes: *1, 2, 3 in title order* (Vol 2 sorts before Vol 10), *in file name order*, *in the order you selected them*, *the number written in each title* (第3巻, 3, III, 上/中/下; books whose title has no number keep theirs), or *remove the volume numbers*. Start and step can be changed.
+  - **Author, publisher, imprint, language** and **tags** (click a tag once to add it, twice to remove it from all). A ticked field left empty clears it, and the dialog says so.
+  - A **preview** shows how many series names and volume numbers will change and the first books (now → after). It is computed by the same code that applies the edit. Nothing changes until you press **Apply to N**.
+  - The importer guesses series and volumes from titles; a bulk edit replaces those guesses.
+
+### Reading list, favourites, bookmarks and the quiz
+- **Favourites and reading lists.** Click the **star** on a book card to favourite it. In the book's details (**Info**) choose *Currently reading*, *Planning to read* or *Completed* for the book, and a star and a list for the **whole series**; a book without its own list takes its series' list. The sidebar section **Lists** shows each list with its count. Select several books and use **Favourite** or **Reading list…** in the selection bar to set many at once. **Shift+click** a card to add it to, or remove it from, the selection.
+- **Bookmarks.** **Bookmark here** in the reader's bookmark drawer saves your place. Nothing selected: the line reads `Vol3Ch12` (volume and chapter). With words selected in the text: `[ch12] the words you selected`.
+- **The reading quiz** asks about the **last chapter you finished**, never the one you are reading. Multiple-choice questions have four realistic answers and one correct one, in random positions. Written answers are judged first for whether they answer the question, then grammar, then vocabulary. Words you use correctly three times in a row move towards Known, and a word you misuse goes back to Learning; the answer shows what moved (switch it off in the AI Reading Companion settings). The quiz needs a running model: without one it says so instead of making up a question.
+
+### Prompts, your own stylesheet and what the characters know about you (Settings)
+- **Prompts**: every prompt the program sends to a model, in an editor. Pick one, change the text, press **Ctrl+S**. The program checks your copy as you type: it must keep the `{{variables}}` the header declares (the program fills them in) and variables marked untrusted (text from a book or from you) stay fenced. A copy that does not pass is not used, and the reason is shown; **Use built-in text** brings the original back. A change applies from the next request; a book build that is already running keeps the prompts it started with.
+- **Custom CSS**: one stylesheet of your own, applied over the app and inside the book page. The window changes while you type; **Ctrl+S** keeps it. Aim at `html.ir-app` (the app), `html.ir-reader` (the book page) or the regions `[data-ir="sidebar"]`, `[data-ir="header"]`, `[data-ir="library"]`, `[data-ir="reader"]`, `[data-ir="chapter-frame"]`, or change the theme variables. **If the interface becomes unusable, press Ctrl+Alt+Shift+C** to switch your stylesheet off (the same keys switch it back on). Your file is kept.
+- **Memory**: facts you state about yourself while talking to a character ("my sister is called Yuna") are remembered on this computer and given to the characters in later conversations. This tab lists them; you can add, delete one, or **Forget everything**. Switch the feature off, or limit what you tell a character to that character, under Plugins → AI Reading Companion. A fact that is used in a reply is sent to your model endpoint like the rest of the chat.
+
+### Finding Duplicate Books
+Click **Find Duplicates...** in the sidebar. The library is compared by title, volume number, author, series, ISBN and length (a fraction of a second for thousands of books) and every group of likely duplicates is shown side by side: cover, volume, authors, length, chapters, file name and folder, size, and what *you* have on it (reading progress, study pack, vocabulary deck, tags).
+- **Nothing is removed automatically.** Each group has a **Keep** choice (preselected with a recommendation, for example the copy you have already read or that has a deck) and three buttons: **Keep selected, remove others**, **Not duplicates** (remembered, never shown again) and **Skip**.
+- **Mass clear keeping recommended (N)** (toolbar) clears every group currently listed in one go, keeping the recommended book in each (or your own pick where you changed the selection) and removing the rest from the library. It asks first and shows how many groups of each confidence it covers. To be careful, switch the list to *Likely and certain* (the default) before using it, or review the *possible* groups first. Files stay on disk, so it can be undone with *Removed duplicates > Allow import again* plus a scan.
+- **Different volumes are never grouped**, nor books in different languages. The confidence is *certain* (same ISBN, or same title, volume and author), *likely* or *possible* (use the drop-down to include them).
+- **Removing only removes the library entry.** The EPUB file stays on disk, and tags, the vocabulary deck and missing details (series, author, ISBN ...) are copied to the book you keep (untick *Merge...* to skip that). Reading progress is not copied because chapter structures differ between editions, which is why the recommendation favours the copy you have read.
+- A folder scan will **not** import a removed duplicate again. The **Removed duplicates** tab lists them with **Allow import again**. Importing a single file by hand always works.
 
 ### Pruning Empty Folders & Removing Books
 - **Prune Empty Folders**: Click the `🧹 Prune Empty Folders` button in the sidebar. This scans your collection tree and safely removes all empty folders in one click, keeping your library tidy.
@@ -127,7 +151,9 @@ Manage dozens or hundreds of books simultaneously:
 ### Book Info Pop-up Modal
 Next to every `📖 Read` button in Table and Grid views, you will find an `ℹ️ Info` button. Clicking it opens a comprehensive, tabbed pop-up dialog:
 - **Bibliographic Metadata**: Edit Book Title, Original Title, Series Name, Series Index, Author, Publisher, Language, and Total Character Count.
-- **jiten.moe & Custom Fields**: View and manage external dictionary IDs, difficulty levels, and user-defined key-value attributes.
+- **Custom Fields**: View and manage user-defined key-value attributes (including the jiten URL and difficulty).
+- **jiten.moe** *(plugin)*: Search jiten.moe, apply difficulty/tags/synopsis and download the vocabulary deck.
+- **Deck Builder** *(plugin)*: Build a vocabulary deck from the book itself, see [Deck Builder](#-deck-builder-plugin-build-a-deck-from-your-own-book).
 - **Chapters**: Browse the complete Table of Contents with per-chapter word counts and reading completion markers.
 - **Study Pack**: Check whether an offline Python study bundle exists for this book, view vocabulary counts, and access printable PDFs.
 - **Raw OPF**: Inspect the raw EPUB package metadata, spine items, and manifest.
@@ -136,7 +162,7 @@ Next to every `📖 Read` button in Table and Grid views, you will find an `ℹ�
 [jiten.moe](https://jiten.moe) is a popular community index for Japanese media difficulty ratings and vocabulary frequency decks. Immersive Reading integrates directly with the [jiten.moe API](https://api.jiten.moe/index.html) via an **explicit, user-initiated action** (preserving your privacy and offline guarantees):
 
 1. Click `ℹ️ Info` on any book in your library.
-2. Switch to the **jiten.moe & Custom Fields** tab.
+2. Switch to the **jiten.moe** tab (it appears when the *jiten.moe Integration* plugin is enabled in Settings → Installed Plugins).
 3. The search box automatically populates with the book's series or title. You can also filter by media format (**Novels / Light Novels**, **Web Novels**, **Manga**, **Visual Novels**, or **Anime**).
 4. Click `🔍 Search`. The .NET backend queries the jiten API and presents rich media cards:
    - **Cover Artwork & Titles**: High-resolution cover thumbnails, original Japanese title, Romaji title, and English title.
@@ -153,14 +179,14 @@ Next to every `📖 Read` button in Table and Grid views, you will find an `ℹ�
 
 ### ⚡ 1-Press Match Series on jiten.moe
 When you have a multi-volume franchise, you don't need to look up and match each volume one by one:
-1. In the Library or Series View, click the **`⚡ Jiten`** or **`⚡ 1-Press Match on jiten.moe`** button.
+1. In the Library or Series View, click the **`Match on jiten.moe`** button.
 2. The system searches jiten.moe for the series title, identifies the parent franchise, and intelligently correlates each local volume against Jiten's sub-decks (e.g. mapping Volume 1 to sub-deck #1, Volume 15 to sub-deck #15).
 3. A confirmation modal displays:
    - Franchise details, difficulty rating, and volume coverage.
    - An exact mapping table of local books to Jiten sub-decks with volume difficulty ratings.
    - **Community Tags**: Top tags and genres from the community (e.g. `Fantasy`, `School Life`, `Romance`) are pre-selected for import into your library tags.
    - **Auto-Download CSVs**: A checked option to download the official vocabulary `.csv` for all matched volumes at once.
-4. Click **`⚡ Confirm & Apply All`**. In one press, all volumes receive their Jiten URLs, difficulties, synopses, library tags, and offline CSV decks!
+4. Click **`Apply mapping & sync`** (or **`Download all decks (.csv)`**). In one press, all volumes receive their Jiten URLs, difficulties, synopses, library tags, and offline CSV decks!
 
 ### 📥 Direct Vocabulary Deck (.csv) Downloads
 [jiten.moe](https://jiten.moe) generates comprehensive vocabulary lists for books. Immersive Reading can fetch these directly:
@@ -169,15 +195,35 @@ When you have a multi-volume franchise, you don't need to look up and match each
 - **Where are they stored?** The downloaded CSV is saved directly as `deck.csv` inside that book's EPUB directory (`book.FolderPath`).
 - **Offline Integration**: The Python enrichment engine automatically detects this file and uses it to construct offline Study Packs, 20-word learning sets, and printable Master PDFs without requiring re-parsing!
 
-### 🔑 jiten.moe API Key Configuration (`.env`)
-Most public queries work without an API key, but if you have a registered jiten.moe account or reach rate limits:
+### 🔑 jiten.moe API Key Configuration
+Most public queries work without an API key, but if you have a registered jiten.moe account or reach rate limits, either paste the key into **Settings → Installed Plugins → jiten.moe Integration → jiten.moe API key**, or use the `.env` file:
 1. Open the project root folder (`k:\immersive-reading`).
 2. Open or create the **`.env`** file (guarded by `.gitignore`, so your key is never committed).
 3. Set your API key:
    ```env
    JITEN_API_KEY=your_jiten_api_key_here
    ```
-4. Immersive Reading automatically detects and applies this key for all subsequent searches and deck downloads.
+4. Immersive Reading automatically detects and applies this key for all subsequent searches and deck downloads. (The plugin setting wins over `.env`.)
+
+### 🧱 Deck Builder plugin: build a deck from your own book
+When jiten.moe has no deck for your book (or you do not want to go online), enable **Deck Builder (jiten.moe style)** in Settings → Installed Plugins, open the book's `ℹ️ Info` and use the **Deck Builder** tab:
+1. Press **Analyze book**. The whole book is read and every word is counted in dictionary form (statistics: characters, words, unique words, words seen once, unique kanji, sentences, dialogue %).
+2. Pick the word order (chronological, most used first, or most common in Japanese first), which words (full deck, top N, target coverage %, minimum occurrences), and options (exclude kana-only words, no example sentences, content words only). The table shows a live preview with readings, counts, definitions and example sentences.
+3. Press **Build & attach deck.csv**. The file is written next to the book in jiten.moe's CSV format, so the study-pack pipeline uses it exactly like a downloaded deck. An existing `deck.csv` is only replaced after you confirm.
+
+#### Particles and auxiliaries are kept apart from vocabulary
+Every word in the deck is marked with a **Kind** (`vocabulary`, `particle` or `auxiliary`) taken from the tokenizer. In the study pack, particles and auxiliaries are **not** mixed into the 20-word vocabulary sets or the vocabulary PDF: they get their own **Particles & function words** page and **function-words-master.pdf**. Tick *Leave particles & auxiliaries out* if you do not want them in the deck at all.
+
+#### ✨ Improve the deck with an LLM (optional)
+With an LLM configured (any OpenAI-compatible chat endpoint, for example your FreeToken URL), the **Improve deck with LLM** box reads the book chapter by chapter and adds:
+- **the grammar used in each chapter** (patterns such as 〜てしまう, with meaning, explanation and real sentences from the book), which appears in the grammar master, the **chapter grammar booklets** (`chapter-NN-grammar.pdf`) and the grammar flashcards (up to three real example sentences per point);
+- **a usage note for each particle and auxiliary** (for example に: destination, time, purpose), shown on the particles & function words sheet and in the **chapter particle booklets** (`chapter-NN-function-words.pdf`). Chapters that introduce no grammar or no particle get no booklet. All of them are listed in the study pack drawer.
+
+**Which LLM:** in **Settings → Installed Plugins → Deck Builder** enter an **LLM endpoint** (a base URL such as `http://127.0.0.1:1919/v1`, or a full chat-completions URL), optionally a model id and an API key, and press **Test connection** (it lists the models the server offers). If you leave the endpoint empty, the endpoint, model and key of **Settings → AI** are used. For local reasoning models (Qwen3 ...) keep *reasoning mode* **Off**; for hosted services that reject unknown fields choose *Server default*. If your server accepts far fewer tokens per request than it advertises, enter the real number under *context tokens the server really accepts* and requests are made smaller to fit.
+
+The box first shows how many requests and roughly how many tokens the run needs, and nothing is sent until you press the button. Examples are always real sentences of your book: anything the model cites that is not found word for word is discarded, and story sentences are never translated. Results are saved, so rebuilding the deck does not use tokens again. **Build & attach** then writes `deck-grammar.json` next to `deck.csv`. The explanations are model output and are labelled that way in the printouts: review them before relying on them.
+
+Definitions, frequency ranks and pitch accent come from the dictionaries you imported (import a JMdict-based Yomitan dictionary for definitions). Everything runs on your computer. The method is adapted from the open-source [Jiten](https://github.com/Sirush/Jiten) project (Apache-2.0), see the plugin's `NOTICE-Jiten.md`.
 
 ---
 
@@ -322,6 +368,31 @@ If you prefer pen-and-paper review or bedside reading:
 - **`chapter-XX-*.pdf`**: Compact 2-page study sheets for each individual chapter to review before or after reading.
 
 ---
+
+## 8a. Character Knowledge (who is this character, without spoilers)
+
+The **Character Knowledge** plugin reads a book once with a language model and builds a knowledge graph of its characters: who they are, how they speak, who they are related to and what has happened to them. Everything you see is gated by your reading position: a character's profile only contains what is revealed *before* the chapter you are about to read, so it does not spoil twists.
+
+### One-time setup
+1. The builder is a separate Python project, `knowledge-graph/`, next to `enrichement-extractor/`. In a terminal: `cd knowledge-graph`, `uv venv --python 3.12 .venv`, `uv pip install --python .venv\Scripts\python.exe -e .`. The Characters tab shows this exact command if something is missing.
+2. Point the plugin at a model: **Settings → Installed Plugins → Character Knowledge**. The default is an OpenAI-compatible server at `http://127.0.0.1:1919/v1`. If you leave the endpoint empty, **Settings → AI** is used. API keys are handed to the builder only through its environment.
+
+### Building
+* Open a book → **Book Info → Characters → Build**. Choose *this volume and the ones before it* or *the whole series*, press **Test connection** and **Estimate**, then **Build**. In the library, the **Characters** button on a series builds the whole series.
+* The text of the book is sent, chapter by chapter, to the endpoint you configured (a local server by default). Nothing is sent anywhere else.
+* A build takes roughly 10 seconds per model request on a local model, so a volume can take around 10 minutes. You can cancel at any time; finished chapters are kept and **Build / continue** carries on, redoing only chapters that failed or whose text changed.
+* Servers often accept far fewer tokens per request than they advertise. The builder learns the real limit and splits chapters as needed (the progress panel says so).
+
+### Browsing
+* **Book Info → Characters**: pick a chapter (it starts at where you are reading), choose a character and read the profile.
+* **Reader → Story drawer**: characters, events and items, following the chapter you are reading.
+
+### Events and items
+After the characters, the plugin reads the book a second time (it can be switched off in the plugin settings, *Also record events and items*) and records **what happened** and **who has which item**.
+* **Book Info → Characters → Events**: battles, monster hunts, dungeon runs, quests, items found or lost, level-ups, meetings and more, newest first. A big happening (a dungeon run) lists its fights and drops inside it. Click a character chip to see only their events, an item chip to jump to the item; filter by kind or search.
+* **Items**: *By character* shows what each character wears (by slot: weapon, shield, head, ...) and carries; *All items* lists everything. Open an item to see who had it when. **Newer gear replaces older gear**: when a character gets a new sword, it is tagged *replaces <old sword>*, the old one is tagged *replaced by <new sword>* and moves to the character's *formerly worn* list, so you can follow the chain. A character's profile shows their equipment too.
+* Like the characters, all of it only shows what you have read: events and items of the chapter you are about to read are hidden, and an item is shown as held by its holder until the chapter in which that changes.
+* A book whose characters are already built gets a button **Add events and items** in the Build view; the characters are not read again. If the events of a chapter fail, the characters are unaffected and **Build / continue** retries them.
 
 ## 9. Global Configuration & Settings
 

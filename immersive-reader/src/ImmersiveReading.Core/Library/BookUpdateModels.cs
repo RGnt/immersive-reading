@@ -37,8 +37,20 @@ public sealed record BulkBookUpdatePatch(
     string? Language = null,
     IReadOnlyList<string>? AddTagIds = null,
     IReadOnlyList<string>? RemoveTagIds = null,
-    IReadOnlyList<CustomFieldValueInput>? CustomFields = null
+    IReadOnlyList<CustomFieldValueInput>? CustomFields = null,
+    // How volume numbers are assigned: "selection" | "title" | "filename" | "fromTitle" (null = leave them alone; AutoNumberVolumes = true means "selection").
+    string? NumberingMode = null,
+    double AutoNumberStep = 1.0,
+    bool ClearSeriesIndex = false
 );
+
+/// <summary>One selected book as a bulk edit would change it.</summary>
+public sealed record BulkPreviewRow(string BookId, string Title, string FileName, string CurrentSeries, double? CurrentIndex, string NewSeries, double? NewIndex);
+
+/// <param name="Rows">The first rows only (the dialog shows a sample); the counts cover every selected book.</param>
+public sealed record BulkPreview(int BookCount, int SeriesChanges, int IndexChanges, int WithoutNumber, IReadOnlyList<BulkPreviewRow> Rows);
+
+public sealed record SeriesNameCount(string Name, int Count);
 
 public sealed record ClearLibraryOptions(
     bool RemoveFolders = true,

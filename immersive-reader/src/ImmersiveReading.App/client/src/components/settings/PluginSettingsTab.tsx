@@ -20,12 +20,12 @@ export const PluginSettingsTab: React.FC = () => {
   return (
     <div className="grid grid-cols-12 gap-6 h-full min-h-[400px]">
       {/* Left Column: Plugin List & Enable/Disable Toggles */}
-      <div className="col-span-5 space-y-3 border-r border-white/10 pr-4">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-white/70">
+      <div className="col-span-5 space-y-3 border-r border-[var(--border-color)] pr-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--text-muted)]">
           Installed Plugins ({plugins.length})
         </h3>
         {plugins.length === 0 ? (
-          <p className="text-xs text-white/50 py-4">No plugins installed.</p>
+          <p className="text-xs text-[var(--text-muted)] py-4">No plugins installed.</p>
         ) : (
           plugins.map((p) => {
             const isEnabled = p.state === 'Enabled' || p.state === 'PendingEnable';
@@ -38,13 +38,13 @@ export const PluginSettingsTab: React.FC = () => {
                 className={`p-3.5 rounded-lg border cursor-pointer transition-colors ${
                   isSelected
                     ? 'border-indigo-500 bg-indigo-500/10'
-                    : 'border-white/10 bg-white/5 hover:bg-white/10'
+                    : 'border-[var(--border-color)] bg-[var(--hover-bg)] hover:bg-[var(--hover-bg)]'
                 }`}
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="font-medium text-sm text-white">{p.manifest.name}</span>
-                    <span className="ml-2 text-xs text-white/50">v{p.manifest.version}</span>
+                    <span className="font-medium text-sm text-[var(--text-primary)]">{p.manifest.name}</span>
+                    <span className="ml-2 text-xs text-[var(--text-muted)]">v{p.manifest.version}</span>
                   </div>
                   <input
                     type="checkbox"
@@ -56,7 +56,7 @@ export const PluginSettingsTab: React.FC = () => {
                     className="h-4 w-4 accent-indigo-600 cursor-pointer"
                   />
                 </div>
-                <p className="text-xs text-white/70 mt-1 line-clamp-2">{p.manifest.description}</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1 line-clamp-2">{p.manifest.description}</p>
                 {p.requiresRestart && (
                   <div className="mt-2 inline-block px-2 py-0.5 rounded text-[11px] bg-amber-500/20 text-amber-300 border border-amber-500/30">
                     Restart application to apply change
@@ -78,7 +78,7 @@ export const PluginSettingsTab: React.FC = () => {
             onReset={() => resetPluginConfig(selectedPlugin.manifest.id)}
           />
         ) : (
-          <p className="text-sm text-white/60">Select a plugin to configure its settings.</p>
+          <p className="text-sm text-[var(--text-muted)]">Select a plugin to configure its settings.</p>
         )}
       </div>
     </div>
@@ -111,8 +111,8 @@ const PluginConfigurationPane: React.FC<{
     return (
       <div className="space-y-4">
         {errorBanner}
-        <h4 className="font-semibold text-base text-white">{plugin.manifest.name}</h4>
-        <p className="text-sm text-white/60">This plugin has no configurable settings.</p>
+        <h4 className="font-semibold text-base text-[var(--text-primary)]">{plugin.manifest.name}</h4>
+        <p className="text-sm text-[var(--text-muted)]">This plugin has no configurable settings.</p>
       </div>
     );
   }
@@ -136,8 +136,8 @@ const PluginConfigurationPane: React.FC<{
   return (
     <div className="space-y-5">
       {errorBanner}
-      <div className="flex items-center justify-between border-b border-white/10 pb-3">
-        <h4 className="font-semibold text-base text-white">{plugin.manifest.name} Settings</h4>
+      <div className="flex items-center justify-between border-b border-[var(--border-color)] pb-3">
+        <h4 className="font-semibold text-base text-[var(--text-primary)]">{plugin.manifest.name} Settings</h4>
         <Button variant="ghost" size="sm" onClick={onReset}>
           Reset to Defaults
         </Button>
@@ -149,19 +149,19 @@ const PluginConfigurationPane: React.FC<{
 
           return (
             <div key={key} className="space-y-1.5">
-              <label className="block text-xs font-medium text-white/90">{prop.title}</label>
+              <label className="block text-xs font-medium text-[var(--text-primary)]">{prop.title}</label>
               {prop.description && (
-                <p className="text-[11px] text-white/60">{prop.description}</p>
+                <p className="text-[11px] text-[var(--text-muted)]">{prop.description}</p>
               )}
 
               {prop.enum ? (
                 <select
                   value={String(val ?? '')}
                   onChange={(e) => onUpdate({ [key]: e.target.value })}
-                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-white/15 text-sm text-white"
+                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-[var(--border-color)] text-sm text-[var(--text-primary)]"
                 >
                   {prop.enum.map((opt, idx) => (
-                    <option key={opt} value={opt} className="bg-zinc-900 text-white">
+                    <option key={opt} value={opt} className="bg-zinc-900 text-[var(--text-primary)]">
                       {prop.enumLabels?.[idx] ?? opt}
                     </option>
                   ))}
@@ -174,7 +174,7 @@ const PluginConfigurationPane: React.FC<{
                     onChange={(e) => onUpdate({ [key]: e.target.checked })}
                     className="h-4 w-4 accent-indigo-600 rounded cursor-pointer"
                   />
-                  <span className="text-xs text-white/80">Enabled</span>
+                  <span className="text-xs text-[var(--text-primary)]">Enabled</span>
                 </label>
               ) : prop.format === 'color' ? (
                 <div className="flex items-center gap-2.5">
@@ -182,14 +182,14 @@ const PluginConfigurationPane: React.FC<{
                     type="color"
                     value={val || '#ffffff'}
                     onChange={(e) => onUpdate({ [key]: e.target.value })}
-                    className="w-9 h-8 rounded border border-white/20 bg-transparent cursor-pointer p-0.5"
+                    className="w-9 h-8 rounded border border-[var(--border-color)] bg-transparent cursor-pointer p-0.5"
                     title="Click to pick a color"
                   />
                   <input
                     type="text"
                     value={val ?? ''}
                     onChange={(e) => onUpdate({ [key]: e.target.value })}
-                    className="flex-1 px-3 py-1.5 rounded bg-black/40 border border-white/15 text-sm text-white font-mono"
+                    className="flex-1 px-3 py-1.5 rounded bg-black/40 border border-[var(--border-color)] text-sm text-[var(--text-primary)] font-mono"
                     placeholder="#rrggbb"
                   />
                 </div>
@@ -211,7 +211,7 @@ const PluginConfigurationPane: React.FC<{
                           : e.target.value,
                     })
                   }
-                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-white/15 text-sm text-white"
+                  className="w-full px-3 py-1.5 rounded bg-black/40 border border-[var(--border-color)] text-sm text-[var(--text-primary)]"
                 />
               )}
 
@@ -225,7 +225,7 @@ const PluginConfigurationPane: React.FC<{
                     {prop['x-rpc-action'].label}
                   </Button>
                   {actionStatus[prop['x-rpc-action'].actionName] && (
-                    <span className="text-xs text-white/80">
+                    <span className="text-xs text-[var(--text-primary)]">
                       {actionStatus[prop['x-rpc-action'].actionName]}
                     </span>
                   )}

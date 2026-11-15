@@ -1,5 +1,6 @@
 using System.Text.Json;
 using ImmersiveReading.Core.Extensions;
+using ImmersiveReading.Core.Library;
 using ImmersiveReading.Core.Plugins;
 using ImmersiveReading.Enrichment;
 using ImmersiveReading.Library;
@@ -101,71 +102,100 @@ public sealed class Phase5AiCompanionSpecsTests : IDisposable
         Assert.DoesNotContain("第3章の秘密", slice.PlainText);
     }
 
-    [Fact]
-    public async Task Scenario2_And_Scenario3_ComprehensionQuizService_McqToFreeFormProgression_And_EnrichedSnippets()
+    private sealed class FakeCatalog(string bookId, IReadOnlyList<BookChapterRecord> chapters) : ImmersiveReading.Core.Abstractions.IBookCatalog
     {
-        string bookId = "book-4e0541b184c4ace9";
-        string ch2Href = "xhtml/ch2.xhtml";
+        public BookSummary? GetBookSummary(string id) => id == bookId
+            ? new BookSummary(id, "sha", null, null, "クークの本", "クークの本", "", null, 0, "", "", "", "", "", "", "ja", "", false, "", "", 0, null,
+                chapters.Count, 0, true, "horizontal-tb", "", "", null, false, 0, [], new Dictionary<string, EffectiveCustomFieldValue>())
+            : null;
+        public BookDetail? GetBookDetail(string id) => GetBookSummary(id) is { } s ? new BookDetail(s, new OpfOriginalMetadata(), chapters, [], new Dictionary<string, string>()) : null;
+        public string? GetEpubFilePath(string id) => null;
+    }
 
-        var enrichedCh = AngleSharpDomEnricher.EnrichChapter(
-            "<html><body><p>クークは海辺で焚き火の準備を始めました。</p></body></html>",
-            bookId,
-            ch2Href,
-            _jaPlugin,
-            new EnrichmentOptions(FuriganaMode.AllKanji));
-        _cache.Set(enrichedCh.TokenMap);
+    private (ReaderContextService Reader, string BookId, string Ch1Text) CompletedChapterBook()
+    {
+        string bookId = "book-quiz-gate";
+        // chapter 0 is excluded front matter, chapter 1 is the last COMPLETED chapter, chapter 2 is the one being read
+        var chapters = new List<BookChapterRecord>
+        {
+            new(bookId, 0, "c0", "表紙", "xhtml/cover.xhtml", IsExcluded: true),
+            new(bookId, 1, "c1", "第一章", "xhtml/ch1.xhtml"),
+            new(bookId, 2, "c2", "第二章", "xhtml/ch2.xhtml")
+        };
+        string ch1Html = "<html><body><p>クークは海辺で焚き火の準備を始めました。</p><p>ミミは流木を集めて、テントのそばに積みました。</p></body></html>";
+        string ch2Html = "<html><body><p>未来のネタバレ：ミミは宝箱を見つけました。</p></body></html>";
+        _cache.Set(AngleSharpDomEnricher.EnrichChapter(ch1Html, bookId, "xhtml/ch1.xhtml", _jaPlugin, new EnrichmentOptions(FuriganaMode.AllKanji)).TokenMap);
+        _cache.Set(AngleSharpDomEnricher.EnrichChapter(ch2Html, bookId, "xhtml/ch2.xhtml", _jaPlugin, new EnrichmentOptions(FuriganaMode.AllKanji)).TokenMap);
+        return (new ReaderContextService(new FakeCatalog(bookId, chapters), _cache, _db), bookId, "クークは海辺で焚き火の準備を始めました。");
+    }
 
+    [Fact]
+    public async Task Scenario2_And_Scenario3_Quiz_AsksAboutTheLastCompletedChapterOnly_McqToFreeFormProgression_And_RubricOrder()
+    {
+        var (reader, bookId, evidence) = CompletedChapterBook();
         var mockLlm = new MockScriptedLlmProvider();
-        var quizService = new ComprehensionQuizService(_db, _readerContext, _snippetEnricher, mockLlm);
+        var quizService = new ComprehensionQuizService(_db, reader, _snippetEnricher, mockLlm) { Rng = new Random(7) };
 
-        // Stage 1: Initial stage is MultipleChoice
+        // Stage 1: initial stage is multiple choice
         Assert.Equal(ComprehensionStage.MultipleChoice, quizService.GetCurrentStage(bookId));
 
-        var mcqQuestion = await quizService.GenerateQuestionAsync(
-            bookId: bookId,
-            previousCheckpointTokenId: 0,
-            overrideViewportTokenId: 20,
-            overrideChapterIndex: 2,
-            overrideSpineHref: ch2Href);
+        // the reader is in chapter 2: the question is about chapter 1 and nothing of chapter 2 reaches the model
+        var mcqQuestion = await quizService.GenerateQuestionAsync(bookId, overrideChapterIndex: 2);
 
+        Assert.Equal(1, mcqQuestion.ChapterIndex);
         Assert.Equal(ComprehensionStage.MultipleChoice, mcqQuestion.Stage);
         Assert.Equal(4, mcqQuestion.Options.Count);
         Assert.Contains("ir-tok", mcqQuestion.PromptHtml);
         Assert.All(mcqQuestion.Options, o => Assert.Contains("ir-tok", o.EnrichedHtml));
+        Assert.All(mockLlm.Requests, r => Assert.DoesNotContain("ネタバレ", string.Join(" ", r.Messages.Select(m => m.Content))));
+        Assert.Contains("[0] クークは海辺", mockLlm.Requests[0].Messages[1].Content);        // the passage reaches the model with numbered paragraphs
 
-        var mcqEval = await quizService.SubmitAnswerAsync(mcqQuestion.QuestionId, "0", selectedOptionIndex: 0);
+        var wrongEval = await quizService.SubmitAnswerAsync((await quizService.GenerateQuestionAsync(bookId, overrideChapterIndex: 2)).QuestionId, "9", selectedOptionIndex: 9);
+        Assert.False(wrongEval.IsCorrect);
+        int right = mcqQuestion.Options.ToList().FindIndex(o => o.Text == "焚き火の準備を始めた。");
+        var mcqEval = await quizService.SubmitAnswerAsync(mcqQuestion.QuestionId, right.ToString(), selectedOptionIndex: right);
         Assert.True(mcqEval.IsCorrect);
         Assert.Equal(100, mcqEval.ComprehensionScore);
         Assert.Contains("焚き火", mcqEval.EvidenceQuote);
-        Assert.Contains("Jump to Paragraph", mcqEval.JumpToParagraphLabel);
 
-        // Scenario 3: Record 4 more answers averaging >= 80% so total last 5 average is >= 80%
-        for (int i = 0; i < 4; i++)
-        {
-            quizService.RecordHistoricalScoreForTesting(bookId, ComprehensionStage.MultipleChoice, 0.90);
-        }
-
+        // Scenario 3: four more answers averaging 90% put the learner on free-form questions
+        for (int i = 0; i < 4; i++) quizService.RecordHistoricalScoreForTesting(bookId, ComprehensionStage.MultipleChoice, 0.90);
         Assert.Equal(ComprehensionStage.FreeForm, quizService.GetCurrentStage(bookId));
 
-        var freeFormQuestion = await quizService.GenerateQuestionAsync(
-            bookId: bookId,
-            previousCheckpointTokenId: 0,
-            overrideViewportTokenId: 20,
-            overrideChapterIndex: 2,
-            overrideSpineHref: ch2Href);
-
-        Assert.Equal(ComprehensionStage.FreeForm, freeFormQuestion.Stage);
+        var freeFormQuestion = await quizService.GenerateQuestionAsync(bookId, overrideChapterIndex: 2);
         Assert.Equal("freeform", freeFormQuestion.QuestionMode);
+        Assert.Empty(freeFormQuestion.Options);
 
-        var ffEval = await quizService.SubmitAnswerAsync(
-            freeFormQuestion.QuestionId,
-            "クークは海辺で焚き火の準備をしていました。");
+        var ffEval = await quizService.SubmitAnswerAsync(freeFormQuestion.QuestionId, "クークは海辺で焚き火の準備をしていました。");
 
+        // the rubric is judged in order: comprehension first (it drives the stage), then grammar, then vocabulary
         Assert.Equal(92, ffEval.ComprehensionScore);
-        Assert.Equal("クークは海辺で焚き火の準備を始めました。", ffEval.EvidenceQuote);
-        Assert.False(string.IsNullOrWhiteSpace(ffEval.MissingOrMisunderstood));
+        var rubric = ffEval.Rubric!;
+        Assert.True(rubric.Counted);
+        Assert.Equal((92, 80, 70), (rubric.Comprehension, rubric.Grammar, rubric.Vocabulary));
+        Assert.Equal(86, rubric.Overall);                                                       // 0.60 x 92 + 0.25 x 80 + 0.15 x 70
+        Assert.Equal(["準備をしていました"], rubric.GrammarIssues.Select(i => i.Original).ToArray());   // the invented issue is not in the answer: dropped
+        Assert.Equal(["焚き火"], rubric.WellUsed.Select(w => w.Lemma).ToArray());
         Assert.Contains("ir-tok", ffEval.ModelAnswerHtml);
-        Assert.Contains("<ruby", ffEval.ModelAnswerHtml);
+    }
+
+    [Fact]
+    public async Task Quiz_IsUnavailableUntilAChapterIsCompleted_AndRefusesAQuestionTheModelCannotSupport()
+    {
+        var (reader, bookId, _) = CompletedChapterBook();
+        var llm = new MockScriptedLlmProvider();
+        var quiz = new ComprehensionQuizService(_db, reader, _snippetEnricher, llm) { Rng = new Random(1) };
+
+        // reading chapter 1 (the first real chapter): nothing is completed yet, and chapter 1 itself must not be used
+        await Assert.ThrowsAsync<QuizUnavailableException>(() => quiz.GenerateQuestionAsync(bookId, overrideChapterIndex: 1));
+        Assert.Empty(llm.Requests);
+
+        // a model that keeps inventing evidence gets one more try with the reason, then the quiz says so: no canned question
+        llm.QuestionJson = """{"questionPrompt":"誰が来ましたか？","options":["A先生","Bさん","C君","D君"],"correctOptionIndex":0,"evidenceQuote":"この文は本文にありません。"}""";
+        var ex = await Assert.ThrowsAsync<QuizGenerationException>(() => quiz.GenerateQuestionAsync(bookId, overrideChapterIndex: 2));
+        Assert.Contains("not found in the passage", ex.Message);
+        Assert.Equal(2, llm.Requests.Count);
+        Assert.Contains("YOUR PREVIOUS QUESTION WAS REJECTED", llm.Requests[1].Messages[1].Content);
     }
 
     [Fact]
@@ -251,6 +281,8 @@ public sealed class Phase5AiCompanionSpecsTests : IDisposable
         public string ProviderId => "mock-scripted";
         public string DisplayName => "Mock Scripted LLM";
         public bool IsLocalOffline => true;
+        public List<LlmRequest> Requests { get; } = [];
+        public string? QuestionJson { get; set; }
 
         private static readonly JsonSerializerOptions JsonOpts = new()
         {
@@ -262,7 +294,8 @@ public sealed class Phase5AiCompanionSpecsTests : IDisposable
             LlmRequest request,
             CancellationToken ct = default)
         {
-            string json = request.TaskKind switch
+            Requests.Add(request);
+            string json = QuestionJson is not null && request.TaskKind?.StartsWith("quiz.generate") == true ? QuestionJson : request.TaskKind switch
             {
                 "quiz.generate.mcq" => """
                     {
@@ -291,9 +324,11 @@ public sealed class Phase5AiCompanionSpecsTests : IDisposable
                     """,
                 "quiz.grade.freeform" => """
                     {
-                      "comprehensionScore": 92,
-                      "evidenceQuote": "クークは海辺で焚き火の準備を始めました。",
-                      "missingOrMisunderstood": "主要な行動が正確に説明されています。",
+                      "comprehension": { "score": 92, "evidenceQuote": "クークは海辺で焚き火の準備を始めました。", "missing": "主要な行動が正確に説明されています。" },
+                      "grammar": { "score": 80, "issues": [
+                        { "original": "準備をしていました", "correction": "準備を始めました", "note": "本文は「始めました」です。" },
+                        { "original": "この文は答えにありません", "correction": "x", "note": "invented" } ] },
+                      "vocabulary": { "score": 70, "wellUsed": [ { "surface": "焚き火", "lemma": "焚き火" } ], "misused": [] },
                       "modelAnswer": "クークは海辺で焚き火の準備を始めました。"
                     }
                     """,

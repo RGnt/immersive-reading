@@ -7,6 +7,7 @@ using ImmersiveReading.Core.Plugins;
 using ImmersiveReading.Dictionaries;
 using ImmersiveReading.Enrichment;
 using ImmersiveReading.Library;
+using ImmersiveReading.Library.Books;
 using Microsoft.Data.Sqlite;
 
 namespace ImmersiveReading.App.Rpc.Modules;
@@ -262,7 +263,8 @@ public sealed class ReaderRpcModule(
         int? endTokenId = req.OptionalInt("endTokenId");
         int startOffset = req.OptionalInt("startCharOffset") ?? 0;
         int endOffset = req.OptionalInt("endCharOffset") ?? 0;
-        string text = req.OptionalString("selectedText") ?? "Bookmark";
+        string text = req.OptionalString("selectedText") ?? "";            // only real selected text: the list line is made by BookmarkLabel
+        double? volume = library.GetBookSummary(bookId)?.SeriesIndex;
         string note = req.OptionalString("userNote") ?? "";
         string? color = req.OptionalString("highlightColor") ?? "#38bdf8";
         string bookmarkId = Guid.NewGuid().ToString("N");
@@ -298,7 +300,7 @@ public sealed class ReaderRpcModule(
         var item = new BookmarkItem(
             bookmarkId, bookId, chIdx, spineHref,
             startTokenId, endTokenId, startOffset, endOffset,
-            text, note, color, now
+            text, note, color, now, BookmarkLabel.Make(volume, chIdx, text)
         );
 
         events?.Emit("reader.bookmarkAdded", item);
@@ -309,6 +311,7 @@ public sealed class ReaderRpcModule(
     {
         if (db is null) return new { bookmarks = Array.Empty<BookmarkItem>() };
         string bookId = req.RequiredString("bookId");
+        double? volume = library.GetBookSummary(bookId)?.SeriesIndex;
         using var conn = db.OpenConnection();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = """
@@ -337,7 +340,8 @@ public sealed class ReaderRpcModule(
                 reader.GetString(8),
                 reader.GetString(9),
                 reader.IsDBNull(10) ? null : reader.GetString(10),
-                reader.GetString(11)
+                reader.GetString(11),
+                BookmarkLabel.Make(volume, reader.GetInt32(2), reader.GetString(8))
             ));
         }
         return new { bookId, bookmarks = list, count = list.Count };
@@ -759,6 +763,7 @@ public sealed record BookmarkItem(
     string SelectedText,
     string UserNote,
     string? HighlightColor,
-    string CreatedAtUtc
+    string CreatedAtUtc,
+    string Label = ""
 );
 

@@ -5,7 +5,7 @@ from reportlab.lib import colors
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, PageBreak, KeepInFrame, Spacer, KeepTogether
 import pymupdf
-from .kanji_pdf import cover, p
+from .kanji_pdf import cover, p, KIND_TITLES
 from .pdf_elements import RubyText
 from .study_pdf import gloss_excerpt
 from .pdf_charts import append_charts
@@ -30,15 +30,19 @@ def write_master(path, book, kind, groups, chapter=None, *, cancel=None, charts=
         heading_paragraph = p(heading, "heading")
         heading_paragraph.keepWithNext = True
         story += [heading_paragraph, Spacer(1, 4*mm - (8 if chapter and kind == "vocabulary" else 0))]
-        if kind == "vocabulary":
-            rows = [[p(t, "label") for t in ("Nr.", "WORD", "READING", "MEANING")]]
+        if kind in ("vocabulary", "function"):
+            rows = [[p(t, "label") for t in ("Nr.", "WORD", "READING", "USAGE / MEANING" if kind == "function" else "MEANING")]]
             for card in cards:
                 number = p(f'{card["study_number"]}  [  ]', "label")
                 # Paragraph normally collapses spaces; non-breaking spaces keep
                 # the recall box wide enough to mark when printed.
                 number = Paragraph(f'{card["study_number"]}&nbsp;&nbsp;[&nbsp;&nbsp;&nbsp;&nbsp;]', number.style)
-                rows.append([number, p(card["title"], "reading"),
-                             p(card["reading"], "reading"), p(gloss_excerpt(card["meaning"]))])
+                if kind == "function":
+                    meaning = [p(card["details"])] if card.get("details") else []
+                    meaning.append(p(gloss_excerpt(card["meaning"])))
+                else:
+                    meaning = p(gloss_excerpt(card["meaning"]))
+                rows.append([number, p(card["title"], "reading"), p(card["reading"], "reading"), meaning])
             table = Table(rows, colWidths=[19*mm, 34*mm, 35*mm, 94*mm], repeatRows=1, hAlign="LEFT")
             table.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
                                        ("LINEBELOW", (0, 0), (-1, -1), .35, colors.HexColor("#aaaaaa")),
@@ -49,8 +53,12 @@ def write_master(path, book, kind, groups, chapter=None, *, cancel=None, charts=
             story.append(table if chapter or len(cards) > 25 else KeepInFrame(182*mm, 245*mm, [table], mode="shrink", hAlign="LEFT"))
         else:
             for card in cards:
-                cell = [p(card["title"], "heading"), p(card["meaning"]), p(card["details"]),
-                        RubyText(card["plain_example"], card.get("ruby", []))]
+                cell = [p(card["title"], "heading"), p(card["meaning"]), p(card["details"])]
+                if card.get("llm"):
+                    # an LLM wrote the explanation: say so on the page itself, not only on the cover
+                    cell.append(p(card["meta"], "label"))
+                cell.append(RubyText(card["plain_example"], card.get("ruby", [])))
+                cell += [RubyText(extra["plain_example"], extra.get("ruby", [])) for extra in card.get("extra_examples", [])]
                 table = Table([[cell]], colWidths=[182*mm], hAlign="LEFT")
                 table.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), .5, colors.HexColor("#777777")),
                                            ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
@@ -76,7 +84,7 @@ def write_master(path, book, kind, groups, chapter=None, *, cancel=None, charts=
         chart_canvas.save()
         with pymupdf.open(stream=chart_buffer.getvalue(), filetype="pdf") as charts:
             result.insert_pdf(charts)
-    label = f'Chapter {chapter["number"]:02d} {kind.title()}' if chapter else kind.title()+" master"
+    label = f'Chapter {chapter["number"]:02d} {KIND_TITLES[kind]}' if chapter else KIND_TITLES[kind]+" master"
     result.set_metadata({"title": book["title"]+" - "+label, "author": "Immersive Reading"})
     result.save(path, garbage=4, deflate=True)
     result.close()

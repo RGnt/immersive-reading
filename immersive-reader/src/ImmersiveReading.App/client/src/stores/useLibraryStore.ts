@@ -1,6 +1,31 @@
 import { create } from 'zustand';
 import { rpc } from '../services/rpc';
-import type { BookRecord, FolderNode, TagRecord, CustomFieldDefinition, BookDetail } from '../types/api';
+import type { BookRecord, FolderNode, TagRecord, CustomFieldDefinition, BookDetail, ListFilter, ReadingListCounts, ReadingStatus } from '../types/api';
+
+/** The query fields of a list: favourites, or one reading list (a book counts through its series too). */
+export function listFilterQuery(filter: ListFilter | null): { favorite?: boolean; readingStatus?: string } {
+  if (filter === 'favorites') return { favorite: true };
+  return filter ? { readingStatus: filter } : {};
+}
+
+/** What a bulk edit may change. A field that is left out stays as it is; an empty string clears it. Mirrors BulkBookUpdatePatch (C#). */
+export interface BulkPatch {
+  folderId?: string | null;
+  clearFolderId?: boolean;
+  seriesName?: string;
+  /** selection | title | filename | fromTitle; leave out to keep the volume numbers. */
+  numberingMode?: 'selection' | 'title' | 'filename' | 'fromTitle';
+  autoNumberStart?: number;
+  autoNumberStep?: number;
+  clearSeriesIndex?: boolean;
+  autoNumberVolumes?: boolean;
+  authors?: string;
+  publisher?: string;
+  imprint?: string;
+  language?: string;
+  addTagIds?: string[];
+  removeTagIds?: string[];
+}
 
 interface LibraryState {
   folders: FolderNode[];
@@ -23,14 +48,25 @@ interface LibraryState {
 
   // Scanning state
   isScanModalOpen: boolean;
+  isDuplicatesModalOpen: boolean;
+  isBulkEditOpen: boolean;
   defaultScanDir: string;
+  openBulkEdit: () => void;
+  closeBulkEdit: () => void;
   openScanModal: () => void;
+  openDuplicatesModal: () => void;
+  closeDuplicatesModal: () => void;
   closeScanModal: () => void;
 
-  // Series View & Jiten Matching
-  activeSeriesJiten: string | null;
-  openSeriesJiten: (seriesName: string) => void;
-  closeSeriesJiten: () => void;
+  /** Which list the gallery shows (favourites or a reading list), or null for the whole library. */
+  listFilter: ListFilter | null;
+  listCounts: ReadingListCounts;
+  selectListFilter: (filter: ListFilter | null) => void;
+  loadListCounts: () => Promise<void>;
+  /** Favourite and reading list of books (all selected ones, for example). Absent = unchanged; a status of '' clears it. */
+  setBookFlags: (bookIds: string[], flags: { favorite?: boolean; readingStatus?: ReadingStatus }) => Promise<void>;
+  setSeriesFlags: (seriesName: string, flags: { favorite?: boolean; readingStatus?: ReadingStatus }) => Promise<void>;
+
   selectedSeriesDrillDown: string | null;
   setSelectedSeriesDrillDown: (seriesName: string | null) => void;
 
@@ -48,19 +84,12 @@ interface LibraryState {
   toggleSelectBook: (bookId: string) => void;
   selectAllOnPage: () => void;
   clearSelection: () => void;
+  /** Selects every book the current filters match (all pages), not only the visible one. Returns how many were selected. */
+  selectAllMatching: () => Promise<number>;
   bulkMoveBooks: (targetFolderId: string | null) => Promise<void>;
   bulkAddTags: (tagIds: string[]) => Promise<void>;
   bulkDeleteSelected: () => Promise<void>;
-  bulkUpdateBooks: (patch: {
-    folderId?: string | null;
-    clearFolderId?: boolean;
-    seriesName?: string;
-    autoNumberVolumes?: boolean;
-    authors?: string;
-    publisher?: string;
-    addTagIds?: string[];
-    removeTagIds?: string[];
-  }) => Promise<void>;
+  bulkUpdateBooks: (patch: BulkPatch) => Promise<void>;
 }
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
@@ -80,15 +109,51 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   isInspectorOpen: false,
   selectedBookIds: [],
   isScanModalOpen: false,
+  isDuplicatesModalOpen: false,
+  isBulkEditOpen: false,
   defaultScanDir: '',
-  activeSeriesJiten: null,
   selectedSeriesDrillDown: null,
+  listFilter: null,
+  listCounts: { favorites: 0, reading: 0, planned: 0, completed: 0 },
 
+  selectListFilter: (filter) => {
+    set({ listFilter: filter, activeFolderId: null, offset: 0, selectedBookIds: [] });
+    get().fetchBooks(0);
+  },
+
+  loadListCounts: async () => {
+    try {
+      const counts = await rpc.call<ReadingListCounts>('library.getReadingListCounts', {});
+      if (counts) set({ listCounts: counts });
+    } catch (err) {
+      console.error('Failed to load the reading list counts:', err);
+    }
+  },
+
+  setBookFlags: async (bookIds, flags) => {
+    if (bookIds.length === 0) return;
+    const res = await rpc.call<{ counts?: ReadingListCounts }>('library.setBookFlags', { bookIds, ...flags });
+    if (res?.counts) set({ listCounts: res.counts });
+    await get().fetchBooks();
+    const open = get().activeBookDetail;
+    if (open && bookIds.includes(open.summary.bookId)) await get().inspectBook(open.summary.bookId);
+  },
+
+  setSeriesFlags: async (seriesName, flags) => {
+    const res = await rpc.call<{ counts?: ReadingListCounts }>('library.setSeriesFlags', { seriesName, ...flags });
+    if (res?.counts) set({ listCounts: res.counts });
+    await get().fetchBooks();
+    const open = get().activeBookDetail;
+    if (open?.summary.seriesName === seriesName) await get().inspectBook(open.summary.bookId);
+  },
+
+  openBulkEdit: () => set({ isBulkEditOpen: true }),
+  closeBulkEdit: () => set({ isBulkEditOpen: false }),
   openScanModal: () => set({ isScanModalOpen: true }),
+  openDuplicatesModal: () => set({ isDuplicatesModalOpen: true }),
+  closeDuplicatesModal: () => set({ isDuplicatesModalOpen: false }),
   closeScanModal: () => set({ isScanModalOpen: false }),
 
-  openSeriesJiten: (seriesName: string) => set({ activeSeriesJiten: seriesName }),
-  closeSeriesJiten: () => set({ activeSeriesJiten: null }),
 
   setSelectedSeriesDrillDown: (seriesName: string | null) => set({ selectedSeriesDrillDown: seriesName }),
 
@@ -103,6 +168,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         });
       }
       await get().fetchBooks(0);
+      void get().loadListCounts();
     } catch (err) {
       console.error('Failed to load bootstrap state:', err);
     } finally {
@@ -111,15 +177,16 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   },
 
   fetchBooks: async (newOffset?: number) => {
-    const { activeFolderId, selectedTagIds, searchQuery, limit } = get();
+    const { activeFolderId, selectedTagIds, searchQuery, limit, listFilter } = get();
     const currentOffset = newOffset !== undefined ? newOffset : get().offset;
 
     set({ isLoading: true, offset: currentOffset });
     try {
       const res = await rpc.call<any>('library.listBooks', {
         folderId: activeFolderId || undefined,
-        tags: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+        tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
         search: searchQuery.trim() || undefined,
+        ...listFilterQuery(listFilter),
         offset: currentOffset,
         limit,
       });
@@ -138,7 +205,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   },
 
   selectFolder: (folderId: string | null) => {
-    set({ activeFolderId: folderId, offset: 0, selectedBookIds: [] });
+    set({ activeFolderId: folderId, listFilter: null, offset: 0, selectedBookIds: [] });
     get().fetchBooks(0);
   },
 
@@ -191,6 +258,19 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   clearSelection: () => {
     set({ selectedBookIds: [] });
+  },
+
+  selectAllMatching: async () => {
+    const { activeFolderId, selectedTagIds, searchQuery, listFilter } = get();
+    const res = await rpc.call<{ bookIds: string[]; total: number }>('library.listBookIds', {
+      folderId: activeFolderId || undefined,
+      tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+      search: searchQuery.trim() || undefined,
+      ...listFilterQuery(listFilter),
+    });
+    const ids = res?.bookIds ?? [];
+    set({ selectedBookIds: ids });
+    return ids.length;
   },
 
   bulkMoveBooks: async (targetFolderId: string | null) => {

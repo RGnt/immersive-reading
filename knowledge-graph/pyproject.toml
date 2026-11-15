@@ -1,0 +1,19 @@
+[project]
+name = "immersive-knowledge"
+version = "0.1.0"
+description = "Spoiler-gated character knowledge graph builder for Immersive Reading (specs/18-character-knowledge-graph-spec.md)"
+requires-python = ">=3.12"
+dependencies = ["networkx>=3.3"]
+
+[project.scripts]
+immersive-knowledge = "immersive_knowledge.cli:main"
+
+[tool.setuptools]
+packages = ["immersive_knowledge"]
+
+[tool.setuptools.package-data]
+immersive_knowledge = ["prompts/*.prompt.md"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

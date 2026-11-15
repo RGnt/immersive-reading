@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLibraryStore } from '../../stores/useLibraryStore';
 import { useReaderStore } from '../../stores/useReaderStore';
 import { useStudyPackStore } from '../../stores/useStudyPackStore';
 import { rpc } from '../../services/rpc';
-import type { BookDetail } from '../../types/api';
+import { usePluginStore } from '../../stores/usePluginStore';
+import { PluginErrorBoundary } from '../plugins/PluginSlots';
+import type { BookDetail, ReadingStatus } from '../../types/api';
+import { FavoriteStar, StatusSelect } from './ReadingFlags';
 import {
   X,
   BookOpen,
@@ -11,16 +14,10 @@ import {
   RotateCcw,
   Trash2,
   Save,
-  Search,
-  ExternalLink,
-  CheckCircle,
   FileCode,
   FileText,
   BookCheck,
-  Download,
   AlertTriangle,
-  FileCheck,
-  Loader2,
 } from 'lucide-react';
 
 export const BookInfoModal: React.FC = () => {
@@ -32,12 +29,16 @@ export const BookInfoModal: React.FC = () => {
     tags,
     customFields: libraryCustomFields,
     fetchBooks,
+    setBookFlags,
+    setSeriesFlags,
   } = useLibraryStore();
 
   const openBook = useReaderStore((s) => s.openBook);
   const openStudyPack = useStudyPackStore((s) => s.openDrawer);
 
-  const [activeTab, setActiveTab] = useState<'meta' | 'jiten' | 'chapters' | 'studypack' | 'opf'>('meta');
+  const [activeTab, setActiveTab] = useState<string>('meta'); // 'meta' | 'fields' | 'chapters' | 'studypack' | 'opf' | 'plugin:<pluginId>:<tabId>'
+  const pluginTabs = usePluginStore((st) => st.bookTabs);
+  const lastBookIdRef = useRef<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [studyPackReady, setStudyPackReady] = useState(false);
@@ -61,21 +62,7 @@ export const BookInfoModal: React.FC = () => {
   const [description, setDescription] = useState('');
   const [bookCustomFields, setBookCustomFields] = useState<Record<string, string>>({});
 
-  // Jiten.moe Search State
-  const [jitenQuery, setJitenQuery] = useState('');
-  const [jitenMediaType, setJitenMediaType] = useState<number | ''>(4); // Default to Novels / Light Novels
-  const [isJitenSearching, setIsJitenSearching] = useState(false);
-  const [jitenResults, setJitenResults] = useState<any[]>([]);
-  const [jitenStatus, setJitenStatus] = useState<string | null>(null);
-  const [hasDeckCsv, setHasDeckCsv] = useState(false);
-  const [deckCsvFileName, setDeckCsvFileName] = useState<string | null>(null);
-  const [isDownloadingDeck, setIsDownloadingDeck] = useState(false);
-  const [expandedVocabDeckId, setExpandedVocabDeckId] = useState<number | null>(null);
-  const [vocabPreview, setVocabPreview] = useState<Record<number, any[]>>({});
-  const [isLoadingVocab, setIsLoadingVocab] = useState(false);
-  const [expandedSubDecksId, setExpandedSubDecksId] = useState<number | null>(null);
-  const [subDecksMap, setSubDecksMap] = useState<Record<number, any[]>>({});
-  const [isLoadingSubDecks, setIsLoadingSubDecks] = useState(false);
+  const hasDeckCsv = !!activeBookDetail?.hasDeckCsv;
 
   useEffect(() => {
     if (!activeBookDetail) return;
@@ -94,8 +81,6 @@ export const BookInfoModal: React.FC = () => {
     setWritingMode(s.writingMode || 'vertical-rl');
     setCustomSortOrder(String(s.customSortOrder || 0));
     setFolderId(s.folderId || '');
-    setHasDeckCsv(!!activeBookDetail.hasDeckCsv);
-    setDeckCsvFileName(activeBookDetail.deckCsvFileName || null);
     
     // Extract tag IDs
     const currentTags = Array.isArray(s.tags)
@@ -114,12 +99,13 @@ export const BookInfoModal: React.FC = () => {
     }
     setBookCustomFields(cf);
 
-    setJitenQuery(s.seriesName || s.title || '');
-    setJitenResults([]);
-    setJitenStatus(null);
     setStatusMessage(null);
     setStudyPackReady(!!s.hasStudyPack);
-    setActiveTab('meta');
+    // Stay on the current tab when the same book is merely refreshed (e.g. a plugin changed its metadata).
+    if (lastBookIdRef.current !== s.bookId) {
+      lastBookIdRef.current = s.bookId;
+      setActiveTab('meta');
+    }
   }, [activeBookDetail]);
 
   useEffect(() => {
@@ -224,120 +210,6 @@ export const BookInfoModal: React.FC = () => {
     }
   };
 
-  const handleJitenSearch = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const query = jitenQuery.trim();
-    if (!query) return;
-
-    setIsJitenSearching(true);
-    setJitenStatus(null);
-    try {
-      const res = await rpc.call<any>('library.searchJitenMoe', {
-        query,
-        mediaType: jitenMediaType !== '' ? jitenMediaType : undefined,
-      });
-      const items = res?.items || [];
-      setJitenResults(items);
-      if (items.length === 0) {
-        setJitenStatus(`No direct matches found on jiten.moe for "${query}".`);
-      }
-    } catch (err: any) {
-      setJitenStatus(`Search failed: ${err.message || String(err)}`);
-    } finally {
-      setIsJitenSearching(false);
-    }
-  };
-
-  const handleToggleVocab = async (deckId: number) => {
-    if (expandedVocabDeckId === deckId) {
-      setExpandedVocabDeckId(null);
-      return;
-    }
-    setExpandedVocabDeckId(deckId);
-    if (!vocabPreview[deckId]) {
-      setIsLoadingVocab(true);
-      try {
-        const res = await rpc.call<any>('library.getJitenVocabularyPreview', { deckId, limit: 15 });
-        setVocabPreview((prev) => ({ ...prev, [deckId]: res?.words || [] }));
-      } catch (err: any) {
-        console.error('Failed to load vocab preview:', err);
-      } finally {
-        setIsLoadingVocab(false);
-      }
-    }
-  };
-
-  const handleToggleSubDecks = async (deckId: number) => {
-    if (expandedSubDecksId === deckId) {
-      setExpandedSubDecksId(null);
-      return;
-    }
-    setExpandedSubDecksId(deckId);
-    if (!subDecksMap[deckId]) {
-      setIsLoadingSubDecks(true);
-      try {
-        const res = await rpc.call<any>('library.getJitenDeckDetail', { deckId });
-        setSubDecksMap((prev) => ({ ...prev, [deckId]: res?.subDecks || [] }));
-      } catch (err: any) {
-        console.error('Failed to load sub-decks:', err);
-      } finally {
-        setIsLoadingSubDecks(false);
-      }
-    }
-  };
-
-  const applyJitenDeck = (deck: any) => {
-    const updatedCf = { ...bookCustomFields };
-    updatedCf['jiten_moe_url'] = deck.jitenUrl || `https://jiten.moe/decks/media/${deck.deckId}`;
-    if (deck.difficulty !== undefined && deck.difficulty !== null) {
-      updatedCf['jiten_difficulty'] = String(deck.difficulty);
-    }
-    setBookCustomFields(updatedCf);
-
-    if (!description.trim() && deck.description) {
-      setDescription(deck.description);
-    }
-
-    setJitenStatus(`Applied jiten.moe deck #${deck.deckId} (Diff: ${deck.difficulty || '—'}). Click Save Changes below to persist!`);
-  };
-
-  const extractDeckId = (val?: string): number | null => {
-    if (!val) return null;
-    const match = val.match(/(\d+)(?!.*\d)/);
-    return match ? parseInt(match[1], 10) : null;
-  };
-
-  const handleDownloadDeck = async (deckId?: number, deckMeta?: any) => {
-    const targetDeckId = deckId ?? extractDeckId(bookCustomFields['jiten_moe_url']);
-    if (!targetDeckId) {
-      setJitenStatus('No valid Jiten deck ID found to download. Search for a deck below.');
-      return;
-    }
-
-    setIsDownloadingDeck(true);
-    setJitenStatus('Downloading deck CSV from jiten.moe and attaching to book folder...');
-    try {
-      const res = await rpc.call<any>('library.downloadJitenDeckCsv', {
-        bookId: book.bookId,
-        deckId: targetDeckId,
-      });
-
-      if (res?.ok) {
-        setHasDeckCsv(true);
-        setDeckCsvFileName(res.fileName || 'deck.csv');
-        if (deckMeta) {
-          applyJitenDeck(deckMeta);
-        }
-        setJitenStatus(`⚡ Successfully downloaded and attached deck.csv (${Math.round((res.fileSizeBytes || 0) / 1024)} KB)!`);
-        await fetchBooks();
-      }
-    } catch (err: any) {
-      setJitenStatus(`Download failed: ${err.message || String(err)}`);
-    } finally {
-      setIsDownloadingDeck(false);
-    }
-  };
-
   const toggleTag = (tagId: string) => {
     setSelectedTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
@@ -350,7 +222,7 @@ export const BookInfoModal: React.FC = () => {
       onClick={closeInspector}
     >
       <div
-        className="book-info-modal-card bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl flex flex-col w-[960px] max-w-[96vw] h-[740px] max-h-[92vh] overflow-hidden select-none animate-in fade-in zoom-in-95 duration-150"
+        className="book-info-modal-card modal-surface bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-modal)] shadow-2xl flex flex-col w-[960px] max-w-[96vw] h-[740px] max-h-[92vh] overflow-hidden select-none animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* MODAL HEADER */}
@@ -389,7 +261,7 @@ export const BookInfoModal: React.FC = () => {
                 closeInspector();
                 openBook(book.bookId);
               }}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--accent-color)] text-black text-xs font-semibold hover:opacity-90 shadow-sm"
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--accent-color)] text-[var(--accent-contrast)] text-xs font-semibold hover:opacity-90 shadow-sm"
             >
               <BookOpen className="w-3.5 h-3.5" />
               <span>Read Book</span>
@@ -411,7 +283,7 @@ export const BookInfoModal: React.FC = () => {
             onClick={() => setActiveTab('meta')}
             className={`book-info-tab-btn py-2.5 px-3.5 text-xs font-medium border-b-2 transition-colors ${
               activeTab === 'meta'
-                ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-semibold'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-semibold'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -419,21 +291,21 @@ export const BookInfoModal: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('jiten')}
+            onClick={() => setActiveTab('fields')}
             className={`book-info-tab-btn py-2.5 px-3.5 text-xs font-medium border-b-2 transition-colors ${
-              activeTab === 'jiten'
-                ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-semibold'
+              activeTab === 'fields'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-semibold'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
-            🌐 jiten.moe & Custom Fields
+            🧩 Custom Fields
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('chapters')}
             className={`book-info-tab-btn py-2.5 px-3.5 text-xs font-medium border-b-2 transition-colors ${
               activeTab === 'chapters'
-                ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-semibold'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-semibold'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -444,7 +316,7 @@ export const BookInfoModal: React.FC = () => {
             onClick={() => setActiveTab('studypack')}
             className={`book-info-tab-btn py-2.5 px-3.5 text-xs font-medium border-b-2 transition-colors ${
               activeTab === 'studypack'
-                ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-semibold'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-semibold'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -455,12 +327,31 @@ export const BookInfoModal: React.FC = () => {
             onClick={() => setActiveTab('opf')}
             className={`book-info-tab-btn py-2.5 px-3.5 text-xs font-medium border-b-2 transition-colors ${
               activeTab === 'opf'
-                ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-semibold'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-semibold'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
             ℹ️ File & OPF Info
           </button>
+          {pluginTabs.map((tab) => {
+            const key = `plugin:${tab.pluginId}:${tab.id}`;
+            const TabIcon = tab.icon;
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setActiveTab(key)}
+                className={`book-info-tab-btn py-2.5 px-3.5 text-xs font-medium border-b-2 transition-colors inline-flex items-center space-x-1.5 ${
+                  activeTab === key
+                    ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-semibold'
+                    : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                }`}
+              >
+                <TabIcon className="w-3.5 h-3.5" />
+                <span>{tab.title}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* STATUS BANNER */}
@@ -507,6 +398,26 @@ export const BookInfoModal: React.FC = () => {
                   onChange={(e) => setSortTitle(e.target.value)}
                   className="w-full px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
                 />
+              </div>
+
+              <div className="p-3 border border-[var(--border-color)] bg-[var(--hover-bg)] space-y-2" data-testid="reading-list-box">
+                <div className="text-[11px] font-semibold text-[var(--text-muted)] uppercase">Favourite and reading list</div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="flex items-center gap-1.5 text-xs text-[var(--text-primary)]">
+                    <FavoriteStar own={!!book.isFavorite} inherited={!!book.seriesIsFavorite} size={16} onToggle={() => void setBookFlags([book.bookId], { favorite: !book.isFavorite })} />
+                    This book
+                  </span>
+                  <StatusSelect testId="book-status" value={(book.readingStatus || '') as ReadingStatus} inherited={(book.seriesReadingStatus || '') as ReadingStatus} onChange={(st) => void setBookFlags([book.bookId], { readingStatus: st })} />
+                </div>
+                {book.seriesName ? (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="flex items-center gap-1.5 text-xs text-[var(--text-primary)]">
+                      <FavoriteStar own={!!book.seriesIsFavorite} size={16} title={book.seriesIsFavorite ? 'Remove the series from favourites' : 'Favourite the whole series'} onToggle={() => void setSeriesFlags(book.seriesName!, { favorite: !book.seriesIsFavorite })} />
+                      Whole series: {book.seriesName}
+                    </span>
+                    <StatusSelect testId="series-status" value={(book.seriesReadingStatus || '') as ReadingStatus} onChange={(st) => void setSeriesFlags(book.seriesName!, { readingStatus: st })} />
+                  </div>
+                ) : null}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -675,7 +586,7 @@ export const BookInfoModal: React.FC = () => {
                           onClick={() => toggleTag(t.tagId)}
                           className={`px-2.5 py-1 rounded text-xs border transition-colors flex items-center space-x-1 ${
                             isChecked
-                              ? 'bg-[var(--accent-color)] border-[var(--accent-color)] text-black font-semibold'
+                              ? 'bg-[var(--accent-color)] border-[var(--accent-color)] text-[var(--accent-contrast)] font-semibold'
                               : 'bg-[var(--bg-primary)] border-[var(--border-color)] text-[var(--text-muted)] hover:border-[var(--text-primary)]'
                           }`}
                         >
@@ -703,288 +614,9 @@ export const BookInfoModal: React.FC = () => {
             </div>
           )}
 
-          {/* TAB 2: JITEN.MOE & CUSTOM FIELDS */}
-          {activeTab === 'jiten' && (
+          {/* TAB 2: CUSTOM FIELDS */}
+          {activeTab === 'fields' && (
             <div className="space-y-5 max-w-3xl">
-              {/* Jiten Integration Card */}
-              <div className="jiten-integration-card p-4 rounded-lg border border-sky-500/30 bg-sky-950/20 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="font-semibold text-sm text-[var(--text-primary)]">🌐 Jiten.moe Media Integration</span>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-600 text-white uppercase">
-                      JITEN.MOE
-                    </span>
-                  </div>
-                  {bookCustomFields['jiten_moe_url'] && (
-                    <a
-                      href={bookCustomFields['jiten_moe_url']}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs text-[var(--accent-color)] hover:underline inline-flex items-center space-x-1"
-                    >
-                      <span>Open Deck</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
-                </div>
-
-                {/* 1-Click Deck Status & Download */}
-                <div className="p-3 rounded bg-black/30 border border-[var(--border-color)] flex items-center justify-between">
-                  <div className="flex items-center space-x-2.5">
-                    {hasDeckCsv ? (
-                      <FileCheck className="w-5 h-5 text-emerald-400 shrink-0" />
-                    ) : (
-                      <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
-                    )}
-                    <div>
-                      <div className="font-semibold text-xs text-[var(--text-primary)] flex items-center space-x-2">
-                        <span>Vocabulary Deck:</span>
-                        {hasDeckCsv ? (
-                          <span className="text-emerald-400 font-bold">✓ {deckCsvFileName || 'deck.csv'} Attached</span>
-                        ) : (
-                          <span className="text-amber-400 font-bold">⚠️ No deck.csv in book folder</span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-[var(--text-muted)]">
-                        {hasDeckCsv
-                          ? 'Enrichment pipeline and study packs will use this deck for vocabulary & pitch data.'
-                          : 'Download the vocabulary deck below to enable frequency & JLPT metadata, definitions, and pitch accent.'}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    {extractDeckId(bookCustomFields['jiten_moe_url']) ? (
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadDeck()}
-                        disabled={isDownloadingDeck}
-                        className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 disabled:opacity-50 shadow-sm"
-                      >
-                        {isDownloadingDeck ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                        <span>{hasDeckCsv ? '⚡ Re-download CSV Deck' : '⚡ 1-Click Download & Attach Deck'}</span>
-                      </button>
-                    ) : (
-                      !hasDeckCsv && (
-                        <span className="text-[10px] text-[var(--text-muted)] italic">
-                          Search below to 1-click install
-                        </span>
-                      )
-                    )}
-                  </div>
-                </div>
-
-                <form onSubmit={handleJitenSearch} className="flex space-x-2">
-                  <select
-                    value={jitenMediaType}
-                    onChange={(e) => setJitenMediaType(e.target.value === '' ? '' : parseInt(e.target.value, 10))}
-                    className="px-2.5 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
-                  >
-                    <option value="4">Novels / Light Novels</option>
-                    <option value="">All Formats</option>
-                    <option value="1">Manga</option>
-                    <option value="2">Visual Novels</option>
-                    <option value="3">Anime</option>
-                  </select>
-                  <input
-                    type="text"
-                    value={jitenQuery}
-                    onChange={(e) => setJitenQuery(e.target.value)}
-                    placeholder="Search series or book title on jiten.moe..."
-                    className="flex-1 px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-color)]"
-                  />
-                  <button
-                    type="submit"
-                    disabled={isJitenSearching}
-                    className="flex items-center space-x-1 px-3 py-1.5 rounded bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 disabled:opacity-50"
-                  >
-                    <Search className="w-3.5 h-3.5" />
-                    <span>{isJitenSearching ? 'Searching...' : 'Search'}</span>
-                  </button>
-                </form>
-
-                {jitenStatus && (
-                  <div className="p-2.5 rounded bg-black/20 border border-[var(--border-color)] text-xs text-[var(--text-muted)] flex items-center space-x-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>{jitenStatus}</span>
-                  </div>
-                )}
-
-                {jitenResults.length > 0 && (
-                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1 pt-1">
-                    {jitenResults.map((item: any) => {
-                      const isVocabOpen = expandedVocabDeckId === item.deckId;
-                      const isSubDecksOpen = expandedSubDecksId === item.deckId;
-                      const words = vocabPreview[item.deckId] || [];
-                      const subDecks = subDecksMap[item.deckId] || [];
-
-                      return (
-                        <div
-                          key={item.deckId}
-                          className="p-3.5 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--accent-color)]/60 transition-colors flex flex-col gap-2.5"
-                        >
-                          <div className="flex space-x-3 items-start">
-                            {item.coverUrl && (
-                              <img
-                                src={item.coverUrl}
-                                alt=""
-                                className="w-12 h-16 rounded object-cover bg-black/40 shrink-0 border border-white/10"
-                                onError={(e) => ((e.target as HTMLElement).style.display = 'none')}
-                              />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-xs text-[var(--text-primary)] truncate">
-                                {item.originalTitle}
-                              </div>
-                              <div className="text-[11px] text-[var(--text-muted)] truncate">
-                                {[item.romajiTitle, item.englishTitle].filter(Boolean).join(' • ')}
-                              </div>
-                              <div className="flex items-center space-x-2.5 text-[10px] text-[var(--text-muted)] mt-1.5 flex-wrap gap-y-1">
-                                {item.difficulty !== undefined && item.difficulty !== null && (
-                                  <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
-                                    ★ Diff: {item.difficulty.toFixed(1)}/10
-                                  </span>
-                                )}
-                                <span>Words: {(item.wordCount || 0).toLocaleString()}</span>
-                                <span>Chars: {(item.characterCount || 0).toLocaleString()}</span>
-                                {item.childrenDeckCount > 0 && (
-                                  <span className="text-[var(--accent-color)] font-semibold">
-                                    {item.childrenDeckCount} Volumes
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex items-center space-x-2 mt-2 flex-wrap gap-y-1">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDownloadDeck(item.deckId, item)}
-                                  disabled={isDownloadingDeck}
-                                  className="px-2.5 py-1 rounded bg-[var(--accent-color)] text-black text-[11px] font-semibold hover:opacity-90 flex items-center space-x-1"
-                                >
-                                  {isDownloadingDeck ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
-                                  <span>⚡ Download Deck CSV</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => applyJitenDeck(item)}
-                                  className="px-2 py-1 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] text-[11px] hover:border-[var(--accent-color)]"
-                                >
-                                  Apply Metadata
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleToggleVocab(item.deckId)}
-                                  className={`px-2 py-1 rounded border text-[11px] transition-colors ${
-                                    isVocabOpen
-                                      ? 'bg-sky-500/20 border-sky-400 text-sky-300'
-                                      : 'bg-[var(--bg-primary)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                                  }`}
-                                >
-                                  📖 Vocab Preview
-                                </button>
-                                {item.childrenDeckCount > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleSubDecks(item.deckId)}
-                                    className={`px-2 py-1 rounded border text-[11px] transition-colors ${
-                                      isSubDecksOpen
-                                        ? 'bg-sky-500/20 border-sky-400 text-sky-300'
-                                        : 'bg-[var(--bg-primary)] border-[var(--border-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                                    }`}
-                                  >
-                                    ▼ Volumes ({item.childrenDeckCount})
-                                  </button>
-                                )}
-                                {item.jitenUrl && (
-                                  <a
-                                    href={item.jitenUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="text-[11px] text-[var(--accent-color)] hover:underline inline-flex items-center space-x-0.5 ml-1"
-                                  >
-                                    <span>Jiten</span>
-                                    <ExternalLink className="w-2.5 h-2.5" />
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* VOCABULARY PREVIEW DRAWER */}
-                          {isVocabOpen && (
-                            <div className="p-2.5 rounded bg-black/40 border border-[var(--border-color)] text-xs animate-in fade-in">
-                              <div className="font-semibold text-[11px] text-sky-300 uppercase mb-1.5 flex items-center justify-between">
-                                <span>Top 15 Vocabulary Words ({item.originalTitle})</span>
-                                {isLoadingVocab && <Loader2 className="w-3 h-3 animate-spin text-[var(--accent-color)]" />}
-                              </div>
-                              {words.length > 0 ? (
-                                <div className="max-h-48 overflow-y-auto border border-white/5 rounded">
-                                  <table className="w-full text-left text-[11px] border-collapse">
-                                    <thead>
-                                      <tr className="bg-black/30 border-b border-white/10 text-[var(--text-muted)] uppercase text-[9px]">
-                                        <th className="py-1 px-2">Word</th>
-                                        <th className="py-1 px-2">Reading</th>
-                                        <th className="py-1 px-2">Meaning</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-white/5">
-                                      {words.map((w: any, idx: number) => (
-                                        <tr key={idx} className="hover:bg-white/5">
-                                          <td className="py-1 px-2 font-medium text-[var(--text-primary)]">{w.expression || w.word || '—'}</td>
-                                          <td className="py-1 px-2 text-sky-300 font-mono">{w.reading || '—'}</td>
-                                          <td className="py-1 px-2 text-[var(--text-muted)] truncate max-w-xs">{w.meaning || w.gloss || '—'}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              ) : !isLoadingVocab ? (
-                                <p className="text-[11px] text-[var(--text-muted)]">No vocabulary preview available for this deck.</p>
-                              ) : null}
-                            </div>
-                          )}
-
-                          {/* SUB-DECKS EXPLORER DRAWER */}
-                          {isSubDecksOpen && (
-                            <div className="p-2.5 rounded bg-black/40 border border-[var(--border-color)] text-xs animate-in fade-in space-y-2">
-                              <div className="font-semibold text-[11px] text-sky-300 uppercase flex items-center justify-between">
-                                <span>Volume Sub-Decks ({subDecks.length})</span>
-                                {isLoadingSubDecks && <Loader2 className="w-3 h-3 animate-spin text-[var(--accent-color)]" />}
-                              </div>
-                              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
-                                {subDecks.map((sub: any) => (
-                                  <div
-                                    key={sub.deckId}
-                                    className="p-2 rounded bg-[var(--bg-surface)] border border-[var(--border-color)] flex items-center justify-between"
-                                  >
-                                    <div className="min-w-0 flex-1 mr-2">
-                                      <div className="font-semibold text-[11px] text-[var(--text-primary)] truncate">
-                                        {sub.originalTitle || `Volume #${sub.deckId}`}
-                                      </div>
-                                      <div className="text-[10px] text-[var(--text-muted)] flex items-center space-x-1">
-                                        {sub.difficulty && <span className="text-amber-400 font-bold">★ {sub.difficulty.toFixed(1)}</span>}
-                                        <span>• {(sub.characterCount || 0).toLocaleString()} chars</span>
-                                      </div>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDownloadDeck(sub.deckId, sub)}
-                                      disabled={isDownloadingDeck}
-                                      className="px-2 py-0.5 rounded bg-[var(--accent-color)] text-black text-[10px] font-semibold shrink-0 hover:opacity-90"
-                                    >
-                                      Apply Vol
-                                    </button>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
               {/* Custom Fields List */}
               <div className="space-y-3">
                 <div className="font-semibold text-xs uppercase tracking-wider text-[var(--text-muted)]">
@@ -1059,7 +691,7 @@ export const BookInfoModal: React.FC = () => {
                           closeInspector();
                           openBook(book.bookId, ch.spineHref);
                         }}
-                        className="px-2.5 py-1 rounded bg-[var(--accent-color)] text-black text-[11px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="px-2.5 py-1 rounded bg-[var(--accent-color)] text-[var(--accent-contrast)] text-[11px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity"
                       >
                         Read Chapter →
                       </button>
@@ -1096,18 +728,20 @@ export const BookInfoModal: React.FC = () => {
                       <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
                       <span>No vocabulary deck CSV attached. Vocabulary cards & pitch accents require a deck.csv.</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('jiten')}
-                      className="px-2.5 py-1 rounded bg-amber-500 text-black font-semibold text-[11px] hover:opacity-90 shrink-0"
-                    >
-                      1-Click Download Deck ➔
-                    </button>
+                    {pluginTabs.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab(`plugin:${pluginTabs[0].pluginId}:${pluginTabs[0].id}`)}
+                        className="px-2.5 py-1 rounded bg-amber-500 text-black font-semibold text-[11px] hover:opacity-90 shrink-0"
+                      >
+                        Find a deck: {pluginTabs[0].title} ➔
+                      </button>
+                    )}
                   </div>
                 )}
 
                 <p className="text-xs text-[var(--text-muted)] leading-relaxed">
-                  Study packs include offline Kanji Master PDFs, 20-word Vocabulary set PDFs, and Anki-compatible
+                  Study packs include offline Kanji Master PDFs, 20-word Vocabulary set PDFs, grammar and particle booklets per chapter, and Anki-compatible
                   flashcards generated deterministically by the Python enrichment bridge.
                 </p>
 
@@ -1118,7 +752,7 @@ export const BookInfoModal: React.FC = () => {
                       closeInspector();
                       openStudyPack(book.bookId);
                     }}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 shadow-sm"
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--accent-color)] text-[var(--accent-contrast)] font-semibold text-xs hover:opacity-90 shadow-sm"
                   >
                     <BookCheck className="w-3.5 h-3.5" />
                     <span>Open Study Cards & Sets</span>
@@ -1143,6 +777,17 @@ export const BookInfoModal: React.FC = () => {
               </div>
             </div>
           )}
+
+          {/* PLUGIN TABS (registered through ctx.registerBookInfoTab) */}
+          {pluginTabs.map((tab) => {
+            if (activeTab !== `plugin:${tab.pluginId}:${tab.id}`) return null;
+            const TabBody = tab.component;
+            return (
+              <PluginErrorBoundary key={`${tab.pluginId}:${tab.id}`} pluginId={tab.pluginId}>
+                <TabBody bookId={book.bookId} book={activeBookDetail} />
+              </PluginErrorBoundary>
+            );
+          })}
 
           {/* TAB 5: OPF INFO */}
           {activeTab === 'opf' && (
@@ -1217,7 +862,7 @@ export const BookInfoModal: React.FC = () => {
               type="button"
               onClick={handleSave}
               disabled={isSaving}
-              className="flex items-center space-x-1.5 px-4 py-1.5 rounded bg-[var(--accent-color)] text-black text-xs font-semibold hover:opacity-90 disabled:opacity-50 shadow-sm"
+              className="flex items-center space-x-1.5 px-4 py-1.5 rounded bg-[var(--accent-color)] text-[var(--accent-contrast)] text-xs font-semibold hover:opacity-90 disabled:opacity-50 shadow-sm"
             >
               <Save className="w-3.5 h-3.5" />
               <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>

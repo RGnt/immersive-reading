@@ -1,6 +1,8 @@
 # Writing a Plugin UI (authoring guide)
 
-> Read this before adding or changing any plugin user interface. Design record: [spec 11](../specs/11-plugin-ui-loading-spec.md). Reference plugins: `PosHighlighter` (plain JS, toolbar popover) and `AiCompanion` (JSX, view + drawer). Architecture overview: [dotnet-architecture.md](dotnet-architecture.md) §7.
+> **New to building plugins here?** Start with the step-by-step **[Creating a Plugin Tutorial (based on `PosHighlighter`)](creating-a-plugin-tutorial.md)** for the full C# + Python + UI walkthrough, then use this page as your UI slot and `@ir/sdk` reference.
+>
+> Read this before adding or changing any plugin user interface. Design record: [spec 11](../specs/11-plugin-ui-loading-spec.md). Reference plugins: `PosHighlighter` (plain JS, toolbar popover), `AiCompanion` (JSX, view + drawer), `JitenMoe` (JSX, Book Info tab + badge + series action + own stylesheet) `DeckBuilder` (JSX, Book Info tab) and `CharacterKnowledge` (JSX, Book Info tab + series action modal + reader drawer that follows `useActiveBook().chapterIndex`, polling an RPC for job progress). Architecture overview: [dotnet-architecture.md](dotnet-architecture.md) §7.
 
 ## 1. How a plugin UI reaches the screen (and why)
 
@@ -26,9 +28,9 @@ Plain JS plugins (like PosHighlighter) can use `React.createElement` directly an
 
 ## 3. What `ctx` offers (`PluginUiContext`, `sdk/types.ts`)
 
-- `registerView`, `registerReaderDrawer`, `registerBookInfoTab`, `registerCustomSettingsPanel`
+- `registerView`, `registerReaderDrawer`, `registerBookInfoTab`, `registerBookBadge`, `registerSeriesAction`, `registerCustomSettingsPanel` (library slots: [dotnet-architecture.md](dotnet-architecture.md) §10)
 - `registerReaderToolbarAction({ id, label, icon, onClick? , popover? })`: `popover` renders an anchored panel (Escape / outside click close it). `onClick(ctx)` gets `rpc(action, payload)` scoped to `ext.<pluginId>.<action>`.
-- From `@ir/sdk`: `usePluginRpc`, `usePluginConfig`, `useActiveBook`, `EnrichedText`, `PluginDrawerShell`, `PluginPageLayout`, `Button`, and `setReaderStyle(pluginId, styleId, css)` for live CSS in the open chapter (use the id the server injected to *replace* it).
+- From `@ir/sdk`: `usePluginRpc`, `usePluginConfig`, `useActiveBook`, `refreshLibrary`, `EnrichedText`, `PluginDrawerShell`, `PluginPageLayout`, `Button`, and `setReaderStyle(pluginId, styleId, css)` for live CSS in the open chapter (use the id the server injected to *replace* it).
 - Hidden settings: mark a schema property `"x-hidden": true` to keep it out of the generic Settings form.
 - Stylesheets: set `Manifest.StyleEntry` to a `.css` asset; it is injected as `<style data-ir-plugin="id">` and removed on disable.
 
@@ -47,3 +49,6 @@ Plain JS plugins (like PosHighlighter) can use `React.createElement` directly an
 - Typical messages: `imports 'x', which is not provided by the host` (section 2); `Unexpected token '<'` (raw JSX in `ui.js`); `Asset 'x' not found in plugin` (not embedded, or wrong `UiEntry`).
 - `--verify-ui` output ends with `pluginUi=ok(...)` and `posMenu=ok(...)`. A missing field means the run failed earlier; read the `FAIL:` line.
 - Stale code after editing an *embedded* plugin: rebuild the plugin project (the file is compiled into the DLL). External plugin folders are read from disk on each enable.
+
+## 7. Styling a plugin
+The host's Tailwind build only generates classes that appear in the host's own sources, so Tailwind utility classes used only in a plugin's `ui.src.jsx` are **not** generated. Ship your own `ui.css` (set `StyleEntry`, embed it under `Assets\`) with a unique prefix (`jm-`, `db-`) and use the host CSS variables (`--bg-surface`, `--border-color`, `--accent-color`, `--text-primary`, `--text-muted`).

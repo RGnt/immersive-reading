@@ -4,7 +4,7 @@
     "endpointUrl": {
       "type": "string",
       "title": "OpenAI-Compatible LLM Endpoint URL",
-      "description": "Local llama-server, Ollama, LM Studio, or OpenAI API base URL.",
+      "description": "Local llama-server, Ollama, LM Studio, or OpenAI API address. The host (http://localhost:8091), the base (http://localhost:8091/v1) or the full chat URL all work.",
       "default": "http://127.0.0.1:8080/v1",
       "x-rpc-action": {
         "label": "Test LLM Connection",
@@ -26,8 +26,16 @@
       "type": "string",
       "title": "Reading Comprehension Quiz Display Location",
       "description": "Choose whether quizzes open as a modal popup, side drawer panel, or full page view.",
-      "enum": ["modal", "drawer", "view"],
-      "enumLabels": ["Modal Pop-up", "Side Drawer Panel", "Dedicated Page View"],
+      "enum": [
+        "modal",
+        "drawer",
+        "view"
+      ],
+      "enumLabels": [
+        "Modal Pop-up",
+        "Side Drawer Panel",
+        "Dedicated Page View"
+      ],
       "default": "modal"
     },
     "questionCount": {
@@ -47,6 +55,38 @@
     "enforceNPlusOne": {
       "type": "boolean",
       "title": "Enforce i+1 Vocabulary Budget in Persona Replies",
+      "default": true
+    },
+    "characterMemory": {
+      "type": "boolean",
+      "title": "Characters remember what I tell them",
+      "description": "Facts you state about yourself in a conversation are kept on this computer and used by the characters later. Sent to the model like the rest of the chat. See and delete them in Settings > Memory.",
+      "default": true
+    },
+    "characterMemoryShare": {
+      "type": "string",
+      "title": "Who may use what I tell a character",
+      "enum": [
+        "all",
+        "thisCharacter"
+      ],
+      "enumLabels": [
+        "Every character",
+        "Only the character I told"
+      ],
+      "default": "all"
+    },
+    "memoryMaxFacts": {
+      "type": "integer",
+      "title": "Most facts remembered from one message",
+      "minimum": 1,
+      "maximum": 5,
+      "default": 3
+    },
+    "quizNudgesVocabulary": {
+      "type": "boolean",
+      "title": "Written quiz answers move my vocabulary",
+      "description": "After a free-form answer, words you used correctly three times in a row move towards Known, and a word you misused goes back to Learning. Only for answers that really answered the question. Shown after each answer.",
       "default": true
     }
   }

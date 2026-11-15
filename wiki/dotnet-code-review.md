@@ -1,5 +1,7 @@
 # .NET Code Review Log (`immersive-reader/`)
 
+> A newer whole-project review (knowledge graph, plugins, bulk edit, security) is in [code-review-2026-11-15.md](code-review-2026-11-15.md); its findings are open.
+
 Last review: 2026-11-14. Build: 0 warnings / 0 errors before and after. **203 tests pass** (Core 87, Enrichment 36, Dictionaries 15, App 65).
 Scan command (run from `immersive-reader/src`) to spot regressions:
 `grep -rEn 'async void|\.Result\b|\.Wait\(\)|new HttpClient|catch *\{ *\}' --include=*.cs .`

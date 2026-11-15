@@ -25,7 +25,7 @@ export const DictionaryPopover: React.FC = () => {
       <div className="p-2.5 border-b border-[var(--border-color)] flex items-center justify-between bg-[var(--bg-primary)] rounded-t-lg">
         {primaryTerm ? (
           <div className="flex items-baseline space-x-2 truncate">
-            <span className="dict-headword text-base font-bold text-[var(--accent-color)] truncate">
+            <span className="dict-headword text-base font-bold text-[var(--accent-text)] truncate">
               {primaryTerm.expression}
             </span>
             {primaryTerm.reading && (
@@ -53,7 +53,7 @@ export const DictionaryPopover: React.FC = () => {
 
       {isLoading ? (
         <div className="p-8 flex items-center justify-center space-x-2 text-[var(--text-muted)]">
-          <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-color)]" />
+          <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-text)]" />
           <span>Searching dictionaries...</span>
         </div>
       ) : terms.length === 0 ? (
@@ -65,7 +65,7 @@ export const DictionaryPopover: React.FC = () => {
               onClick={() => setPopoverTab('words')}
               className={`py-1.5 px-3 border-b-2 font-medium transition-colors ${
                 activeTab === 'words'
-                  ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-bold'
+                  ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-bold'
                   : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
               }`}
             >
@@ -76,7 +76,7 @@ export const DictionaryPopover: React.FC = () => {
                 onClick={() => setPopoverTab('kanji')}
                 className={`py-1.5 px-3 border-b-2 font-medium transition-colors ${
                   activeTab === 'kanji'
-                    ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-bold'
+                    ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-bold'
                     : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
                 }`}
               >
@@ -106,7 +106,7 @@ export const DictionaryPopover: React.FC = () => {
                             onClick={() => updateWordStatus(idx, btn.id)}
                             className={`px-1.5 py-0.5 rounded text-[10px] border transition-colors ${
                               t.userStatus === btn.id
-                                ? 'bg-[var(--accent-color)] text-black font-bold border-[var(--accent-color)]'
+                                ? 'bg-[var(--accent-color)] text-[var(--accent-contrast)] font-bold border-[var(--accent-color)]'
                                 : 'text-[var(--text-muted)] border-[var(--border-color)] hover:text-[var(--text-primary)]'
                             }`}
                           >
@@ -119,7 +119,7 @@ export const DictionaryPopover: React.FC = () => {
                     <div className="space-y-1">
                       {t.senses?.map((s, sIdx) => (
                         <div key={sIdx} className="text-[11px] leading-snug">
-                          <span className="text-[10px] text-[var(--accent-color)] opacity-75 font-semibold mr-1">
+                          <span className="text-[10px] text-[var(--accent-text)] opacity-75 font-semibold mr-1">
                             {s.dictionaryTitle}
                           </span>
                           <span className="text-[var(--text-primary)]">{s.glosses?.join('; ')}</span>
@@ -164,7 +164,7 @@ export const DictionaryPopover: React.FC = () => {
               <div className="space-y-2">
                 {kanjiList.map((k, idx) => (
                   <div key={idx} className="p-2.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] flex space-x-3">
-                    <span className="text-2xl font-serif text-[var(--accent-color)] shrink-0">{k.character}</span>
+                    <span className="text-2xl font-serif text-[var(--accent-text)] shrink-0">{k.character}</span>
                     <div className="flex-1 text-[11px] space-y-0.5">
                       <div className="text-[var(--text-primary)] font-semibold">{k.primaryMeanings?.join(', ')}</div>
                       <div className="text-[10px] text-[var(--text-muted)]">

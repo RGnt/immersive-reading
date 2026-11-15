@@ -11,7 +11,7 @@ import { ReaderDrawerPluginSlot } from '../plugins/PluginSlots';
 
 export const ReaderView: React.FC = () => {
   return (
-    <div className="reader-view flex-1 flex flex-col h-full overflow-hidden bg-[var(--bg-primary)] relative">
+    <div data-ir="reader" className="reader-view flex-1 flex flex-col h-full overflow-hidden bg-[var(--bg-primary)] relative">
       <ReaderTopBar />
       <div className="flex-1 relative w-full h-full overflow-hidden flex flex-row">
         <div className="flex-1 relative h-full overflow-hidden">

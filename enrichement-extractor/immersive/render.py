@@ -98,6 +98,7 @@ def card_html(card):
     glyph = "glyph" if card["kind"] == "kanji" else "word"
     practice = '<div class="practice" aria-label="Writing practice boxes"><span></span><span></span><span></span><span></span></div>' if card["kind"] == "kanji" else ""
     example = f'<div class="example" lang="ja">{render_example(card)}</div>' if card["plain_example"] else ""
+    example += "".join(f'<div class="example" lang="ja">{render_example(extra)}</div>' for extra in card.get("extra_examples", []))
     return f'''<article class="card" data-card id="{E(card['id'])}">
     <div class="meta">{E(card['meta'])}</div><h2 class="{glyph}" lang="ja">{E(card['title'])}</h2>
     <div class="reading" lang="ja">{E(card['reading'])}</div><div class="meaning">{E(card['meaning'])}</div>

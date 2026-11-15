@@ -72,6 +72,15 @@ public sealed class BookImportService
         using var conn = _db.OpenConnection();
         using var tx = conn.BeginTransaction();
 
+        // Importing a single file explicitly is the user's intent: it overrides an earlier "removed as duplicate" (spec 21).
+        using (var forget = conn.CreateCommand())
+        {
+            forget.Transaction = tx;
+            forget.CommandText = "DELETE FROM removed_books WHERE book_id = $id;";
+            forget.Parameters.AddWithValue("$id", pkg.BookId);
+            forget.ExecuteNonQuery();
+        }
+
         UpsertExtractedBookInTransaction(
             conn,
             tx,
@@ -142,11 +151,13 @@ public sealed class BookImportService
         int deduplicated = 0;
         int failed = 0;
         int skippedImageOnly = 0;
+        int skippedRemoved = 0;
         var errors = new ConcurrentBag<string>();
         var warnings = new ConcurrentBag<string>();
 
         // Preload existing book IDs & SHA256s for fast deduplication detection
         var existingBookIds = LoadExistingBookIds();
+        var removedBookIds = LoadRemovedBookIds();   // duplicates the user removed: not imported again (spec 21)
 
         // Optional directory -> virtual folder mapping when autoCreateFolderHierarchyFromDirectories is true
         var dirToFolderId = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
@@ -183,6 +194,13 @@ public sealed class BookImportService
                         {
                             Interlocked.Increment(ref skippedImageOnly);
                             warnings.Add(UnsupportedBookException.BuildMessage(Path.GetFileName(filePath), content));
+                            return;
+                        }
+
+                        if (removedBookIds.Contains(pkg.BookId))
+                        {
+                            Interlocked.Increment(ref skippedRemoved);
+                            warnings.Add($"{Path.GetFileName(filePath)}: skipped, you removed it as a duplicate (Library tools > Removed duplicates > Allow import again).");
                             return;
                         }
 
@@ -259,13 +277,13 @@ public sealed class BookImportService
 
             string lastFile = chunk.Count > 0 ? Path.GetFileName(chunk[^1]) : "";
             progress?.Report(new ScanBatchProgress(
-                ScannedFiles: scanned + failed + skippedImageOnly,
+                ScannedFiles: scanned + failed + skippedImageOnly + skippedRemoved,
                 TotalFiles: totalFiles,
                 ImportedNew: importedNew,
                 DeduplicatedExisting: deduplicated,
                 FailedFiles: failed,
                 CurrentFile: lastFile,
-                SkippedFiles: skippedImageOnly));
+                SkippedFiles: skippedImageOnly + skippedRemoved));
         }
 
         sw.Stop();
@@ -277,7 +295,19 @@ public sealed class BookImportService
             ElapsedSeconds: Math.Round(sw.Elapsed.TotalSeconds, 3),
             Errors: errors.ToList(),
             SkippedImageOnly: skippedImageOnly,
-            Warnings: warnings.OrderBy(w => w, StringComparer.OrdinalIgnoreCase).ToList());
+            Warnings: warnings.OrderBy(w => w, StringComparer.OrdinalIgnoreCase).ToList(),
+            SkippedRemovedDuplicates: skippedRemoved);
+    }
+
+    public HashSet<string> LoadRemovedBookIds()
+    {
+        var set = new HashSet<string>(StringComparer.Ordinal);
+        using var conn = _db.OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT book_id FROM removed_books;";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read()) set.Add(reader.GetString(0));
+        return set;
     }
 
     public HashSet<string> LoadExistingBookIds()

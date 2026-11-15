@@ -16,6 +16,7 @@ export const BookmarksDrawer: React.FC = () => {
 
   const [noteInput, setNoteInput] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [selection, setSelection] = useState('');
 
   if (!isBookmarksOpen) return null;
 
@@ -25,8 +26,9 @@ export const BookmarksDrawer: React.FC = () => {
 
   const handleCreateBookmark = async (e: React.FormEvent) => {
     e.preventDefault();
-    await addBookmark(noteInput.trim(), currentChapter.title);
+    await addBookmark(noteInput.trim(), selection);
     setNoteInput('');
+    setSelection('');
     setShowAddForm(false);
   };
 
@@ -34,7 +36,7 @@ export const BookmarksDrawer: React.FC = () => {
     <div className="fixed inset-y-0 right-0 w-80 bg-[var(--bg-surface)] border-l border-[var(--border-color)] shadow-2xl flex flex-col z-40 select-none animate-in slide-in-from-right duration-200">
       <div className="p-3 border-b border-[var(--border-color)] flex items-center justify-between bg-[var(--bg-primary)]">
         <div className="flex items-center space-x-2">
-          <Bookmark className="w-4 h-4 text-[var(--accent-color)]" />
+          <Bookmark className="w-4 h-4 text-[var(--accent-text)]" />
           <span className="text-xs font-bold text-[var(--text-primary)]">
             Bookmarks ({bookmarks.length})
           </span>
@@ -50,16 +52,23 @@ export const BookmarksDrawer: React.FC = () => {
       <div className="p-3 border-b border-[var(--border-color)] bg-black/10">
         {!showAddForm ? (
           <button
-            onClick={() => setShowAddForm(true)}
-            className="w-full py-1.5 px-3 rounded bg-[var(--accent-color)] text-black font-semibold text-xs flex items-center justify-center space-x-1.5 hover:opacity-90 shadow-sm"
+            onClick={() => {
+              // the words selected in the book page (if any) become the bookmark's line
+              const frame = document.getElementById('reader-frame') as HTMLIFrameElement | null;
+              setSelection((frame?.contentWindow?.getSelection()?.toString() ?? '').trim());
+              setShowAddForm(true);
+            }}
+            className="w-full py-1.5 px-3 rounded bg-[var(--accent-color)] text-[var(--accent-contrast)] font-semibold text-xs flex items-center justify-center space-x-1.5 hover:opacity-90 shadow-sm"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>Bookmark Current Chapter</span>
+            <span>Bookmark here</span>
           </button>
         ) : (
           <form onSubmit={handleCreateBookmark} className="space-y-2">
-            <div className="text-[11px] font-semibold text-[var(--text-muted)]">
-              {currentChapter.title}
+            <div className="text-[11px] text-[var(--text-muted)]" data-testid="bookmark-form-hint">
+              {selection
+                ? <>Selected text: <b className="text-[var(--text-primary)]">{selection.length > 60 ? selection.slice(0, 60) + '…' : selection}</b></>
+                : <>{currentChapter.title}. Select words in the text first to bookmark them.</>}
             </div>
             <input
               type="text"
@@ -79,7 +88,7 @@ export const BookmarksDrawer: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="px-2.5 py-1 rounded bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90"
+                className="px-2.5 py-1 rounded bg-[var(--accent-color)] text-[var(--accent-contrast)] font-semibold text-xs hover:opacity-90"
               >
                 Save
               </button>
@@ -100,8 +109,8 @@ export const BookmarksDrawer: React.FC = () => {
               className="p-2.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)]/70 hover:border-[var(--accent-color)]/60 text-xs transition-colors group space-y-1.5"
             >
               <div className="flex items-baseline justify-between">
-                <span className="font-bold text-[var(--text-primary)] truncate max-w-[170px]" title={bm.selectedText}>
-                  {bm.selectedText || `Chapter ${bm.chapterIndex + 1}`}
+                <span className="bookmark-label font-bold text-[var(--text-primary)] truncate max-w-[200px]" title={bm.selectedText || bm.label}>
+                  {bm.label || bm.selectedText || `Ch${bm.chapterIndex + 1}`}
                 </span>
                 <span className="text-[10px] text-[var(--text-muted)] font-mono">
                   {new Date(bm.createdAtUtc).toLocaleDateString()}
@@ -120,7 +129,7 @@ export const BookmarksDrawer: React.FC = () => {
                     loadChapter(bm.spineHref, bm.chapterIndex);
                     toggleBookmarks();
                   }}
-                  className="flex items-center space-x-1 text-[11px] text-[var(--accent-color)] hover:underline font-medium"
+                  className="flex items-center space-x-1 text-[11px] text-[var(--accent-text)] hover:underline font-medium"
                 >
                   <span>Jump to chapter</span>
                   <ArrowUpRight className="w-3 h-3" />

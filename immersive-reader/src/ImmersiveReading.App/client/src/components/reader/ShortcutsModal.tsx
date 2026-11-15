@@ -18,7 +18,7 @@ export const ShortcutsModal: React.FC = () => {
       >
         <div className="shortcuts-dialog-header">
           <div className="flex items-center space-x-2">
-            <Keyboard className="w-5 h-5 text-[var(--accent-color)]" />
+            <Keyboard className="w-5 h-5 text-[var(--accent-text)]" />
             <h2 className="text-base font-bold text-[var(--text-primary)]">
               Keyboard Shortcuts & Vim Motions
             </h2>

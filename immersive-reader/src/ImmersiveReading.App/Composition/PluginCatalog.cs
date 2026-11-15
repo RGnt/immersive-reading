@@ -1,6 +1,9 @@
 using ImmersiveReading.Core.Extensions;
 using ImmersiveReading.Plugins.AiCompanion;
+using ImmersiveReading.Plugins.CharacterKnowledge;
+using ImmersiveReading.Plugins.DeckBuilder;
 using ImmersiveReading.Plugins.Japanese;
+using ImmersiveReading.Plugins.JitenMoe;
 using ImmersiveReading.Plugins.PosHighlighter;
 
 namespace ImmersiveReading.App.Composition;
@@ -15,7 +18,10 @@ public static class PluginCatalog
     [
         new JapaneseModule(),
         new AiCompanionModule(),
-        new PosHighlighterModule()
+        new PosHighlighterModule(),
+        new JitenMoeModule(),
+        new DeckBuilderModule(),
+        new CharacterKnowledgeModule()
     ];
 }
 

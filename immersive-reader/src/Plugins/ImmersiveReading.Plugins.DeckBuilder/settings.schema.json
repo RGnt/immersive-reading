@@ -1,0 +1,117 @@
+{
+  "type": "object",
+  "title": "Deck Builder",
+  "properties": {
+    "order": {
+      "type": "string",
+      "title": "Default word order",
+      "description": "chronological = first appearance in the book, deckFrequency = most frequent in this book first, globalFrequency = most common Japanese words first (needs a frequency dictionary).",
+      "enum": [
+        "chronological",
+        "deckFrequency",
+        "globalFrequency"
+      ],
+      "enumLabels": [
+        "Chronological",
+        "Deck frequency",
+        "Global frequency"
+      ],
+      "default": "chronological"
+    },
+    "excludeKana": {
+      "type": "boolean",
+      "title": "Exclude kana-only words",
+      "description": "Leave out words written only in kana (particles, auxiliaries, kana-only vocabulary).",
+      "default": false
+    },
+    "excludeExampleSentences": {
+      "type": "boolean",
+      "title": "Exclude example sentences",
+      "default": false
+    },
+    "contentWordsOnly": {
+      "type": "boolean",
+      "title": "Content words only",
+      "description": "Skip particles, auxiliary verbs and other function words.",
+      "default": false
+    },
+    "excludeFunctionWords": {
+      "type": "boolean",
+      "title": "Leave particles and auxiliaries out of the deck",
+      "description": "By default they are kept but marked (Kind column) so study printouts list them in their own section.",
+      "default": false
+    },
+    "llmEndpointUrl": {
+      "type": "string",
+      "title": "LLM endpoint (OpenAI-compatible)",
+      "description": "The model that writes the chapter grammar and particle notes, for example your FreeToken host: http://127.0.0.1:1919/v1 (base URL) or a full .../chat/completions URL. Leave empty to use Settings → AI.",
+      "default": "",
+      "x-rpc-action": { "label": "Test connection", "actionName": "testEndpoint" }
+    },
+    "llmModelId": {
+      "type": "string",
+      "title": "LLM: model id",
+      "description": "Only used with the endpoint above. Leave empty to use the model the server has loaded.",
+      "default": ""
+    },
+    "llmApiKey": {
+      "type": "string",
+      "format": "password",
+      "title": "LLM: API key (optional)",
+      "description": "Only used with the endpoint above. Stored in your settings file; sent as a Bearer token to that endpoint only.",
+      "default": ""
+    },
+    "llmThinking": {
+      "type": "string",
+      "title": "LLM: reasoning (thinking) mode",
+      "description": "off sends enable_thinking=false, which reasoning models such as Qwen3 need (otherwise they spend the answer budget thinking). Choose server default for services that reject unknown fields. Only used with the endpoint above.",
+      "enum": ["off", "default"],
+      "enumLabels": ["Off (recommended for local Qwen)", "Server default"],
+      "default": "off"
+    },
+    "llmContextTokens": {
+      "type": "integer",
+      "title": "LLM: context tokens the server really accepts",
+      "description": "Prompt plus answer per request. Servers often advertise far more than they enforce (a model advertising 262,144 tokens was measured to accept 8,241). When set, requests are sized to fit (smaller chunks, shorter answers). 0 = unknown: use the characters-per-request setting below as it is.",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 2000000
+    },
+    "llmMaxChunkChars": {
+      "type": "integer",
+      "title": "LLM: characters per request",
+      "description": "Chapter text is sent in chunks of at most this many characters. 60000 is safe for 128k+ token models; raise it for a 256k model to use fewer requests.",
+      "default": 60000,
+      "minimum": 4000,
+      "maximum": 400000
+    },
+    "llmRequestTimeoutSeconds": {
+      "type": "integer",
+      "title": "LLM: timeout per request (seconds)",
+      "default": 300,
+      "minimum": 10,
+      "maximum": 3600
+    },
+    "llmMaxOutputTokens": {
+      "type": "integer",
+      "title": "LLM: max answer tokens",
+      "default": 8000,
+      "minimum": 1000,
+      "maximum": 64000
+    },
+    "llmMaxPointsPerChunk": {
+      "type": "integer",
+      "title": "LLM: max grammar points per request",
+      "default": 25,
+      "minimum": 3,
+      "maximum": 100
+    },
+    "llmTemperature": {
+      "type": "number",
+      "title": "LLM: temperature",
+      "default": 0.2,
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

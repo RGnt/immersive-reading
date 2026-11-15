@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useLibraryStore } from '../../stores/useLibraryStore';
-import { FolderInput, Tag, Trash2, X, CheckSquare, ChevronDown } from 'lucide-react';
+import { FolderInput, Tag, Trash2, X, CheckSquare, ChevronDown, PencilLine, Star } from 'lucide-react';
+import type { ReadingStatus } from '../../types/api';
+import { STATUS_LABELS } from './ReadingFlags';
 
 export const BulkActionBar: React.FC = () => {
   const {
@@ -11,6 +13,11 @@ export const BulkActionBar: React.FC = () => {
     bulkMoveBooks,
     bulkAddTags,
     bulkDeleteSelected,
+    totalBooks,
+    selectAllMatching,
+    openBulkEdit,
+    setBookFlags,
+    books,
   } = useLibraryStore();
 
   const [showFolderDropdown, setShowFolderDropdown] = useState(false);
@@ -20,6 +27,33 @@ export const BulkActionBar: React.FC = () => {
   if (selectedBookIds.length === 0) return null;
 
   const count = selectedBookIds.length;
+
+  // the list shows one page; "select all" reaches every book the current filters match
+  const handleSelectAll = async () => {
+    setIsProcessing(true);
+    try {
+      await selectAllMatching();
+    } catch (err: any) {
+      alert(`Select all failed: ${err.message || String(err)}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  // favourite all selected books, or take them all off when they already are (judged on the books loaded on this page)
+  const selectedOnPage = books.filter((b) => selectedBookIds.includes(b.bookId));
+  const allFavorite = selectedOnPage.length > 0 && selectedOnPage.every((b) => b.isFavorite);
+
+  const handleFlags = async (flags: { favorite?: boolean; readingStatus?: ReadingStatus }) => {
+    setIsProcessing(true);
+    try {
+      await setBookFlags(selectedBookIds, flags);
+    } catch (err: any) {
+      alert(`Could not update the lists: ${err.message || String(err)}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleMove = async (folderId: string | null) => {
     setIsProcessing(true);
@@ -61,9 +95,20 @@ export const BulkActionBar: React.FC = () => {
 
   return (
     <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[var(--bg-surface)] border border-[var(--accent-color)]/60 rounded-full shadow-2xl px-5 py-2.5 flex items-center space-x-4 text-xs animate-in slide-in-from-bottom duration-200 backdrop-blur-md">
-      <div className="flex items-center space-x-2 font-bold text-[var(--accent-color)] border-r border-[var(--border-color)] pr-3">
+      <div className="flex items-center space-x-2 font-bold text-[var(--accent-text)] border-r border-[var(--border-color)] pr-3">
         <CheckSquare className="w-4 h-4" />
         <span>{count} selected</span>
+        {totalBooks > count && (
+          <button
+            type="button"
+            disabled={isProcessing}
+            onClick={handleSelectAll}
+            className="font-medium text-[var(--text-muted)] underline decoration-dotted hover:text-[var(--accent-text)] disabled:opacity-50"
+            title="Select every book the current filters match, on all pages"
+          >
+            select all {totalBooks}
+          </button>
+        )}
       </div>
 
       <div className="flex items-center space-x-2">
@@ -141,6 +186,43 @@ export const BulkActionBar: React.FC = () => {
             )}
           </div>
         )}
+
+        {/* EDIT METADATA (series, volume numbers, author, publisher, tags ...) */}
+        <button
+          type="button"
+          data-testid="bulk-favorite"
+          onClick={() => void handleFlags({ favorite: !allFavorite })}
+          disabled={isProcessing}
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-[var(--bg-primary)] border border-[var(--border-color)] hover:border-[var(--accent-color)] text-[var(--text-primary)] font-medium transition-colors disabled:opacity-50"
+          title={allFavorite ? 'Remove all selected books from favourites' : 'Add all selected books to favourites'}
+        >
+          <Star className="w-3.5 h-3.5 text-[var(--accent-text)]" fill={allFavorite ? 'currentColor' : 'none'} />
+          <span>{allFavorite ? 'Unfavourite' : 'Favourite'}</span>
+        </button>
+
+        <select
+          data-testid="bulk-reading-list"
+          value=""
+          disabled={isProcessing}
+          onChange={(e) => { if (e.target.value !== '') void handleFlags({ readingStatus: (e.target.value === 'none' ? '' : e.target.value) as ReadingStatus }); }}
+          className="px-3 py-1.5 rounded-full bg-[var(--bg-primary)] border border-[var(--border-color)] text-[var(--text-primary)] font-medium disabled:opacity-50"
+          title="Put all selected books on a reading list"
+        >
+          <option value="">Reading list…</option>
+          {(Object.keys(STATUS_LABELS) as Exclude<ReadingStatus, ''>[]).map((st) => <option key={st} value={st}>{STATUS_LABELS[st]}</option>)}
+          <option value="none">Remove from lists</option>
+        </select>
+
+        <button
+          type="button"
+          disabled={isProcessing}
+          onClick={openBulkEdit}
+          className="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-[var(--bg-primary)] border border-[var(--border-color)] hover:border-[var(--accent-color)] text-[var(--text-primary)] font-medium transition-colors disabled:opacity-50"
+          title="Change the series, volume numbers, author, publisher or tags of all selected books at once"
+        >
+          <PencilLine className="w-3.5 h-3.5 text-sky-400" />
+          <span>Edit...</span>
+        </button>
 
         {/* DELETE BUTTON */}
         <button

@@ -14,7 +14,8 @@ def validate_study(book):
     require(isinstance(sets, list), "Missing learning sets")
     words = [w for group in sets for w in group["words"]]
     spellings = [w["word"] for w in words]
-    expected = {v["word"] for v in book["vocabulary"] if v["occurrences"]}
+    # Particles and auxiliaries (deck Kind) are printed in their own section, not in the vocabulary sets.
+    expected = {v["word"] for v in book["vocabulary"] if v["occurrences"] and v.get("kind", "vocabulary") == "vocabulary"}
     require(len(spellings) == len(set(spellings)), "Repeated vocabulary across learning sets")
     require(set(spellings) == expected, "Learning-set words disagree with matched vocabulary")
     require(all(g["size"] == len(g["words"]) == 20 for g in sets[:-1]), "Incomplete intermediate learning set")
@@ -36,6 +37,8 @@ def verify_html(book, output, *, cancel=None):
         owner = {}
         order = {c["id"]: i for i, c in enumerate(book["chapters"])}
         for item in book[kind]:
+            if kind == "vocabulary" and item.get("kind", "vocabulary") != "vocabulary":
+                continue
             for occurrence in item["occurrences"]:
                 value, cid = item[field], occurrence["chapter_id"]
                 if value not in owner or order[cid] < order[owner[value]]:

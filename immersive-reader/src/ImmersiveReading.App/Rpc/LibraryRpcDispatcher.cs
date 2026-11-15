@@ -100,7 +100,6 @@ public sealed class LibraryRpcDispatcher : IDisposable
         var events = new DelegateRpcEventSink(sendMessageToUi);
         yield return new Modules.BootstrapRpcModule(library, configManager, workspaceBooksDir, dictDb);
         yield return new Modules.LibraryRpcModule(library, events);
-        yield return new Modules.JitenRpcModule(library);
         yield return new Modules.ReaderRpcModule(library, bookSchemeHandler, lookupEngine, vocabTracker, db, events, dictDb: dictDb);
         yield return new Modules.DictionaryRpcModule(dictDb);
         yield return new Modules.StudyPackRpcModule(library, studyPackBridge, flashcardService, events, configManager);

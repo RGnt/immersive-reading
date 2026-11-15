@@ -392,8 +392,8 @@ export const useReaderStore = create<ReaderState>((set, get) => ({
   addBookmark: async (note = '', selectedText) => {
     const { bookDetail, currentChapterIndex, currentSpineHref, chapters } = get();
     if (!bookDetail) return;
-    const ch = chapters[currentChapterIndex] || { title: `Chapter ${currentChapterIndex + 1}` };
-    const text = selectedText || ch.title || `Chapter ${currentChapterIndex + 1}`;
+    void chapters;
+    const text = (selectedText || '').trim();      // only text the reader really selected: without it the bookmark is labelled Vol<X>Ch<Y>
     try {
       const bm = await rpc.call<BookmarkItem>('reader.addBookmark', {
         bookId: bookDetail.summary.bookId,

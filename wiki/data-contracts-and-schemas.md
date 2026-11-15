@@ -146,3 +146,8 @@ Validated against [`immersive/config.schema.json`](../enrichement-extractor/imme
   - Top-level: `{"schema_version": "1.0", "books": [{"id", "title", "chapters": [{"id", "number", "title", "cards": [...]}], "dictionary_sources", "attribution"}]}`.
   - Each card has: `id`, `kind` (`"vocabulary"|"kanji"|"grammar"`), `prompt`, `meaning`, `reading`, `example` (plain Japanese text), `example_ruby`, `notes`, `dictionary_entries`, `dictionary_metadata`, `definition_candidates`, `sense_selection`, `set_number` (`1..N` for vocabulary, `0` for kanji/grammar).
 
+
+
+## Deck extension: function words and LLM grammar (spec 16)
+- `deck.csv` may carry `Kind` (`vocabulary` | `particle` | `auxiliary`), `PartOfSpeech`, `UsageNote`. Reader JSON vocabulary entries get optional `kind`, `part_of_speech`, `usage_note`. Entries whose `kind` is not `vocabulary` are **function words**: excluded from `learning_sets`, `vocabulary-sets.json` and vocabulary pages/PDFs; listed in `function-words.html` and `function-words-master.pdf`; exported as flashcards of kind `function`.
+- `deck-grammar.json` (`immersive-deck-grammar/1`) adds `grammar` entries with `status: "deck_llm_candidate"`, `source`, `model`, `category` and verified occurrences; provenance and dropped points are in `book["deck_grammar"]`. See [specs/16-deck-llm-enrichment-spec.md](../specs/16-deck-llm-enrichment-spec.md) §3.

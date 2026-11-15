@@ -27,6 +27,40 @@ public sealed class BookQueryService : IBookCatalog
         _customFieldService = customFieldService;
     }
 
+    /// <summary>Ids of every book the query matches (paging ignored, capped at <paramref name="max"/>): "select all N books of this filter".</summary>
+    public IReadOnlyList<string> ListBookIds(BookListQuery query, int max = 100_000)
+    {
+        using var conn = _db.OpenConnection();
+        var rawFolders = FolderService.LoadAllFoldersRaw(conn);
+        var (whereSql, orderBySql, parameters) = BookListSqlBuilder.Build(query, rawFolders);
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            SELECT b.book_id FROM books b
+            LEFT JOIN reading_progress rp ON rp.book_id = b.book_id
+            {whereSql}
+            {orderBySql}
+            LIMIT $max;
+            """;
+        foreach (var p in parameters) cmd.Parameters.Add(new SqliteParameter(p.ParameterName, p.Value));
+        cmd.Parameters.AddWithValue("$max", Math.Clamp(max, 1, 1_000_000));
+        var ids = new List<string>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) ids.Add(r.GetString(0));
+        return ids;
+    }
+
+    /// <summary>Every series name in the library with its book count (suggestions for the bulk edit).</summary>
+    public IReadOnlyList<SeriesNameCount> ListSeriesNames()
+    {
+        using var conn = _db.OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT series_name, COUNT(*) FROM books WHERE series_name IS NOT NULL AND series_name <> '' GROUP BY series_name ORDER BY series_name COLLATE NOCASE;";
+        var list = new List<SeriesNameCount>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read()) list.Add(new SeriesNameCount(r.GetString(0), r.GetInt32(1)));
+        return list;
+    }
+
     public PagedBookListResult ListBooks(BookListQuery query)
     {
         var sw = Stopwatch.StartNew();
@@ -110,6 +144,7 @@ public sealed class BookQueryService : IBookCatalog
         }
 
         sw.Stop();
+        items = BookFlagsService.Decorate(conn, items);
         return new PagedBookListResult(
             Items: items,
             TotalCount: totalCount,
@@ -237,7 +272,7 @@ public sealed class BookQueryService : IBookCatalog
         var tags = TagService.LoadTagsForBooks(conn, [bookId]).GetValueOrDefault(bookId) ?? [];
         var effFields = CustomFieldService.ResolveEffectiveCustomFieldsForBook(bookId, title, folderId, rawFolders, fieldDefs, allCustomValues);
 
-        return new BookSummary(
+        var summary = new BookSummary(
             BookId: r.GetString(0),
             EpubSha256: r.GetString(1),
             FolderId: folderId,
@@ -271,6 +306,8 @@ public sealed class BookQueryService : IBookCatalog
             OverallCompletion: r.GetDouble(29),
             Tags: tags,
             CustomFields: effFields.ToDictionary(f => f.FieldKey, StringComparer.OrdinalIgnoreCase));
+        r.Close();
+        return BookFlagsService.Decorate(conn, [summary])[0];
     }
 
     private static IReadOnlyList<string>? ParseMembers(string json)

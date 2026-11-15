@@ -11,11 +11,11 @@ export const Header: React.FC = () => {
   const closeReader = useReaderStore((s) => s.closeReader);
 
   return (
-    <header className="header shrink-0 flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-surface)] select-none">
+    <header data-ir="header" className="header shrink-0 flex items-center justify-between px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-surface)] select-none">
       <div className="flex items-center space-x-3">
         <button
           onClick={closeReader}
-          className="flex items-center space-x-2 font-bold text-lg text-[var(--accent-color)] hover:opacity-90"
+          className="flex items-center space-x-2 font-bold text-lg text-[var(--accent-text)] hover:opacity-90"
           title="Back to Library"
         >
           <BookOpen className="w-6 h-6" />
@@ -52,21 +52,21 @@ export const Header: React.FC = () => {
           <div className="flex items-center bg-[var(--bg-primary)] rounded border border-[var(--border-color)] p-0.5">
             <button
               onClick={() => setViewMode('grid')}
-              className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-[var(--accent-color)] text-black' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+              className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-[var(--accent-color)] text-[var(--accent-contrast)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
               title="Grid View"
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('table')}
-              className={`p-1.5 rounded ${viewMode === 'table' ? 'bg-[var(--accent-color)] text-black' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+              className={`p-1.5 rounded ${viewMode === 'table' ? 'bg-[var(--accent-color)] text-[var(--accent-contrast)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
               title="Table View"
             >
               <List className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode('series')}
-              className={`p-1.5 rounded ${viewMode === 'series' ? 'bg-[var(--accent-color)] text-black' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
+              className={`p-1.5 rounded ${viewMode === 'series' ? 'bg-[var(--accent-color)] text-[var(--accent-contrast)]' : 'text-[var(--text-muted)] hover:text-[var(--text-primary)]'}`}
               title="Series View"
             >
               <Library className="w-4 h-4" />

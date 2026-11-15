@@ -1,8 +1,9 @@
 import { create } from 'zustand';
+import { ensureContrast, isLightColor, mixRgb, parseHex, readableOn, paletteOverrides, statusColors, toHex } from '../styles/themeColors';
 import { rpc } from '../services/rpc';
 import type { AppConfig, LibrarySettings } from '../types/api';
 
-export type SettingsTab = 'general' | 'library' | 'appearance' | 'reader' | 'llm' | 'dictionaries';
+export type SettingsTab = 'general' | 'library' | 'appearance' | 'reader' | 'llm' | 'dictionaries' | 'prompts' | 'customCss' | 'memory';
 
 interface ConfigState {
   config: AppConfig | null;
@@ -122,4 +123,38 @@ export function applyThemeStyles(config: AppConfig) {
   if (a.accentColor) root.style.setProperty('--accent-color', a.accentColor);
   if (a.rubyColor) root.style.setProperty('--ruby-color', a.rubyColor);
   if (a.uiFontFamily) root.style.setProperty('--ui-font-family', a.uiFontFamily);
+  applyDerivedThemeColors(config);
+}
+
+/**
+ * Colours that depend on the theme's own colours, so text stays readable in any theme (light ones, and custom ones, included):
+ * muted and accent-coloured text are pulled towards the main text colour until they reach 4.5:1, the text of an accent button is
+ * black or white by the accent's brightness, and the pale Tailwind status shades become darker ones on a light theme.
+ */
+export function applyDerivedThemeColors(config: AppConfig) {
+  const root = document.documentElement;
+  const cs = getComputedStyle(root);
+  const a = config.appearance;
+  const read = (value: string | undefined, variable: string) => (value && parseHex(value) ? value : cs.getPropertyValue(variable).trim());
+  const bgPrimary = read(a?.bgPrimary, '--bg-primary');
+  const bgSurface = read(a?.bgSurface, '--bg-surface');
+  const textPrimary = read(a?.textPrimary, '--text-primary');
+  const textMuted = read(a?.textMuted, '--text-muted');
+  const accent = read(a?.accentColor, '--accent-color');
+  if (![bgPrimary, bgSurface, textPrimary].every((c) => parseHex(c))) return;
+
+  const light = isLightColor(bgPrimary);
+  root.dataset.themeMode = light ? 'light' : 'dark';
+  // also on the darker panels (bg-black/5 ...) that sit on the surface
+  const panel = toHex(mixRgb(parseHex(bgSurface)!, [0, 0, 0], 0.08));
+  root.style.setProperty('--text-muted', ensureContrast(textMuted, [bgPrimary, bgSurface, panel], textPrimary, 4.5));
+  // accent-coloured text also sits on tinted bars (bg-black/10) and selected rows (a 15 to 20% wash of the accent itself)
+  const tint = parseHex(accent) ? toHex(mixRgb(parseHex(bgSurface)!, parseHex(accent)!, 0.2)) : bgSurface;
+  const darkerBar = toHex(mixRgb(parseHex(bgSurface)!, [0, 0, 0], 0.12));
+  root.style.setProperty('--accent-text', ensureContrast(accent, [bgPrimary, bgSurface, panel, tint, darkerBar], textPrimary, 4.5));
+  root.style.setProperty('--accent-contrast', readableOn(accent));
+  for (const [name, value] of Object.entries(statusColors(light))) root.style.setProperty(name, value);
+  for (const [name, value] of paletteOverrides(light)) {
+    if (value) root.style.setProperty(name, value); else root.style.removeProperty(name);
+  }
 }

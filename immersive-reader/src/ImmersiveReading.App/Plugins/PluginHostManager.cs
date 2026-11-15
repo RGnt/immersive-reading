@@ -11,15 +11,20 @@ using System.Threading.Tasks;
 using ImmersiveReading.App.Rpc;
 using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Extensions;
+using ImmersiveReading.Core.Knowledge;
 using ImmersiveReading.Core.Plugins;
+using ImmersiveReading.Core.Prompts;
 
 public sealed class PluginHostManager : IPythonStageRegistryProvider, IAsyncDisposable
 {
     private readonly string _dataRootDir;
     private readonly IBookCatalog _bookCatalog;
+    private readonly IHostLibrary? _library;
     private readonly IReaderContextService _readerContext;
     private readonly IVocabularyBudgetService _vocabBudget;
     private readonly ISnippetEnricher _snippetEnricher;
+    private readonly IKnowledgeHub _knowledge;
+    private readonly IPromptCatalog _prompts;
     private readonly LanguagePluginRegistry _languageRegistry;
     private readonly IRpcEventSink _rpcEvents;
     private readonly PluginEventBusHub _eventBusHub;
@@ -38,8 +43,13 @@ public sealed class PluginHostManager : IPythonStageRegistryProvider, IAsyncDisp
         IVocabularyBudgetService vocabBudget,
         ISnippetEnricher snippetEnricher,
         LanguagePluginRegistry languageRegistry,
-        IRpcEventSink rpcEvents)
+        IRpcEventSink rpcEvents,
+        IHostLibrary? library = null,
+        IKnowledgeHub? knowledge = null,
+        IPromptCatalog? prompts = null)
     {
+        _library = library;
+        _knowledge = knowledge ?? new ImmersiveReading.Knowledge.KnowledgeHub();   // a host without the app's hub still lets plugins register sources
         _dataRootDir = dataRootDir;
         _bookCatalog = bookCatalog;
         _readerContext = readerContext;
@@ -48,6 +58,7 @@ public sealed class PluginHostManager : IPythonStageRegistryProvider, IAsyncDisp
         _languageRegistry = languageRegistry;
         _rpcEvents = rpcEvents;
         _eventBusHub = new PluginEventBusHub(rpcEvents);
+        _prompts = prompts ?? new PromptCatalog(Path.Combine(dataRootDir, "prompts"));
         _enabledStateFilePath = Path.Combine(_dataRootDir, "config", "plugins-state.json");
     }
 
@@ -367,9 +378,13 @@ public sealed class PluginHostManager : IPythonStageRegistryProvider, IAsyncDisp
         public IPluginEventBus EventBus { get; }
 
         public IBookCatalog BookCatalog => _host._bookCatalog;
+        public IHostLibrary Library => _host._library
+            ?? throw new InvalidOperationException("This plugin host was created without library access.");
         public IReaderContextService ReaderContext => _host._readerContext;
         public IVocabularyBudgetService VocabularyBudget => _host._vocabBudget;
         public ISnippetEnricher SnippetEnricher => _host._snippetEnricher;
+        public IKnowledgeHub Knowledge => _host._knowledge;
+        public IPromptCatalog Prompts => _host._prompts;
 
         public IDisposable RegisterRpcAction(string actionName, PluginRpcHandler handler)
         {
@@ -396,6 +411,12 @@ public sealed class PluginHostManager : IPythonStageRegistryProvider, IAsyncDisp
                 lock (_host._domStages) { _host._domStages.Remove(stage); }
             });
         }
+
+        public IDisposable RegisterPrompts(IEnumerable<string> templateTexts)
+            => TrackDisposable(_host._prompts.RegisterBuiltIns(Manifest.Id, templateTexts).Dispose);
+
+        public IDisposable RegisterKnowledgeSource(IKnowledgeSource source)
+            => TrackDisposable(Knowledge.RegisterSource(source).Dispose);
 
         public IDisposable RegisterPythonStage(PythonStageDescriptor stage)
         {

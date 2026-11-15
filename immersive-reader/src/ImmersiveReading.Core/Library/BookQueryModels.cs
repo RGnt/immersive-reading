@@ -19,8 +19,15 @@ public sealed record BookListQuery(
     IReadOnlyList<CustomFieldFilter>? CustomFieldFilters = null,
     string Sort = "series_or_title", // "series_or_title" | "custom" | "title" | "author" | "added" | "last_read" | "isbn"
     int Offset = 0,
-    int Limit = 100
+    int Limit = 100,
+    /// <summary>True: only favourites (the book's or its series'). Null: no filter.</summary>
+    bool? Favorite = null,
+    /// <summary>reading | planned | completed (the book's own status, else its series'), or "any" for every book on a list. Null: no filter.</summary>
+    string? ReadingStatus = null
 );
+
+/// <summary>How many books are on each list (the sidebar shows these).</summary>
+public sealed record ReadingListCounts(int Favorites, int Reading, int Planned, int Completed);
 
 public sealed record PagedBookListResult(
     IReadOnlyList<BookSummary> Items,

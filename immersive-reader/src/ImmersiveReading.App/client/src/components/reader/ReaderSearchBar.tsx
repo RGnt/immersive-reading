@@ -64,7 +64,7 @@ export const ReaderSearchBar: React.FC = () => {
 
   return (
     <div className="absolute top-3 right-6 z-40 bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-lg shadow-2xl p-1.5 flex items-center space-x-2 text-xs animate-in slide-in-from-top-2 duration-150 backdrop-blur-md">
-      <Search className="w-3.5 h-3.5 text-[var(--accent-color)] ml-1 shrink-0" />
+      <Search className="w-3.5 h-3.5 text-[var(--accent-text)] ml-1 shrink-0" />
 
       <input
         ref={inputRef}

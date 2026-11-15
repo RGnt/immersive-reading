@@ -262,6 +262,19 @@
           },
           "sense_selection": {
             "$ref": "#/$defs/sense_selection"
+          },
+          "kind": {
+            "enum": [
+              "vocabulary",
+              "particle",
+              "auxiliary"
+            ]
+          },
+          "part_of_speech": {
+            "type": "string"
+          },
+          "usage_note": {
+            "type": "string"
           }
         }
       }
@@ -362,7 +375,10 @@
         ],
         "properties": {
           "status": {
-            "const": "rule_based_candidate"
+            "enum": [
+              "rule_based_candidate",
+              "deck_llm_candidate"
+            ]
           },
           "occurrences": {
             "type": "array",
@@ -381,6 +397,15 @@
             "type": "string"
           },
           "note": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "model": {
             "type": "string"
           }
         }

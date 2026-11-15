@@ -60,6 +60,8 @@ public sealed class LibraryDatabase : IDbConnectionFactory, IDisposable
         // added here, idempotently. (LibraryMigrations.All is not applied anywhere; do not rely on it.)
         EnsureColumn(conn, "books", "chapter_model_version", "INTEGER NOT NULL DEFAULT 1");
         EnsureColumn(conn, "book_chapters", "member_spine_hrefs", "TEXT NOT NULL DEFAULT '[]'");
+        EnsureColumn(conn, "books", "is_favorite", "INTEGER NOT NULL DEFAULT 0");
+        EnsureColumn(conn, "books", "reading_status", "TEXT NOT NULL DEFAULT ''");
 
         SeedDefaultCustomFields(conn);
     }
@@ -297,6 +299,24 @@ public sealed class LibraryDatabase : IDbConnectionFactory, IDisposable
         );
         CREATE INDEX IF NOT EXISTS idx_vocab_state_lemma ON vocabulary_state(language, lemma);
 
+        -- how the learner uses words in their own writing (quiz answers): evidence for nudging the vocabulary state
+        CREATE TABLE IF NOT EXISTS vocabulary_practice (
+            language        TEXT NOT NULL,
+            lemma           TEXT NOT NULL,
+            correct_uses    INTEGER NOT NULL DEFAULT 0,   -- the current run of correct uses
+            misuses         INTEGER NOT NULL DEFAULT 0,
+            updated_at_utc  TEXT NOT NULL,
+            PRIMARY KEY (language, lemma)
+        );
+
+        -- reading list flags of a whole series ('' = none, else reading | planned | completed); a book's own flags are columns of books
+        CREATE TABLE IF NOT EXISTS series_flags (
+            series_name     TEXT PRIMARY KEY,
+            is_favorite     INTEGER NOT NULL DEFAULT 0,
+            reading_status  TEXT NOT NULL DEFAULT '',
+            updated_at_utc  TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS comprehension_sessions (
             session_id          TEXT PRIMARY KEY,
             book_id             TEXT NOT NULL,
@@ -365,6 +385,27 @@ public sealed class LibraryDatabase : IDbConnectionFactory, IDisposable
             updated_at_utc      TEXT NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_app_settings_category ON app_settings(category);
+
+        -- Library management (spec 21): duplicates the user removed (a re-scan must not import them again) and pairs the user
+        -- declared "not duplicates". The EPUB files themselves are never touched.
+        CREATE TABLE IF NOT EXISTS removed_books (
+            book_id             TEXT PRIMARY KEY,
+            epub_sha256         TEXT NOT NULL,
+            title               TEXT NOT NULL,
+            authors             TEXT NOT NULL DEFAULT '',
+            epub_file_name      TEXT NOT NULL,
+            original_folder_path TEXT NOT NULL,
+            kept_book_id        TEXT NOT NULL,
+            removed_at_utc      TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS duplicate_dismissals (
+            book_a              TEXT NOT NULL REFERENCES books(book_id) ON DELETE CASCADE,
+            book_b              TEXT NOT NULL REFERENCES books(book_id) ON DELETE CASCADE,
+            dismissed_at_utc    TEXT NOT NULL,
+            PRIMARY KEY (book_a, book_b)
+        );
+        CREATE INDEX IF NOT EXISTS idx_dismissals_b ON duplicate_dismissals(book_b);
         """;
 }
 

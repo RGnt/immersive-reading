@@ -2,7 +2,9 @@ using System.Text.Json;
 using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Database;
 using ImmersiveReading.Core.Extensions;
+using ImmersiveReading.Core.Llm;
 using ImmersiveReading.Core.Plugins;
+using ImmersiveReading.Plugins.AiCompanion.Prompts;
 using ImmersiveReading.Plugins.AiCompanion.Providers;
 using ImmersiveReading.Plugins.AiCompanion.Schema;
 using Microsoft.Data.Sqlite;
@@ -43,7 +45,7 @@ public sealed class AiCompanionPlugin : IFeaturePlugin, IImmersivePlugin
     {
         _db = db;
         LlmProvider = llmProvider ?? new OpenAiCompatibleLlmProvider();
-        QuizService = new ComprehensionQuizService(db, readerContext, snippetEnricher, LlmProvider);
+        QuizService = new ComprehensionQuizService(db, readerContext, snippetEnricher, LlmProvider, vocabBudget);
         PersonaChatService = new PersonaChatService(db, readerContext, vocabBudget, snippetEnricher, languages, LlmProvider);
     }
 
@@ -57,10 +59,39 @@ public sealed class AiCompanionPlugin : IFeaturePlugin, IImmersivePlugin
         RegisterSharedRpcActions(
             (action, handler) => context.RegisterRpcAction(action, handler),
             context.Database);
+
+        // Characters remember what the user told them (spec 24): the prompts are editable in Settings -> Prompts, the facts live in the host's user memory.
+        _memorySettings = context.Config.Get<MemorySettings>();
+        QuizService.NudgeVocabulary = _memorySettings.QuizNudgesVocabulary;
+        _memorySub = context.Config.OnConfigChanged<MemorySettings>(s => { _memorySettings = s; QuizService.NudgeVocabulary = s.QuizNudgesVocabulary; });
+        // every prompt of this plugin is a template the user can edit (Settings -> Prompts); the services render through the host's catalog
+        context.RegisterPrompts(ChatPrompts.All);
+        PersonaChatService.Prompts = context.Prompts;
+        QuizService.Prompts = context.Prompts;
+        PersonaChatService.Memory = new PersonaMemory(context.Knowledge, context.Prompts, LlmProvider, () => _memorySettings);
+
+        // The model address typed in Settings -> AI lives in this plugin's own settings; the provider used to read only the app-wide ones,
+        // so a server typed there (llama-server on :8091) was never called and the offline fallback answered every message.
+        ApplyEndpoint(context.Config.Get<CompanionEndpointSettings>());
+        _endpointSub = context.Config.OnConfigChanged<CompanionEndpointSettings>(ApplyEndpoint);
     }
+
+    private void ApplyEndpoint(CompanionEndpointSettings s)
+        => (LlmProvider as OpenAiCompatibleLlmProvider)?.UseEndpointOverride(s.EndpointUrl, s.ApiKey, s.ModelId);
+
+    private MemorySettings _memorySettings = new();
+    private IDisposable? _memorySub;
+    private IDisposable? _endpointSub;
 
     public ValueTask OnDisableAsync(CancellationToken ct = default)
     {
+        PersonaChatService.Memory = null;
+        PersonaChatService.Prompts = ChatPrompts.BuiltInsOnly;
+        QuizService.Prompts = ChatPrompts.BuiltInsOnly;
+        _memorySub?.Dispose();
+        _memorySub = null;
+        _endpointSub?.Dispose();
+        _endpointSub = null;
         return ValueTask.CompletedTask;
     }
 
@@ -294,7 +325,7 @@ public sealed class AiCompanionPlugin : IFeaturePlugin, IImmersivePlugin
             startTokenId = question.StartTokenId,
             endTokenId = question.EndTokenId,
             sourceParagraphId = question.SourceParagraphId,
-            evidenceQuote = question.EvidenceQuote,
+            sourceChapterTitle = question.ChapterTitle,   // the evidence sentence is not sent: it would give the answer away
             questions = new[]
             {
                 new
@@ -303,8 +334,7 @@ public sealed class AiCompanionPlugin : IFeaturePlugin, IImmersivePlugin
                     promptEnrichedHtml = question.PromptHtml,
                     options = question.Options.Select(o => o.EnrichedHtml).ToArray()
                 }
-            },
-            question
+            }
         };
     }
 
@@ -321,6 +351,10 @@ public sealed class AiCompanionPlugin : IFeaturePlugin, IImmersivePlugin
             isCorrect = res.IsCorrect,
             modelAnswer = res.ModelAnswerHtml,
             critiqueExplanation = res.MissingOrMisunderstood,
+            explanation = res.MissingOrMisunderstood,
+            evidenceQuote = res.EvidenceQuote,
+            rubric = res.Rubric,
+            vocabularyNudges = res.VocabularyNudges,
             nextRecommendedStage = 2,
             result = res
         };

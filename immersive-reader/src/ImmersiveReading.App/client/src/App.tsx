@@ -5,7 +5,8 @@ import { LibraryGrid } from './components/library/LibraryGrid';
 import { ReaderView } from './components/reader/ReaderView';
 import { BookInfoModal } from './components/library/BookInfoModal';
 import { ScanFolderModal } from './components/library/ScanFolderModal';
-import { SeriesJitenModal } from './components/library/SeriesJitenModal';
+import { DuplicatesModal } from './components/library/DuplicatesModal';
+import { BulkEditModal } from './components/library/BulkEditModal';
 import { StudyPackDrawer } from './components/studypack/StudyPackDrawer';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { PluginModalHost } from './components/plugins/PluginSlots';
@@ -13,6 +14,7 @@ import { useLibraryStore } from './stores/useLibraryStore';
 import { useConfigStore } from './stores/useConfigStore';
 import { useReaderStore } from './stores/useReaderStore';
 import { usePluginStore } from './stores/usePluginStore';
+import { useAppearanceStore } from './stores/useAppearanceStore';
 import { rpc } from './services/rpc';
 import { runReactReaderSelfTest } from './services/selfTestRunner';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -28,6 +30,7 @@ export const App: React.FC = () => {
     loadBootstrap();
     loadConfig();
     initializePlugins();
+    void useAppearanceStore.getState().load();
 
     // Listen for Photino self-test event
     const unsubscribeSelfTest = rpc.on('ui.runReaderSelfTest', () => {
@@ -40,7 +43,7 @@ export const App: React.FC = () => {
   }, [loadBootstrap, loadConfig, initializePlugins]);
 
   return (
-    <div className="app-shell flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]">
+    <div data-ir="app" className="app-shell flex flex-col h-screen w-screen overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]">
       <Header />
       <div className="flex-1 flex overflow-hidden relative">
         {isReaderActive ? (
@@ -55,7 +58,8 @@ export const App: React.FC = () => {
 
       <BookInfoModal />
       <ScanFolderModal />
-      <SeriesJitenModal />
+      <DuplicatesModal />
+      <BulkEditModal />
       <StudyPackDrawer />
       <SettingsModal />
       <PluginModalHost />

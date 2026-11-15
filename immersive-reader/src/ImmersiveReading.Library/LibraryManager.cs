@@ -1,3 +1,4 @@
+using ImmersiveReading.Library.Duplicates;
 using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Library;
 using ImmersiveReading.Library.Books;
@@ -11,26 +12,41 @@ namespace ImmersiveReading.Library;
 /// Facade over the focused library services (books, folders, tags, custom fields).
 /// Keeps the original public API stable while all logic lives in single-responsibility services.
 /// </summary>
-public sealed class LibraryManager : IBookCatalog
+public sealed class LibraryManager : IBookCatalog, IHostLibrary
 {
     private readonly TagService _tags;
     private readonly CustomFieldService _customFields;
     private readonly FolderService _folders;
     private readonly BookQueryService _queries;
     private readonly BookMetadataService _metadata;
+    private readonly BookFlagsService _flags;
     private readonly BookImportService _import;
     private readonly ChapterModelUpgrader _chapterUpgrader;
+    private readonly LibraryDatabase _database;
+    private readonly DuplicateService _duplicates;
 
     public LibraryManager(LibraryDatabase db, string? enrichmentExtractorOutputDir = null, TimeProvider? timeProvider = null)
     {
+        _database = db;
+        _duplicates = new DuplicateService(db, timeProvider);
         _tags = new TagService(db, timeProvider);
         _customFields = new CustomFieldService(db, timeProvider);
         _folders = new FolderService(db, _customFields, timeProvider);
         _queries = new BookQueryService(db, _tags, _customFields);
         _metadata = new BookMetadataService(db, _queries, _tags, _customFields, timeProvider);
+        _flags = new BookFlagsService(db, timeProvider);
         _chapterUpgrader = new ChapterModelUpgrader(db);
         _import = new BookImportService(db, _folders, _tags, _customFields, _queries, enrichmentExtractorOutputDir, timeProvider);
     }
+
+    // ---- Library management: duplicates (spec 21) ----
+
+    public DuplicateSearchResult FindDuplicates(DuplicateOptions? options = null) => _duplicates.FindDuplicates(options);
+    public ResolveResult ResolveDuplicates(string keepBookId, IReadOnlyList<string> removeBookIds, bool mergeData = true) => _duplicates.Resolve(keepBookId, removeBookIds, mergeData);
+    public BatchResolveResult ResolveDuplicatesBatch(IReadOnlyList<ResolveGroupRequest> groups, bool mergeData = true) => _duplicates.ResolveMany(groups, mergeData);
+    public int DismissDuplicates(IReadOnlyList<string> bookIds) => _duplicates.DismissGroup(bookIds);
+    public IReadOnlyList<RemovedBook> ListRemovedBooks() => _duplicates.ListRemoved();
+    public bool ForgetRemovedBook(string bookId) => _duplicates.ForgetRemoved(bookId);
 
     // ---- Import & scanning ----
 
@@ -56,6 +72,15 @@ public sealed class LibraryManager : IBookCatalog
 
     // ---- Book queries ----
 
+    public int? GetReadingChapterIndex(string bookId)
+    {
+        using var conn = _database.OpenConnection();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT current_chapter_index FROM reading_progress WHERE book_id = $id;";
+        cmd.Parameters.AddWithValue("$id", bookId);
+        return cmd.ExecuteScalar() is long index ? (int)index : null;
+    }
+
     public PagedBookListResult ListBooks(BookListQuery query) => _queries.ListBooks(query);
     public BookSummary? GetBookSummary(string bookId) => _queries.GetBookSummary(bookId);
     public string? GetEpubFilePath(string bookId) => _queries.GetEpubFilePath(bookId);
@@ -70,6 +95,12 @@ public sealed class LibraryManager : IBookCatalog
 
     public BookDetail UpdateBookMetadata(BookMetadataUpdateRequest req) => _metadata.UpdateBookMetadata(req);
     public int BulkUpdateBooks(BulkBookUpdatePatch patch) => _metadata.BulkUpdateBooks(patch);
+    public BulkPreview PreviewBulkUpdate(BulkBookUpdatePatch patch, int maxRows = 300) => _metadata.PreviewBulkUpdate(patch, maxRows);
+    public IReadOnlyList<string> ListBookIds(BookListQuery query) => _queries.ListBookIds(query);
+    public IReadOnlyList<SeriesNameCount> ListSeriesNames() => _queries.ListSeriesNames();
+    public int SetBookFlags(IReadOnlyList<string> bookIds, bool? favorite, string? readingStatus) => _flags.SetBookFlags(bookIds, favorite, readingStatus);
+    public void SetSeriesFlags(string seriesName, bool? favorite, string? readingStatus) => _flags.SetSeriesFlags(seriesName, favorite, readingStatus);
+    public ReadingListCounts GetReadingListCounts() => _flags.GetCounts();
     public BookDetail ResetBookMetadataToOpf(string bookId) => _metadata.ResetBookMetadataToOpf(bookId);
     public void DeleteBook(string bookId) => _metadata.DeleteBook(bookId);
     public int BulkDeleteBooks(IReadOnlyList<string> bookIds) => _metadata.BulkDeleteBooks(bookIds);

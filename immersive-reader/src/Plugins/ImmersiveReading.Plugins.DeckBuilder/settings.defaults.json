@@ -1,0 +1,17 @@
+{
+  "order": "chronological",
+  "excludeKana": false,
+  "excludeExampleSentences": false,
+  "contentWordsOnly": false,
+  "excludeFunctionWords": false,
+  "llmEndpointUrl": "",
+  "llmModelId": "",
+  "llmApiKey": "",
+  "llmThinking": "off",
+  "llmContextTokens": 0,
+  "llmMaxChunkChars": 60000,
+  "llmRequestTimeoutSeconds": 300,
+  "llmMaxOutputTokens": 8000,
+  "llmMaxPointsPerChunk": 25,
+  "llmTemperature": 0.2
+}

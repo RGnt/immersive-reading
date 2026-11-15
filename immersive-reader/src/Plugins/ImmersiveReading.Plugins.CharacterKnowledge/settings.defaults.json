@@ -1,0 +1,14 @@
+{
+  "endpointUrl": "http://127.0.0.1:1919/v1",
+  "modelId": "",
+  "apiKey": "",
+  "thinking": "off",
+  "contextTokens": 0,
+  "outputLanguage": "Japanese",
+  "maxInputChars": 90000,
+  "requestTimeoutSeconds": 900,
+  "minProminence": 1,
+  "extractStory": true,
+  "builderDirectory": "",
+  "pythonPath": ""
+}

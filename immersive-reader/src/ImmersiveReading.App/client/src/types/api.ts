@@ -93,6 +93,10 @@ export interface CustomFieldDefinition {
   optionsJson?: string;
 }
 
+export type ReadingStatus = '' | 'reading' | 'planned' | 'completed';
+export type ListFilter = 'favorites' | 'reading' | 'planned' | 'completed';
+export interface ReadingListCounts { favorites: number; reading: number; planned: number; completed: number }
+
 export interface BookRecord {
   bookId: string;
   epubSha256: string;
@@ -123,6 +127,11 @@ export interface BookRecord {
   addedAtUtc: string;
   updatedAtUtc: string;
   hasStudyPack: boolean;
+  /** Favourites and the reading list: the book's own flags and its series' flags (a book without its own status inherits the series'). */
+  isFavorite?: boolean;
+  readingStatus?: ReadingStatus;
+  seriesIsFavorite?: boolean;
+  seriesReadingStatus?: ReadingStatus;
   overallCompletion: number;
   tags: string[];
   customFields: Record<string, string>;
@@ -215,6 +224,8 @@ export interface BookmarkItem {
   userNote: string;
   highlightColor?: string | null;
   createdAtUtc: string;
+  /** The one line the bookmark is listed by: "Vol3Ch12", or "[ch12] the selected words". Made by the server. */
+  label: string;
 }
 
 export interface ReaderChapterPayload {

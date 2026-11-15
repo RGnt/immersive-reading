@@ -1,0 +1,44 @@
+/* Deck Builder plugin styles. Self-contained: host Tailwind does not scan plugin sources. */
+.db-root { display: flex; flex-direction: column; gap: 12px; font-size: 12px; color: var(--text-primary); max-width: 760px; }
+.db-box { background: rgba(168, 85, 247, 0.06); border: 1px solid rgba(168, 85, 247, 0.28); border-radius: var(--radius-control); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.db-row { display: flex; align-items: center; gap: 8px; }
+.db-between { justify-content: space-between; }
+.db-wrap { flex-wrap: wrap; }
+.db-muted { color: var(--text-muted); }
+.db-title { font-weight: 600; font-size: 13px; }
+.db-tag { background: #7c3aed; color: #fff; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: var(--radius-control); text-transform: uppercase; }
+.db-inset { background: var(--shade); border: 1px solid var(--border-color); border-radius: var(--radius-control); padding: 10px; }
+.db-ok { color: var(--success-text); font-weight: 700; }
+.db-warn { color: var(--warning-text); font-weight: 700; }
+
+.db-field { display: flex; flex-direction: column; gap: 4px; min-width: 150px; }
+.db-field label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 600; }
+.db-input, .db-select { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-control); padding: 6px 10px; font-size: 12px; color: var(--text-primary); }
+.db-input:focus, .db-select:focus { outline: none; border-color: var(--accent-color); }
+.db-input[type="number"] { width: 90px; }
+
+.db-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--radius-control); font-size: 11.5px; font-weight: 600; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); cursor: pointer; }
+.db-btn:hover:not(:disabled) { border-color: var(--accent-color); }
+.db-btn:disabled { opacity: 0.45; cursor: default; }
+.db-btn.db-primary { background: var(--accent-color); color: var(--accent-contrast); border-color: transparent; }
+
+.db-status { padding: 8px 10px; border-radius: var(--radius-control); background: rgba(168, 85, 247, 0.12); color: var(--violet-text); border: 1px solid rgba(168, 85, 247, 0.35); }
+.db-status.db-success { background: rgba(16, 185, 129, 0.14); color: var(--success-text); border-color: rgba(16, 185, 129, 0.4); }
+.db-status.db-error { background: rgba(244, 63, 94, 0.14); color: var(--danger-text); border-color: rgba(244, 63, 94, 0.4); }
+
+.db-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.db-stat { background: var(--shade); border: 1px solid var(--border-color); border-radius: var(--radius-control); padding: 8px; text-align: center; }
+.db-stat b { display: block; font-size: 15px; }
+.db-stat span { font-size: 10px; text-transform: uppercase; color: var(--text-muted); }
+
+.db-table { width: 100%; border-collapse: collapse; font-size: 11.5px; text-align: left; }
+.db-table th { background: var(--shade); color: var(--text-muted); font-size: 10px; text-transform: uppercase; padding: 6px 8px; position: sticky; top: 0; }
+.db-table td { padding: 5px 8px; border-top: 1px solid var(--border-color); vertical-align: top; }
+.db-scroll { max-height: 18rem; overflow: auto; border: 1px solid var(--border-color); border-radius: var(--radius-control); }
+.db-ex { color: var(--text-muted); max-width: 22rem; }
+.db-ex b { color: var(--violet-text); }
+.db-unresolved { color: var(--warning-text); }
+.db-attrib { font-size: 10.5px; color: var(--text-muted); line-height: 1.5; }
+.db-attrib a { color: var(--accent-text); text-decoration: none; }
+.db-attrib a:hover { text-decoration: underline; }
+.db-kind { background: rgba(124, 58, 237, 0.25); color: var(--violet-text); border: 1px solid rgba(168, 85, 247, 0.4); padding: 1px 6px; border-radius: var(--radius-control); font-size: 10px; font-weight: 700; text-transform: uppercase; }

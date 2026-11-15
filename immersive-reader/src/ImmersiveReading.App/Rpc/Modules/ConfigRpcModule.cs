@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Text.Json;
 using ImmersiveReading.Core.Config;
-using ImmersiveReading.Plugins.AiCompanion.Providers;
+using ImmersiveReading.Core.Llm;
 
 namespace ImmersiveReading.App.Rpc.Modules;
 

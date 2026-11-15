@@ -76,6 +76,19 @@ internal static class BookListSqlBuilder
             }
         }
 
+        // 4b. Favourites and the reading list (a book inherits its series' flags)
+        if (query.Favorite == true) whereClauses.Add(BookFlagsService.EffectiveFavoriteSql);
+        if (!string.IsNullOrWhiteSpace(query.ReadingStatus))
+        {
+            string wanted = query.ReadingStatus.Trim().ToLowerInvariant();
+            if (wanted == "any") whereClauses.Add(BookFlagsService.EffectiveStatusSql + " <> ''");
+            else
+            {
+                whereClauses.Add(BookFlagsService.EffectiveStatusSql + " = $readingStatus");
+                parameters.Add(new SqliteParameter("$readingStatus", ReadingStatus.Normalize(wanted)));
+            }
+        }
+
         // 5. Search filter (FTS5 + substring fallback for CJK mid-word queries)
         if (!string.IsNullOrWhiteSpace(query.Search))
         {

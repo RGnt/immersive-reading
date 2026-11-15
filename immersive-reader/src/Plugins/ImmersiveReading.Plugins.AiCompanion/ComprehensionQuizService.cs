@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Extensions;
+using ImmersiveReading.Core.Prompts;
 using Microsoft.Data.Sqlite;
 using ImmersiveReading.Plugins.AiCompanion.Prompts;
 
@@ -34,7 +35,8 @@ public sealed record ComprehensionQuestionView(
     int StartTokenId,
     int EndTokenId,
     int SourceParagraphId,
-    string EvidenceQuote
+    string EvidenceQuote,
+    string ChapterTitle = ""
 );
 
 public sealed record ComprehensionEvaluationResult(
@@ -48,7 +50,9 @@ public sealed record ComprehensionEvaluationResult(
     string MissingOrMisunderstood,
     string ModelAnswerHtml,
     string ModelAnswerSyntheticChapterHref,
-    ComprehensionStage NextRecommendedStage
+    ComprehensionStage NextRecommendedStage,
+    FreeFormRubricView? Rubric = null,
+    IReadOnlyList<VocabularyNudge>? VocabularyNudges = null
 );
 
 internal sealed record GeneratedQuestionDto(
@@ -61,12 +65,11 @@ internal sealed record GeneratedQuestionDto(
     string? ModelAnswer = null
 );
 
-internal sealed record GradedFreeFormDto(
-    int ComprehensionScore,
-    string EvidenceQuote,
-    string MissingOrMisunderstood,
-    string ModelAnswer
-);
+/// <summary>No question can be asked yet (for example no chapter has been completed). The message is for the learner.</summary>
+public sealed class QuizUnavailableException(string message) : InvalidOperationException(message);
+
+/// <summary>The model twice failed to write a usable question.</summary>
+public sealed class QuizGenerationException(string message) : InvalidOperationException(message);
 
 public sealed class ComprehensionQuizService
 {
@@ -74,6 +77,19 @@ public sealed class ComprehensionQuizService
     private readonly IReaderContextService _readerContext;
     private readonly ISnippetEnricher _snippetEnricher;
     private readonly ILlmProvider _llmProvider;
+    private readonly IVocabularyBudgetService? _vocabulary;
+
+    /// <summary>Longest stretch of the completed chapter one question is about.</summary>
+    public int MaxPassageChars { get; set; } = QuizPassageSelector.DefaultMaxChars;
+
+    /// <summary>Random source of passage windows and of the position of the correct option (a test can fix it).</summary>
+    public Random Rng { get; set; } = Random.Shared;
+
+    /// <summary>Free-form answers move the status of words the learner used (spec: nudge the vocabulary state).</summary>
+    public bool NudgeVocabulary { get; set; } = true;
+
+    /// <summary>The prompts in force (the user's edited copies included). The built-ins alone until the host attaches its catalog.</summary>
+    public IPromptCatalog Prompts { get; set; } = ChatPrompts.BuiltInsOnly;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -85,8 +101,10 @@ public sealed class ComprehensionQuizService
         IDbConnectionFactory db,
         IReaderContextService readerContext,
         ISnippetEnricher snippetEnricher,
-        ILlmProvider llmProvider)
+        ILlmProvider llmProvider,
+        IVocabularyBudgetService? vocabulary = null)
     {
+        _vocabulary = vocabulary;
         _db = db;
         _readerContext = readerContext;
         _snippetEnricher = snippetEnricher;
@@ -177,6 +195,13 @@ public sealed class ComprehensionQuizService
         }
     }
 
+    /// <summary>
+    /// One question about the **last chapter the reader completed** (the chapter before the one being read), never about the current chapter or
+    /// anything later: that chapter is the spoiler gate. <paramref name="overrideChapterIndex"/> is the chapter being read; without it the saved
+    /// reading position is used. The old token and spine arguments are accepted and ignored. The model's question is validated (the evidence is a
+    /// real sentence of the passage, a multiple-choice question has four distinct options with exactly one correct, no tell in the lengths) and asked
+    /// for once more with the reason when it fails; if it fails again there is no question (never a canned one).
+    /// </summary>
     public async Task<ComprehensionQuestionView> GenerateQuestionAsync(
         string bookId,
         ComprehensionStage? overrideStage = null,
@@ -188,15 +213,22 @@ public sealed class ComprehensionQuizService
     {
         var stage = overrideStage ?? GetCurrentStage(bookId);
         string modeStr = StageToModeString(stage);
+        bool multipleChoice = stage == ComprehensionStage.MultipleChoice;
 
-        var slice = await _readerContext.GetJustReadPassageAsync(
-            bookId: bookId,
-            maxCharacters: 3500,
-            previousCheckpointTokenId: previousCheckpointTokenId,
-            overrideViewportTokenId: overrideViewportTokenId,
-            overrideChapterIndex: overrideChapterIndex,
-            overrideSpineHref: overrideSpineHref,
-            ct: ct).ConfigureAwait(false);
+        var chapter = await _readerContext.GetLastCompletedChapterAsync(bookId, overrideChapterIndex, 60000, ct).ConfigureAwait(false)
+            ?? throw new QuizUnavailableException("Finish a chapter first: the quiz asks about the last chapter you completed, so nothing from the chapter you are reading is used.");
+
+        var recent = new List<(int Start, int End)>();
+        using (var conn = _db.OpenConnection())
+        using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT start_token_id, end_token_id FROM comprehension_sessions WHERE book_id = $b AND chapter_index = $c ORDER BY created_at_utc DESC LIMIT 6;";
+            cmd.Parameters.AddWithValue("$b", bookId);
+            cmd.Parameters.AddWithValue("$c", chapter.ChapterIndex);
+            using var r = cmd.ExecuteReader();
+            while (r.Read()) recent.Add((r.GetInt32(0), r.GetInt32(1)));
+        }
+        var passage = QuizPassageSelector.Select(chapter.Paragraphs, MaxPassageChars, Rng, recent);
 
         string taskKind = stage switch
         {
@@ -204,43 +236,38 @@ public sealed class ComprehensionQuizService
             ComprehensionStage.GuidedShortAnswer => "quiz.generate.guided",
             _ => "quiz.generate.freeform"
         };
+        string systemPrompt = Prompts.Render(ChatPrompts.QuizSystem);
 
-        string systemPrompt = QuizPrompts.SystemPrompt;
-
-        string userPrompt = QuizPrompts.BuildUserPrompt(modeStr, slice.PlainText);
-        var request = LlmRequestBuilder.Create()
-            .WithSystemPrompt(systemPrompt)
-            .WithUserPrompt(userPrompt)
-            .WithTemperature(0.2)
-            .WithTaskKind(taskKind)
-            .Build();
-
-        var llmResp = await _llmProvider.CompleteStructuredAsync<GeneratedQuestionDto>(request, ct).ConfigureAwait(false);
-
-        var dto = llmResp.Value;
-        var enrichedPrompt = _snippetEnricher.EnrichSnippet(bookId, dto.QuestionPrompt);
-
-        var enrichedOptions = new List<EnrichedQuizOption>();
-        if (stage == ComprehensionStage.MultipleChoice)
+        ValidatedQuestion? question = null;
+        string retryNote = "";
+        var problems = new List<string>();
+        for (int attempt = 0; attempt < 2 && question is null; attempt++)
         {
-            var rawOpts = dto.Options is { Count: > 0 }
-                ? dto.Options
-                : [dto.EvidenceQuote, "別の場面の説明", "登場しない人物の行動", "まだ起きていない出来事"];
-
-            for (int i = 0; i < rawOpts.Count; i++)
+            string userPrompt = Prompts.Render(ChatPrompts.QuizUser, new Dictionary<string, object?>
             {
-                var optEnriched = _snippetEnricher.EnrichSnippet(bookId, rawOpts[i]);
-                enrichedOptions.Add(new EnrichedQuizOption(
-                    OptionIndex: i,
-                    Text: rawOpts[i],
-                    EnrichedHtml: optEnriched.EnrichedHtml,
-                    SyntheticChapterHref: optEnriched.SyntheticChapterHref));
-            }
+                ["mode"] = modeStr == "mcq" ? "multiple-choice" : modeStr,
+                ["passage"] = passage.PromptText,
+                ["retry_note"] = retryNote
+            });
+            var request = LlmRequestBuilder.Create()
+                .WithSystemPrompt(systemPrompt)
+                .WithUserPrompt(userPrompt)
+                .WithTemperature(attempt == 0 ? 0.3 : 0.5)
+                .WithTaskKind(taskKind)
+                .Build();
+            var llmResp = await _llmProvider.CompleteStructuredAsync<GeneratedQuestionDto>(request, ct).ConfigureAwait(false);
+            (question, string? why) = QuizQuestionValidator.Validate(llmResp.Value, passage, multipleChoice, Rng);
+            if (question is null) { problems.Add(why ?? "unknown problem"); retryNote = problems[^1]; }
         }
+        if (question is null) throw new QuizGenerationException($"The model did not produce a usable question ({string.Join("; then: ", problems)}). Check that the model server in Settings is running, then try again.");
 
-        int sourceParagraphId = slice.Paragraphs.Count > 0
-            ? (slice.Paragraphs.Any(p => p.ParagraphId == dto.ParagraphId) ? dto.ParagraphId : slice.Paragraphs[0].ParagraphId)
-            : dto.ParagraphId;
+        var enrichedPrompt = _snippetEnricher.EnrichSnippet(bookId, question.Prompt);
+        var enrichedOptions = new List<EnrichedQuizOption>();
+        for (int i = 0; i < question.Options.Count; i++)
+        {
+            var optEnriched = _snippetEnricher.EnrichSnippet(bookId, question.Options[i]);
+            enrichedOptions.Add(new EnrichedQuizOption(i, question.Options[i], optEnriched.EnrichedHtml, optEnriched.SyntheticChapterHref));
+        }
 
         string sessionId = $"sess-{Guid.NewGuid():N}";
         string questionId = $"q-{Guid.NewGuid():N}";
@@ -248,11 +275,11 @@ public sealed class ComprehensionQuizService
 
         var rubricObj = new
         {
-            evidenceQuote = dto.EvidenceQuote,
-            paragraphId = sourceParagraphId,
-            explanation = dto.Explanation ?? "",
-            modelAnswer = dto.ModelAnswer ?? dto.EvidenceQuote,
-            passageText = slice.PlainText
+            evidenceQuote = question.EvidenceQuote,
+            paragraphId = question.ParagraphId,
+            explanation = question.Explanation,
+            modelAnswer = question.ModelAnswer,
+            passageText = passage.PlainText
         };
 
         using (var conn = _db.OpenConnection())
@@ -268,10 +295,10 @@ public sealed class ComprehensionQuizService
                     """;
                 sCmd.Parameters.AddWithValue("$sid", sessionId);
                 sCmd.Parameters.AddWithValue("$bid", bookId);
-                sCmd.Parameters.AddWithValue("$chIdx", slice.ChapterIndex);
-                sCmd.Parameters.AddWithValue("$startTok", slice.StartTokenId);
-                sCmd.Parameters.AddWithValue("$endTok", slice.EndTokenId);
-                sCmd.Parameters.AddWithValue("$text", slice.PlainText);
+                sCmd.Parameters.AddWithValue("$chIdx", chapter.ChapterIndex);
+                sCmd.Parameters.AddWithValue("$startTok", passage.StartTokenId);
+                sCmd.Parameters.AddWithValue("$endTok", passage.EndTokenId);
+                sCmd.Parameters.AddWithValue("$text", passage.PlainText);
                 sCmd.Parameters.AddWithValue("$now", now);
                 sCmd.ExecuteNonQuery();
             }
@@ -290,10 +317,10 @@ public sealed class ComprehensionQuizService
                 qCmd.Parameters.AddWithValue("$sid", sessionId);
                 qCmd.Parameters.AddWithValue("$bid", bookId);
                 qCmd.Parameters.AddWithValue("$mode", modeStr);
-                qCmd.Parameters.AddWithValue("$pText", dto.QuestionPrompt);
+                qCmd.Parameters.AddWithValue("$pText", question.Prompt);
                 qCmd.Parameters.AddWithValue("$pHtml", enrichedPrompt.EnrichedHtml);
                 qCmd.Parameters.AddWithValue("$optsJson", JsonSerializer.Serialize(enrichedOptions, JsonOpts));
-                qCmd.Parameters.AddWithValue("$correctIdx", dto.CorrectOptionIndex);
+                qCmd.Parameters.AddWithValue("$correctIdx", question.CorrectIndex);
                 qCmd.Parameters.AddWithValue("$rubricJson", JsonSerializer.Serialize(rubricObj, JsonOpts));
                 qCmd.ExecuteNonQuery();
             }
@@ -305,15 +332,16 @@ public sealed class ComprehensionQuizService
             BookId: bookId,
             Stage: stage,
             QuestionMode: modeStr,
-            PromptText: dto.QuestionPrompt,
+            PromptText: question.Prompt,
             PromptHtml: enrichedPrompt.EnrichedHtml,
             PromptSyntheticChapterHref: enrichedPrompt.SyntheticChapterHref,
             Options: enrichedOptions,
-            ChapterIndex: slice.ChapterIndex,
-            StartTokenId: slice.StartTokenId,
-            EndTokenId: slice.EndTokenId,
-            SourceParagraphId: sourceParagraphId,
-            EvidenceQuote: dto.EvidenceQuote);
+            ChapterIndex: chapter.ChapterIndex,
+            StartTokenId: passage.StartTokenId,
+            EndTokenId: passage.EndTokenId,
+            SourceParagraphId: question.ParagraphId,
+            EvidenceQuote: question.EvidenceQuote,
+            ChapterTitle: chapter.ChapterTitle);
     }
 
     public async Task<ComprehensionEvaluationResult> SubmitAnswerAsync(
@@ -360,6 +388,8 @@ public sealed class ComprehensionQuizService
         bool isCorrect;
         string missingOrMisunderstood;
         string rawModelAnswer;
+        FreeFormRubricView? rubric = null;
+        IReadOnlyList<VocabularyNudge> nudges = [];
 
         if (modeStr == "mcq")
         {
@@ -371,8 +401,14 @@ public sealed class ComprehensionQuizService
         }
         else
         {
-            string gradeSystemPrompt = GradingPrompts.SystemPrompt;
-            string gradeUserPrompt = GradingPrompts.BuildUserPrompt(promptText, userAnswer, evidenceQuote, passageText);
+            string gradeSystemPrompt = Prompts.Render(ChatPrompts.GradeSystem);
+            string gradeUserPrompt = Prompts.Render(ChatPrompts.GradeUser, new Dictionary<string, object?>
+            {
+                ["question"] = promptText,
+                ["user_answer"] = userAnswer,
+                ["expected_evidence"] = evidenceQuote,
+                ["passage"] = passageText
+            });
 
             var gradeRequest = LlmRequestBuilder.Create()
                 .WithSystemPrompt(gradeSystemPrompt)
@@ -381,17 +417,22 @@ public sealed class ComprehensionQuizService
                 .WithTaskKind("quiz.grade.freeform")
                 .Build();
 
-            var gradeResp = await _llmProvider.CompleteStructuredAsync<GradedFreeFormDto>(gradeRequest, ct).ConfigureAwait(false);
+            var gradeResp = await _llmProvider.CompleteStructuredAsync<FreeFormRubricDto>(gradeRequest, ct).ConfigureAwait(false);
 
-            var g = gradeResp.Value;
-            score100 = Math.Clamp(g.ComprehensionScore, 0, 100);
-            isCorrect = score100 >= 70;
-            if (!string.IsNullOrWhiteSpace(g.EvidenceQuote))
+            // comprehension first, then grammar, then vocabulary; only what the learner really wrote is accepted
+            rubric = FreeFormRubricScorer.Score(gradeResp.Value, userAnswer ?? "", evidenceQuote);
+            score100 = rubric.Comprehension;
+            isCorrect = score100 >= FreeFormRubricScorer.CorrectThreshold;
+            if (!string.IsNullOrWhiteSpace(rubric.EvidenceQuote)) evidenceQuote = rubric.EvidenceQuote;
+            missingOrMisunderstood = rubric.Missing;
+            rawModelAnswer = !string.IsNullOrWhiteSpace(gradeResp.Value.ModelAnswer) ? gradeResp.Value.ModelAnswer! : rubricModelAnswer;
+
+            // the vocabulary state moves a step, only for answers that addressed the question, and it is shown below
+            if (NudgeVocabulary && _vocabulary is not null)
             {
-                evidenceQuote = g.EvidenceQuote;
+                var practice = FreeFormRubricScorer.Practice(rubric);
+                if (practice.Count > 0) nudges = _vocabulary.RecordPractice("ja", practice);
             }
-            missingOrMisunderstood = g.MissingOrMisunderstood ?? "";
-            rawModelAnswer = !string.IsNullOrWhiteSpace(g.ModelAnswer) ? g.ModelAnswer : rubricModelAnswer;
         }
 
         var enrichedModelAnswer = _snippetEnricher.EnrichSnippet(bookId, rawModelAnswer);
@@ -404,7 +445,9 @@ public sealed class ComprehensionQuizService
             evidenceQuote,
             paragraphId,
             missingOrMisunderstood,
-            modelAnswerHtml = enrichedModelAnswer.EnrichedHtml
+            modelAnswerHtml = enrichedModelAnswer.EnrichedHtml,
+            rubric,
+            vocabularyNudges = nudges.Select(n => new { n.Lemma, from = n.From.ToString(), to = n.To.ToString(), n.Reason }).ToList()
         };
 
         using (var conn = _db.OpenConnection())
@@ -438,7 +481,9 @@ public sealed class ComprehensionQuizService
             MissingOrMisunderstood: missingOrMisunderstood,
             ModelAnswerHtml: enrichedModelAnswer.EnrichedHtml,
             ModelAnswerSyntheticChapterHref: enrichedModelAnswer.SyntheticChapterHref,
-            NextRecommendedStage: nextStage);
+            NextRecommendedStage: nextStage,
+            Rubric: rubric,
+            VocabularyNudges: nudges);
     }
 
     private static string StageToModeString(ComprehensionStage stage) => stage switch

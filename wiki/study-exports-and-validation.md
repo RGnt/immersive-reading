@@ -55,7 +55,8 @@ Generated under `output/pdf/<book-id>/` when `skip_pdf=False`:
 - **File Inventory**: `2 * len(chapters) + 3` PDF files per book:
   - `chapter-01-kanji.pdf` ... `chapter-NN-kanji.pdf`
   - `chapter-01-vocabulary.pdf` ... `chapter-NN-vocabulary.pdf`
-  - `kanji-master.pdf`, `vocabulary-master.pdf`, `grammar-master.pdf`
+  - `kanji-master.pdf`, `vocabulary-master.pdf`, `grammar-master.pdf` (+ `function-words-master.pdf` when the deck has particles)
+  - `chapter-NN-grammar.pdf` and `chapter-NN-function-words.pdf`, only for chapters that introduce at least one grammar entry / particle (`study_data.grammar_chapters`, `function_word_chapters`; `pdf_validation` expects exactly these). LLM grammar cards print their provenance line and up to 3 verbatim examples (`LLM_EXAMPLES_SHOWN`).
 - **Strict Visual & Layout Rules** (enforced by [`pdf_validation.py`](../enrichement-extractor/immersive/pdf_validation.py)):
   - **Page 1 (Cover)**: Book metadata, usage instructions, source filenames, and full copyright/license notices (`COPYRIGHT / LICENSE NOTICES`). Must fit above `18 mm` bottom margin.
   - **Page 2 (Blank Reverse)**: Completely blank, unnumbered page (`canvas.showPage()`) for double-sided printing.
@@ -86,3 +87,7 @@ Generated under `output/pdf/<book-id>/` when `skip_pdf=False`:
 5. Generates `Run.cmd`, `Check.cmd`, `licenses/dependencies.json`, `licenses/THIRD-PARTY-NOTICES.txt`, and `distribution.json` (with SHA-256 fingerprints of every file in the distribution).
 6. Runs a live subprocess smoke test (`python.exe -I app/run_pipeline.py --doctor`) before zipping `ImmersivePipeline-windows-x64.zip` and writing `.zip.sha256`.
 
+
+
+## Function words section (spec 16)
+Particles and auxiliaries from a deck with a `Kind` column are not vocabulary: `study_data.vocab_cards(function_words=True)` returns them, `render_outputs` writes `function-words.html` and `function-words-master.pdf` (`master_pdf.write_master(kind="function")`, columns Nr. / WORD / READING / USAGE / MEANING), `verification` and `pdf_validation` expect vocabulary without them plus the extra master PDF, and `publication.py` whitelists both files. A deck without `Kind` produces exactly the old outputs.

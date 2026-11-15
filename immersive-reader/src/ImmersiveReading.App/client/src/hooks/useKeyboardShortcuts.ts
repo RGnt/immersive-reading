@@ -3,6 +3,7 @@ import { useReaderStore } from '../stores/useReaderStore';
 import { usePluginStore } from '../stores/usePluginStore';
 import { useStudyPackStore } from '../stores/useStudyPackStore';
 import { useConfigStore } from '../stores/useConfigStore';
+import { useAppearanceStore } from '../stores/useAppearanceStore';
 
 export const sendVimMotion = (payload: any) => {
   const iframe = document.getElementById('reader-frame') as HTMLIFrameElement | null;
@@ -35,6 +36,14 @@ export const useKeyboardShortcuts = () => {
         activeEl?.tagName === 'INPUT' ||
         activeEl?.tagName === 'TEXTAREA' ||
         activeEl?.tagName === 'SELECT';
+
+      // Way out of a stylesheet that broke the interface: Ctrl+Alt+Shift+C switches the user's CSS off (or back on)
+      if ((e.ctrlKey || e.metaKey) && e.altKey && e.shiftKey && (e.code === 'KeyC' || e.key.toLowerCase() === 'c')) {
+        e.preventDefault?.();
+        const appearance = useAppearanceStore.getState();
+        void appearance.setEnabled(!appearance.enabled);
+        return;
+      }
 
       // Global Settings shortcut: Ctrl+, or Cmd+,
       if ((e.ctrlKey || e.metaKey) && e.key === ',') {

@@ -1,0 +1,103 @@
+/* jiten.moe plugin styles. Self-contained: host Tailwind does not scan plugin sources. */
+.jm-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: var(--radius-control);
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  line-height: 1.5;
+}
+.jm-badge.jm-card { backdrop-filter: blur(6px); }
+.jm-badge.jm-row { font-size: 11px; }
+.jm-diff-easy { background: rgba(2, 44, 34, 0.85); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.4); }
+.jm-diff-med { background: rgba(69, 26, 3, 0.85); color: #fcd34d; border-color: rgba(245, 158, 11, 0.4); }
+.jm-diff-hard { background: rgba(67, 20, 7, 0.85); color: #fdba74; border-color: rgba(249, 115, 22, 0.4); }
+.jm-diff-master { background: rgba(76, 5, 25, 0.85); color: #fda4af; border-color: rgba(244, 63, 94, 0.4); }
+
+.jm-root { display: flex; flex-direction: column; gap: 12px; font-size: 12px; color: var(--text-primary); max-width: 760px; }
+.jm-card-box {
+  background: rgba(14, 165, 233, 0.06);
+  border: 1px solid rgba(14, 165, 233, 0.28);
+  border-radius: var(--radius-control);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.jm-row-flex { display: flex; align-items: center; gap: 8px; }
+.jm-between { justify-content: space-between; }
+.jm-wrap { flex-wrap: wrap; }
+.jm-muted { color: var(--text-muted); }
+.jm-title { font-weight: 600; font-size: 13px; }
+.jm-tag {
+  background: #0369a1; color: #fff; font-size: 10px; font-weight: 700;
+  padding: 1px 6px; border-radius: var(--radius-control); text-transform: uppercase;
+}
+.jm-inset {
+  background: var(--shade);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-control);
+  padding: 10px;
+}
+.jm-ok { color: var(--success-text); font-weight: 700; }
+.jm-warn { color: var(--warning-text); font-weight: 700; }
+.jm-err { color: var(--danger-text); }
+
+.jm-input, .jm-select {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-control);
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.jm-input { flex: 1; min-width: 0; }
+.jm-input:focus, .jm-select:focus { outline: none; border-color: var(--accent-color); }
+
+.jm-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: var(--radius-control); font-size: 11.5px; font-weight: 600;
+  background: var(--bg-primary); color: var(--text-primary);
+  border: 1px solid var(--border-color); cursor: pointer;
+}
+.jm-btn:hover:not(:disabled) { border-color: var(--accent-color); }
+.jm-btn:disabled { opacity: 0.45; cursor: default; }
+.jm-btn.jm-primary { background: var(--accent-color); color: var(--accent-contrast); border-color: transparent; }
+.jm-btn.jm-primary:hover:not(:disabled) { opacity: 0.9; }
+.jm-btn.jm-active { background: rgba(14, 165, 233, 0.2); border-color: #38bdf8; color: var(--info-text); }
+
+.jm-status {
+  padding: 8px 10px; border-radius: var(--radius-control); font-size: 12px;
+  background: rgba(14, 165, 233, 0.12); color: var(--info-text); border: 1px solid rgba(14, 165, 233, 0.35);
+}
+.jm-status.jm-success { background: rgba(16, 185, 129, 0.14); color: var(--success-text); border-color: rgba(16, 185, 129, 0.4); }
+.jm-status.jm-error { background: rgba(244, 63, 94, 0.14); color: var(--danger-text); border-color: rgba(244, 63, 94, 0.4); }
+
+.jm-result {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-control);
+  padding: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.jm-result:hover { border-color: rgba(56, 189, 248, 0.6); }
+.jm-cover { width: 48px; height: 64px; object-fit: cover; border-radius: var(--radius-control); background: var(--shade); flex-shrink: 0; }
+.jm-cover-lg { width: 64px; height: 92px; }
+.jm-results { display: flex; flex-direction: column; gap: 10px; max-height: 24rem; overflow-y: auto; padding-right: 4px; }
+.jm-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; max-height: 12rem; overflow-y: auto; }
+
+.jm-table { width: 100%; border-collapse: collapse; font-size: 11.5px; text-align: left; }
+.jm-table th {
+  background: var(--shade); color: var(--text-muted);
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; padding: 6px 8px;
+}
+.jm-table td { padding: 6px 8px; border-top: 1px solid var(--border-color); }
+.jm-table .jm-mono { font-family: ui-monospace, monospace; color: var(--info-text); }
+.jm-scroll { max-height: 12rem; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-control); }
+
+.jm-chip { padding: 1px 7px; border-radius: var(--radius-control); font-size: 10px; background: var(--shade); border: 1px solid var(--border-color); color: var(--text-muted); }
+.jm-pill-ok { background: rgba(16, 185, 129, 0.2); color: var(--success-text); border: 1px solid rgba(16, 185, 129, 0.35); padding: 1px 6px; border-radius: var(--radius-control); font-size: 10px; font-weight: 600; }
+.jm-pill-miss { background: rgba(245, 158, 11, 0.2); color: var(--warning-text); border: 1px solid rgba(245, 158, 11, 0.35); padding: 1px 6px; border-radius: var(--radius-control); font-size: 10px; font-weight: 600; }
+.jm-link { color: var(--accent-text); text-decoration: none; }
+.jm-link:hover { text-decoration: underline; }

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ImmersiveReading.Core.Library;
 using ImmersiveReading.Library;
+using ImmersiveReading.Plugins.JitenMoe;
 
 namespace ImmersiveReading.Core.Tests;
 

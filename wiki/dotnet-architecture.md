@@ -8,16 +8,23 @@
 
 ```
 App ──► Library ──► Core
+ │  ├─► Knowledge ──► Core   (knowledge hub + the user's memory, spec 24)
  │  ├─► Enrichment ─► Core
  │  ├─► Dictionaries ► Core
- │  └─► Plugins.{Japanese,AiCompanion,PosHighlighter}
+ │  └─► Plugins.{Japanese,AiCompanion,PosHighlighter,JitenMoe,DeckBuilder,CharacterKnowledge} ─► Core
+ │         (DeckBuilder ─► Dictionaries, PosHighlighter ─► Enrichment: the only two exceptions, see below)
 Tests: Core.Tests, Enrichment.Tests, Dictionaries.Tests, App.Tests
 ```
 
-- **Core** has no sibling dependencies: contracts, models, EPUB metadata parsing, `MigrationRunner`, plugin interfaces.
-- **Library / Enrichment / Dictionaries** reference only Core (never each other, never App).
-- **App** is the only composition root. Concrete plugins are referenced *only* from [`Composition/PluginCatalog.cs`](../immersive-reader/src/ImmersiveReading.App/Composition/PluginCatalog.cs).
+- **Core** has no sibling dependencies: contracts, models, EPUB metadata parsing, `MigrationRunner`, plugin interfaces, the prompt template engine and catalog (`Core.Prompts`), the knowledge contracts (`Core.Knowledge`), and helpers that App *and* plugins both need (for example `Core.Llm.LlmEndpointTester`).
+- **Library / Enrichment / Dictionaries / Knowledge** reference only Core (never each other, never App).
+- **App** is the only composition root. Concrete plugins are named *only* in [`Composition/`](../immersive-reader/src/ImmersiveReading.App/Composition/PluginCatalog.cs); an RPC module that needs something a plugin also uses gets it from Core.
+- **Plugins reach each other's knowledge only through `context.Knowledge` (`IKnowledgeHub`, contract in `Core.Knowledge`)**: a plugin registers a source with `RegisterKnowledgeSource` and never references another plugin. A source that hides unread story must declare `KnowledgeGating.StoryPosition`.
+- **A plugin** references Core and nothing else, except where it implements a contract another project owns: `DeckBuilder` implements `IDeckDictionary` on the dictionary store, `PosHighlighter` is a stage of the enrichment pipeline. A plugin reads library data through `IHostLibrary` / `IBookCatalog`, never from the library tables, and keeps its own data in its own tables or files.
+- **SQL belongs in Library / Dictionaries services**, not in RPC modules. RPC modules parse parameters, call a service, shape the result.
 - If two non-Core projects need the same type, move the contract to Core. Don't add a sibling reference.
+
+**These rules are enforced by [`ArchitectureTests`](../immersive-reader/tests/ImmersiveReading.App.Tests/ArchitectureTests.cs)** (project references, `using` namespaces, SQL placement) and, for Python, by `knowledge-graph/tests/test_architecture.py` (module layers, only `store` touches SQLite, only `llm` touches the network, no import of the study pipeline) and `enrichement-extractor/tests/test_architecture.py` (no network library, no import of the LLM project). Debts the tests still allow are listed in the test file with a ceiling that may only go down: raw SQL in `ReaderRpcModule` (8 statements), `BootstrapRpcModule` (2), `StudyPackRpcModule` (2), `DictionaryRpcModule` (1); and the AI companion's tables created by `Library/Schema/LibraryMigrations.cs` and deleted by name in `ClearLibrary`. When you pay one off, lower the number or remove the entry.
 
 ## 2. Startup & composition
 
@@ -26,8 +33,8 @@ Tests: Core.Tests, Enrichment.Tests, Dictionaries.Tests, App.Tests
 
 ## 3. RPC bridge (frontend ↔ C#)
 
-- JSON-RPC 2.0 over Photino IPC. [`LibraryRpcDispatcher`](../immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs) routes `"module.method"` strings to handlers that each [`IRpcModule.Handlers`](../immersive-reader/src/ImmersiveReading.App/Rpc/IRpcModule.cs) yields as `(Method, RpcHandler)` tuples.
-- Modules live in `App/Rpc/Modules/`: Bootstrap, Library, Jiten, Reader, Dictionary, StudyPack, Config, Extensions.
+- JSON-RPC 2.0 over Photino IPC. [`LibraryRpcDispatcher`](../immersive-reader/src/ImmersiveReading.App/Rpc/LibraryRpcDispatcher.cs) routes `"module.method"` strings to handlers that each [`IRpcModule.Handlers`](../immersive-reader/src/ImmersiveReading.App/Rpc/IRpcModule.cs) yields as `(Method, RpcHandler)` tuples, then falls through to `_pluginHostManager.TryGetRpcHandler(...)` and `_featurePluginHost.TryGetRpcHandler(...)` for `ext.<pluginId>.<action>` plugin endpoints.
+- The 10 modules in `App/Rpc/Modules/`: `Appearance`, `Bootstrap`, `Config`, `Dictionary`, `Extensions`, `Library`, `Memory`, `Prompts`, `Reader`, and `StudyPack`. (jiten.moe is no longer a core RPC module: it is the `jitenMoe` plugin, whose actions are `ext.jitenMoe.*`.)
 - Param access: `req.RequiredString / OptionalString / OptionalInt`. Throw `ArgumentException` / `KeyNotFoundException` for bad input; the dispatcher turns exceptions into JSON-RPC errors.
 - Server→UI push: `IRpcEventSink.Emit("event.name", payload)`.
 - **The contract is pinned by** [`RpcContractTests`](../immersive-reader/tests/ImmersiveReading.App.Tests/RpcContractTests.cs). Result-key names are public API because the React client reads them by name. Renaming an anonymous-object property is a breaking change.
@@ -47,7 +54,15 @@ Tests: Core.Tests, Enrichment.Tests, Dictionaries.Tests, App.Tests
 
 ## 5. Plugins
 
-Unified contract `IImmersivePlugin` (+ `PluginLifecycle.Hot|RestartRequired`) managed by `PluginHostManager`. The legacy `FeaturePluginHost` / `IPluginModule` path still registers feature plugins. DOM enrichment stages (`IDomEnrichmentStage`) are pulled lazily through `BookSchemeHandler.DomStagesProvider`. See [LLM-WIKI.md](../LLM-WIKI.md) and `specs/08`, `specs/09`.
+- Unified contract [`IImmersivePlugin`](../immersive-reader/src/ImmersiveReading.Core/Plugins/IImmersivePlugin.cs) (`PluginReloadBehavior.Hot | RestartRequired` in `PluginLifecycle.cs`) managed by [`PluginHostManager`](../immersive-reader/src/ImmersiveReading.App/Plugins/PluginHostManager.cs). Every plugin project exposes an [`IPluginModule`](../immersive-reader/src/ImmersiveReading.Core/Extensions/IPluginModule.cs) registered in [`PluginCatalog`](../immersive-reader/src/ImmersiveReading.App/Composition/PluginCatalog.cs) (`JapaneseModule`, `AiCompanionModule`, `PosHighlighterModule`, `JitenMoeModule`, `DeckBuilderModule`, `CharacterKnowledgeModule`), and `AppServices` discovers plugins polymorphically via `CreateImmersivePlugins(sp)`.
+- Note: because `IImmersivePlugin` inherits `IAsyncDisposable`, any plugin registered via `services.AddSingleton<MyPlugin>()` must **also** implement `IDisposable` (synchronous), or `ServiceProvider.Dispose()` will throw at shutdown.
+- The legacy `FeaturePluginHost` path still supports older `IFeaturePlugin` modules. DOM enrichment stages (`IDomEnrichmentStage`) are pulled lazily through `BookSchemeHandler.DomStagesProvider`. See [LLM-WIKI.md](../LLM-WIKI.md), [creating-a-plugin-tutorial.md](creating-a-plugin-tutorial.md), and `specs/08`, `specs/09`.
+
+First-party plugins (`src/Plugins/`): `Japanese` (language), `AiCompanion`, `PosHighlighter`, **`JitenMoe`** and **`DeckBuilder`** ([spec 15](../specs/15-jiten-plugin-and-deck-builder-spec.md)), and **`CharacterKnowledge`** ([spec 20](../specs/20-character-knowledge-plugin-spec.md)): launches the separate Python `knowledge-graph` builder as a child process and reads its SQLite output read-only. Since spec 22 it also builds and serves **events and item holdings** (second builder pass; RPC `listEvents` / `listItems`, stored cards looked up by chapter like the profiles, schema version 2 migrated in place by the builder, missing story tables read as "no story data").
+
+**Library access for plugins** (`IPluginHostContext.Library`, `Core/Abstractions/IHostLibrary.cs`): a deliberately small metadata surface (`ListBooks`, `GetBookDetail`, `UpdateBookMetadata`, `ListTags`, `SaveTag`, `SetCustomFieldValue`) implemented by `LibraryManager`. Plugins never see the library database. `PluginHostManager` takes it as an optional last constructor argument (tests that do not need it omit it; touching `Library` then throws a clear error).
+
+**Plugin DI gotcha:** a plugin registered as a singleton in `IPluginModule.ConfigureServices` must implement `IDisposable` as well as `IAsyncDisposable`, otherwise `AppServices.Dispose()` throws "type only implements IAsyncDisposable" (see [lessons](troubleshooting-and-lessons.md)).
 
 ## 6. Conventions we follow (and why)
 
@@ -87,3 +102,30 @@ Unified contract `IImmersivePlugin` (+ `PluginLifecycle.Hot|RestartRequired`) ma
 - **Deferred on purpose:** comic formats (`.cbz`), a force-import switch, removing the 55 image-only books already in the library (`--verify-chapters` lists them). Revisit when comic support is relevant; `ImageOnlyPolicy` and `BookContentProfile` are the extension point.
 
 Review log and open items: [dotnet-code-review.md](dotnet-code-review.md). Past failures: [troubleshooting-and-lessons.md](troubleshooting-and-lessons.md).
+
+## 10. Library UI slots for plugins (spec 15)
+
+The library views have no plugin-specific code; plugins attach through three slots (all cleaned up on disable by `unloadPluginUiRegistrations`):
+
+| Slot | Registered with | Rendered by | Notes |
+| :--- | :--- | :--- | :--- |
+| Book Info tab | `ctx.registerBookInfoTab({ id, title, icon, component })` | `BookInfoModal.tsx` (after the built-in tabs) | `component` gets `{ bookId, book }` (`book` = the open `BookDetail`). The modal keeps the current tab when the same book is refreshed |
+| Book badge | `ctx.registerBookBadge({ id, component })` | `BookBadgeSlot` in `BookCard`, the table "Rating" column and series cards (`BookBadgeSlot` in `PluginSlots.tsx`) | `component` gets `{ books, context: 'card' \| 'row' \| 'series' }` |
+| Series action | `ctx.registerSeriesAction({ id, label, icon, onClick(ctx) })` | `SeriesActionsSlot` in `LibraryGrid` (drill-down header, series cards, shelf headers) | `ctx` has `seriesName`, `openModal`, `rpc`, `getPluginConfig` |
+
+After a plugin changes book metadata through its own RPC it must call `refreshLibrary(bookId?)` from `@ir/sdk`; that reloads the grid and the open Book Info dialog.
+
+## 10a. Library management: bulk editing (spec 23)
+
+- **Where:** `BookMetadataService.BulkUpdateBooks` / `PreviewBulkUpdate` (one transaction, FTS updated per book), `Books/BulkNumbering.cs` (modes `selection|title|filename|fromTitle`, natural order, volume taken from the title through `DuplicateNormalizer`), `BookQueryService.ListBookIds` / `ListSeriesNames`. RPC: `library.bulkUpdateBooks`, `previewBulkUpdate`, `listBookIds`, `listSeriesNames`.
+- **Null leaves a field alone, an empty string clears it** (`COALESCE($x, column)`); strings are trimmed. The preview and the update share `BulkNumbering.Compute`.
+- **UI:** `BulkActionBar` (Edit…, select all N) opens `BulkEditModal`; `useLibraryStore.selectAllMatching` asks `listBookIds` with the same filters as the list (`tagIds`, not `tags`).
+
+## 10. Library management: duplicates (spec 21)
+
+- **Where:** `ImmersiveReading.Library/Duplicates/`. `DuplicateDetector.Find(facts, dismissedPairs, options)` is pure (no database); `DuplicateService` loads `BookFacts` in one query and applies decisions. `LibraryManager` exposes `FindDuplicates/ResolveDuplicates/DismissDuplicates/ListRemovedBooks/ForgetRemovedBook`.
+- **Never compare all pairs:** candidate pairs come from buckets (ISBN, identifier, base title by volume, series+index, author+volume). 20,000 books run in well under a second.
+- **Hard separators:** different language, different volume. A volume written in the title is strong evidence, one from the file name or series index is weak (see spec 21 sections 3.2 and 10).
+- **Remove = library entry only.** `Resolve` runs in one transaction: merge tags/custom fields/empty metadata into the kept book, write `removed_books`, delete via `BookMetadataService.DeleteBookInTransaction` (the single delete path). EPUB files are never touched. `BookImportService.ScanDirectoryAsync` skips ids in `removed_books` (`SkippedRemovedDuplicates` + one warning per file); `ImportBookAsync` of a single file clears the record.
+- **Decisions persist:** `duplicate_dismissals` (pair keys, cascade-deleted with the books) for "not duplicates".
+- **Tune with real data:** copy `.library-data/library.db*` to a scratch folder and dump `DuplicateService.FindDuplicates` groups plus the "same base+volume but not grouped" misses (that is how most rules in spec 21 section 10 were found).

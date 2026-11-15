@@ -196,6 +196,68 @@ public class UnifiedPluginSystemTests : IDisposable
         await host.DisposeAsync();
     }
 
+    [Fact]
+    public async Task PluginHostManager_OnePluginsKnowledgeIsReachableFromAnother_AndGoneWhenItIsDisabled()
+    {
+        using var languages = new LanguagePluginRegistry();
+        var hub = new ImmersiveReading.Knowledge.KnowledgeHub();
+        var host = new PluginHostManager(_tempDir, new MockBookCatalog(), new MockReaderContextService(), new MockVocabBudgetService(),
+            new MockSnippetEnricher(), languages, _events, knowledge: hub);
+        var provider = new KnowledgeProviderPlugin("provider");
+        var consumer = new KnowledgeConsumerPlugin("consumer");
+
+        await host.InitializePluginsAsync([provider, consumer]);
+
+        var seen = await consumer.AskAsync();
+        Assert.Equal(["Newton's laws"], seen.Select(e => e.Title).ToArray());     // no reference between the two plugins
+        await host.SetPluginEnabledAsync("provider", false);
+        Assert.Empty(await consumer.AskAsync());
+        await host.DisposeAsync();
+    }
+
+    private sealed class KnowledgeProviderPlugin(string id) : IImmersivePlugin
+    {
+        public PluginManifest Manifest { get; } = new() { Id = id, Name = id, Version = "1.0.0", ReloadBehavior = PluginReloadBehavior.Hot };
+
+        private sealed class Physics : ImmersiveReading.Core.Knowledge.IKnowledgeSource
+        {
+            public string SourceId => "physics";
+            public string DisplayName => "Physics";
+            public IReadOnlyList<string> ScopeKinds { get; } = ["subject"];
+            public ImmersiveReading.Core.Knowledge.KnowledgeGating Gating => ImmersiveReading.Core.Knowledge.KnowledgeGating.None;
+            public Task<IReadOnlyList<ImmersiveReading.Core.Knowledge.KnowledgeEntry>> QueryAsync(ImmersiveReading.Core.Knowledge.KnowledgeQuery query, CancellationToken ct)
+                => Task.FromResult<IReadOnlyList<ImmersiveReading.Core.Knowledge.KnowledgeEntry>>(
+                    [new("physics", query.Scope, "c1", "concept", "Newton's laws", "Force equals mass times acceleration.")]);
+        }
+
+        public ValueTask OnEnableAsync(IPluginHostContext context, CancellationToken ct = default)
+        {
+            context.RegisterKnowledgeSource(new Physics());
+            return ValueTask.CompletedTask;
+        }
+
+        public ValueTask OnDisableAsync(CancellationToken ct = default) => ValueTask.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class KnowledgeConsumerPlugin(string id) : IImmersivePlugin
+    {
+        private ImmersiveReading.Core.Knowledge.IKnowledgeHub? _hub;
+        public PluginManifest Manifest { get; } = new() { Id = id, Name = id, Version = "1.0.0", ReloadBehavior = PluginReloadBehavior.Hot };
+
+        public ValueTask OnEnableAsync(IPluginHostContext context, CancellationToken ct = default)
+        {
+            _hub = context.Knowledge;
+            return ValueTask.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<ImmersiveReading.Core.Knowledge.KnowledgeEntry>> AskAsync()
+            => _hub!.QueryAsync(new ImmersiveReading.Core.Knowledge.KnowledgeQuery(ImmersiveReading.Core.Knowledge.KnowledgeScope.Subject("physics"), "force"));
+
+        public ValueTask OnDisableAsync(CancellationToken ct = default) => ValueTask.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
     private sealed class TestSettings
     {
         public string EndpointUrl { get; set; } = "";

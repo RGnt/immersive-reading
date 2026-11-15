@@ -3,7 +3,7 @@ namespace ImmersiveReading.Core.Library;
 public sealed record StudyPackPdfArtifact(
     string FileName,
     string Title,
-    string Kind,          // "master" | "chapter-kanji" | "chapter-vocabulary"
+    string Kind,          // "master" | "chapter-kanji" | "chapter-vocabulary" | "chapter-grammar" | "chapter-function-words"
     string FullPath,
     string AppSchemeUrl,  // e.g. "ir-app://studypack/pdf/book-.../kanji-master.pdf"
     long SizeBytes

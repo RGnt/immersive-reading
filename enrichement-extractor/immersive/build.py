@@ -16,6 +16,14 @@ from .text_index import utf16_offsets, SentenceIndex
 from . import __version__
 
 
+DECK_KINDS = ("vocabulary", "particle", "auxiliary")
+
+
+def _deck_kind(value):
+    value = (value or "").strip().lower()
+    return value if value in DECK_KINDS else "vocabulary"
+
+
 def load_decks(paths):
     entries = {}
     for path in paths:
@@ -38,6 +46,10 @@ def load_decks(paths):
                                     "furigana": row.get("ReadingFurigana", ""), "definitions": row["Definitions"],
                                     "jmdict_id": row.get("JmDictWordId") or None,
                                     "pitch_positions": row.get("PitchPositions", ""),
+                                    # Optional columns written by the Deck Builder plugin. Particles and auxiliaries are
+                                    # function words: they are printed in their own section, not in the vocabulary sets.
+                                    "kind": _deck_kind(row.get("Kind")), "part_of_speech": (row.get("PartOfSpeech") or "").strip(),
+                                    "usage_note": (row.get("UsageNote") or "").strip(),
                                     "deck_occurrences": row.get("Occurences", row.get("Occurrences", "")),
                                     "frequency_rank": row.get("ReadingFrequency", ""),
                                     "sources": [], "deck_records": [], "deck_examples": [], "occurrences": []}
@@ -299,6 +311,22 @@ def build_data(folder, kanjidic_path, *, cancel=None, yomitan_paths=None, worker
         entries = [entry for entry in entries if entry["occurrences"]]
     book["vocabulary"] = entries
     book["kanji"] = list(kanji.values())
+    from . import deck_grammar
+    grammar_path = deck_grammar.path_for(folder)
+    if grammar_path.exists():
+        check_cancelled(cancel)
+        loaded = deck_grammar.load(grammar_path)
+        merged, dropped = deck_grammar.merge(book, loaded)
+        for entry in merged:
+            grammar.setdefault(entry["id"], entry)
+        notes = deck_grammar.function_notes(loaded)
+        for entry in entries:
+            if entry.get("kind", "vocabulary") != "vocabulary" and not entry.get("usage_note") and entry["word"] in notes:
+                entry["usage_note"] = notes[entry["word"]]
+        book["deck_grammar"] = dict(deck_grammar.provenance(grammar_path, loaded), points_in_file=len(loaded["grammar"]),
+                                    points_verified=len(merged), dropped=dropped)
+        for chapter in book["chapters"]:
+            chapter["new_grammar_ids"] = [g["id"] for g in grammar.values() if g["first_chapter_id"] == chapter["id"]]
     book["grammar"] = list(grammar.values())
     book["grammar_coverage"] = {"method": "curated finite rules; candidates require contextual review",
                                 "rules_available": len(grammar_rules), "exhaustive": False,

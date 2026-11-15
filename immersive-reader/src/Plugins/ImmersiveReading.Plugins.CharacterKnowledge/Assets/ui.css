@@ -1,0 +1,84 @@
+/* Character Knowledge plugin styles. Self-contained: host Tailwind does not scan plugin sources. */
+.ck-root { display: flex; flex-direction: column; gap: 12px; font-size: 12px; color: var(--text-primary); max-width: 820px; }
+.ck-col { display: flex; flex-direction: column; gap: 10px; }
+.ck-row { display: flex; align-items: center; gap: 8px; }
+.ck-between { justify-content: space-between; }
+.ck-wrap { flex-wrap: wrap; }
+.ck-right { text-align: right; }
+.ck-muted { color: var(--text-muted); }
+.ck-title { font-weight: 600; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }
+.ck-sub { font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); margin-top: 8px; }
+.ck-mono { font-family: ui-monospace, monospace; }
+.ck-ok { color: var(--success-text); }
+.ck-warn { color: var(--warning-text); font-weight: 700; }
+.ck-err { color: var(--danger-text); }
+
+.ck-inset { background: var(--shade); border: 1px solid var(--border-color); border-radius: var(--radius-control); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.ck-warnbox { display: flex; gap: 8px; align-items: flex-start; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: var(--radius-control); padding: 10px; color: var(--warning-text); }
+.ck-note { display: flex; align-items: center; gap: 6px; background: rgba(14, 165, 233, 0.08); border: 1px solid rgba(14, 165, 233, 0.3); border-radius: var(--radius-control); padding: 6px 10px; color: var(--text-muted); }
+
+.ck-input, .ck-select { background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-control); padding: 6px 10px; font-size: 12px; color: var(--text-primary); min-width: 0; }
+.ck-input:focus, .ck-select:focus { outline: none; border-color: var(--accent-color); }
+
+.ck-btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: var(--radius-control); font-size: 11.5px; font-weight: 600; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); cursor: pointer; }
+.ck-btn:hover:not(:disabled) { border-color: var(--accent-color); }
+.ck-btn:disabled { opacity: .45; cursor: not-allowed; }
+.ck-btn.ck-primary { background: #0369a1; border-color: #0369a1; color: #fff; }
+.ck-btn.ck-danger { background: #be123c; border-color: #be123c; color: #fff; }
+.ck-btn.ck-active { border-color: var(--accent-color); background: rgba(14, 165, 233, 0.15); }
+.ck-tabs { border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
+
+.ck-bar { height: 6px; border-radius: var(--radius-control); background: var(--hover-bg-strong); overflow: hidden; }
+.ck-bar-fill { height: 100%; background: #0ea5e9; transition: width .4s; }
+.ck-log { white-space: pre-wrap; font-size: 11px; margin: 4px 0 0; max-height: 10rem; overflow: auto; }
+
+.ck-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.ck-table th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 3px 6px; }
+.ck-table td { padding: 3px 6px; border-top: 1px solid var(--border-color); }
+.ck-table tr.ck-current td { background: rgba(14, 165, 233, 0.08); }
+
+.ck-split { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 14px; align-items: start; }
+.ck-chars { display: flex; flex-direction: column; gap: 3px; max-height: 24rem; overflow-y: auto; }
+.ck-char { text-align: left; padding: 5px 9px; border-radius: var(--radius-control); border: 1px solid transparent; background: transparent; color: var(--text-primary); cursor: pointer; font-size: 12px; }
+.ck-char:hover { background: var(--hover-bg); }
+.ck-char.ck-active { background: rgba(14, 165, 233, 0.15); border-color: rgba(14, 165, 233, 0.4); }
+
+.ck-profile { display: flex; flex-direction: column; gap: 6px; }
+.ck-traits { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 4px 0; }
+.ck-traits dt { color: var(--text-muted); text-transform: capitalize; }
+.ck-traits dd { margin: 0; }
+.ck-list { margin: 2px 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
+
+/* events and items (spec 22) */
+.ck-event { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border-color); border-radius: var(--radius-control); background: rgba(0, 0, 0, 0.18); }
+.ck-event.ck-nested { margin: 4px 0 0 14px; background: var(--hover-bg); border-left: 3px solid rgba(14, 165, 233, 0.5); }
+.ck-kind { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; background: rgba(148, 163, 184, 0.18); color: var(--text-muted); }
+.ck-kind-battle { background: rgba(244, 63, 94, 0.2); color: var(--danger-text); }
+.ck-kind-hunt { background: rgba(249, 115, 22, 0.2); color: var(--warning-text); }
+.ck-kind-dungeon { background: rgba(168, 85, 247, 0.2); color: var(--violet-text); }
+.ck-kind-quest { background: rgba(14, 165, 233, 0.2); color: var(--info-text); }
+.ck-kind-item { background: rgba(234, 179, 8, 0.2); color: var(--warning-text); }
+.ck-kind-growth { background: rgba(34, 197, 94, 0.2); color: var(--success-text); }
+.ck-kind-travel, .ck-kind-meeting, .ck-kind-group { background: rgba(20, 184, 166, 0.2); color: var(--info-text); }
+.ck-kind-revelation { background: rgba(236, 72, 153, 0.2); color: var(--danger-text); }
+.ck-kind-death { background: rgba(100, 116, 139, 0.3); color: var(--text-primary); }
+.ck-kind-slot { background: rgba(234, 179, 8, 0.15); color: var(--warning-text); min-width: 62px; text-align: center; }
+
+.ck-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; border-radius: var(--radius-control); font-size: 11px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); }
+button.ck-chip:not(:disabled) { cursor: pointer; }
+button.ck-chip:not(:disabled):hover { border-color: var(--accent-color); }
+.ck-chip:disabled { opacity: 1; cursor: default; }
+.ck-chip-character { border-color: rgba(14, 165, 233, 0.45); }
+.ck-chip-item { border-color: rgba(234, 179, 8, 0.5); }
+.ck-chip-creature { border-color: rgba(244, 63, 94, 0.45); }
+.ck-chip-location { border-color: rgba(168, 85, 247, 0.45); }
+.ck-chip-organization { border-color: rgba(20, 184, 166, 0.45); }
+
+.ck-item { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; border-top: 1px solid var(--border-color); }
+.ck-item:first-of-type { border-top: 0; }
+.ck-item-head { display: flex; align-items: center; gap: 8px; background: transparent; border: 0; padding: 2px 0; color: var(--text-primary); cursor: pointer; text-align: left; font-size: 12px; }
+.ck-item-head:hover b { text-decoration: underline; }
+
+.ck-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: var(--radius-control); font-size: 10.5px; font-weight: 600; }
+.ck-tag-new { background: rgba(34, 197, 94, 0.18); color: var(--success-text); }
+.ck-tag-old { background: rgba(148, 163, 184, 0.2); color: var(--text-muted); }

@@ -22,9 +22,18 @@ def _verify_pdfs(b, output, data_path, *, previews, cancel, preview_root):
     learning_sets = b['learning_sets']
     set_words = [w['word'] for group in learning_sets for w in group['words']]
     pdfs = sorted((output / 'pdf' / b['id']).glob('*.pdf'))
-    require(len(pdfs) == 2 * len(b['chapters']) + 3, 'Expected chapter kanji/vocabulary PDFs and three masters')
+    from .study_data import grouped_vocabulary, grammar_chapters, function_word_chapters
+    has_function_words = any(g.get('kind', 'vocabulary') != 'vocabulary' and g['occurrences'] for g in grouped_vocabulary(b).values())
+    # Grammar and particle booklets exist only for chapters that introduce at least one entry (no empty booklets).
+    grammar_booklets, function_booklets = grammar_chapters(b), function_word_chapters(b)
+    require(len(pdfs) == 2 * len(b['chapters']) + 3 + has_function_words + len(grammar_booklets) + len(function_booklets),
+            'Expected chapter kanji/vocabulary/grammar/particle PDFs and the master PDFs')
     expected_names = {f'{c["id"]}-{kind}.pdf' for c in b['chapters'] for kind in ('kanji', 'vocabulary')}
+    expected_names.update({f'{cid}-grammar.pdf' for cid in grammar_booklets})
+    expected_names.update({f'{cid}-function-words.pdf' for cid in function_booklets})
     expected_names.update({'kanji-master.pdf', 'vocabulary-master.pdf', 'grammar-master.pdf'})
+    if has_function_words:
+        expected_names.add('function-words-master.pdf')
     require({p.name for p in pdfs} == expected_names, 'Missing or unexpected PDF filenames', output / 'pdf' / b['id'])
     require(all((p.suffix == '.pdf' for p in (output / 'pdf' / b['id']).iterdir())), 'Non-PDF files in PDF directory')
     require(not any((p.stem.startswith('set-') for p in pdfs)), 'Per-set vocabulary PDFs remain')

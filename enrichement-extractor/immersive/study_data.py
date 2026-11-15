@@ -40,6 +40,7 @@ class StudyData:
     grammar: dict
     learning_sets: list
     context: dict | None
+    function_words: dict = field(default_factory=dict)
 
     def learning_set_records(self):
         return [{"id": g["id"], "number": g["number"], "size": len(g["cards"]),
@@ -60,13 +61,19 @@ def prepare_study_data(book, *, include_context=True, cancel=None, worker=None):
             return prepare_study_data(book, include_context=include_context, cancel=cancel, worker=active)
     worker.check()
     indexes = StudyIndexes.from_book(book)
-    vocabulary, kanji, grammar = {}, {}, {}
+    vocabulary, kanji, grammar, function_words = {}, {}, {}, {}
     for chapter in book["chapters"]:
         check_cancelled(cancel)
         cid = chapter["id"]
         vocabulary[cid] = vocab_cards(book, chapter, indexes=indexes, worker=worker)
         kanji[cid] = kanji_cards(book, chapter, indexes=indexes, worker=worker)
         grammar[cid] = grammar_cards(book, chapter, indexes=indexes, worker=worker)
+        function_words[cid] = vocab_cards(book, chapter, indexes=indexes, worker=worker, function_words=True)
+    function_number = 0
+    for cid in function_words:
+        for card in function_words[cid]:
+            function_number += 1
+            card["study_number"] = function_number
     sets = vocabulary_learning_sets(book, indexes=indexes, cards_by_chapter=vocabulary)
     numbered = {c["id"]: c for group in sets for c in group["cards"]}
     vocabulary = {cid: [numbered[c["id"]] for c in cards] for cid, cards in vocabulary.items()}
@@ -74,7 +81,7 @@ def prepare_study_data(book, *, include_context=True, cancel=None, worker=None):
     if include_context:
         from .context import contextual_cards
         context = {ch["id"]: contextual_cards(book, ch, indexes=indexes, cards=kanji[ch["id"]], cancel=cancel, worker=worker) for ch in book["chapters"]}
-    return StudyData(book["id"], indexes, vocabulary, kanji, grammar, sets, context)
+    return StudyData(book["id"], indexes, vocabulary, kanji, grammar, sets, context, function_words)
 
 
 def study_reader_data(book, study):
@@ -158,6 +165,10 @@ def grouped_vocabulary(book):
                      dictionary_entries=list({(d["dictionary_id"], d["bank"], d["row"]): d for v in members for d in v.get("dictionary_entries", [])}.values()),
                      dictionary_metadata=list({(d["dictionary_id"], d["bank"], d["row"]): d for v in members for d in v.get("dictionary_metadata", [])}.values()))
         entry["definition_candidates"] = list({d["id"]: d for v in members for d in v.get("definition_candidates", [])}.values())
+        # A spelling that is a real vocabulary entry anywhere stays vocabulary; only pure function words are set apart.
+        kinds = [v.get("kind", "vocabulary") for v in members]
+        entry["kind"] = "vocabulary" if "vocabulary" in kinds else kinds[0]
+        entry["usage_note"] = next((v["usage_note"] for v in members if v.get("usage_note")), "")
         combined[word] = entry
     return combined
 
@@ -176,7 +187,9 @@ def vocabulary_learning_sets(book, size=20, *, indexes=None, cards_by_chapter=No
             for i in range(0, len(cards), size)]
 
 
-def vocab_cards(book, chapter, *, indexes=None, worker=None):
+def vocab_cards(book, chapter, *, indexes=None, worker=None, function_words=False):
+    """New words of a chapter. Particles and auxiliaries (deck ``Kind``) are function words: they are excluded here and
+    returned instead when ``function_words`` is true, so printouts can list them in a section of their own."""
     indexes = indexes or StudyIndexes.from_book(book)
     entries = indexes.vocabulary
     groups = indexes.groups
@@ -187,6 +200,8 @@ def vocab_cards(book, chapter, *, indexes=None, worker=None):
         v = groups[entries[eid]["word"]]
         if v["first_chapter_id"] != chapter["id"] or v["word"] in seen:
             continue
+        if (v.get("kind", "vocabulary") != "vocabulary") != function_words:
+            continue
         seen.add(v["word"])
         occurrences = [o for o in v["occurrences"] if o["chapter_id"] == chapter["id"]]
         first_positions[v["id"]] = min((o["start"], o["end"]) for o in occurrences)
@@ -196,9 +211,12 @@ def vocab_cards(book, chapter, *, indexes=None, worker=None):
         plain = selection["text"]
         source = ("CSV · " if selection["source"] == "csv" else "First chapter occurrence · ") + str(selection.get("source_file") or "")
         cards.append({"id": v["id"], "title": v["word"], "reading": v["reading"], "meaning": v["definitions"],
-                      "meta": f'First appearance · {len(occurrences)} matched occurrence(s)',
+                      "meta": (f'{v.get("kind", "").title()} · ' if function_words else "") + f'First appearance · {len(occurrences)} matched occurrence(s)',
                       "example_highlight": example_highlight(s, highlight), "plain_example": plain, "source": source,
-                      "kind": "vocabulary", "details": "", "ruby": selected_example_ruby(book, selection, indexes, worker=worker),
+                      "kind": "function" if function_words else "vocabulary",
+                      "details": v.get("usage_note", "") if function_words else "",
+                      "function_kind": v.get("kind", "vocabulary") if function_words else None,
+                      "ruby": selected_example_ruby(book, selection, indexes, worker=worker),
                       "example_provenance": selection,
                       "dictionary_entries": v.get("dictionary_entries", []),
                       "dictionary_metadata": v.get("dictionary_metadata", [])})
@@ -242,14 +260,57 @@ def kanji_cards(book, chapter, *, indexes=None, worker=None):
     return cards
 
 
+# How many verbatim book sentences an LLM-written grammar point shows in printouts (the first one is always the first occurrence).
+LLM_EXAMPLES_SHOWN = 3
+
+
+def _extra_examples(book, indexes, entry, first):
+    """Further verbatim examples of an LLM grammar point: other sentences, in book order, never the sentence already shown."""
+    order = {c["id"]: i for i, c in enumerate(book["chapters"])}
+    shown = {first["sentence_id"]}
+    extras = []
+    for o in sorted(entry["occurrences"], key=lambda o: (order[o["chapter_id"]], o["start"], o["end"])):
+        if len(extras) >= LLM_EXAMPLES_SHOWN - 1:
+            break
+        if o["sentence_id"] in shown or o["sentence_id"] not in indexes.sentences:
+            continue
+        shown.add(o["sentence_id"])
+        s, c = indexes.sentences[o["sentence_id"]]
+        extras.append({"plain_example": s["text"], "example_highlight": example_highlight(s, o), "source": source_label(s), "ruby": example_ruby(s, c)})
+    return extras
+
+
+def function_word_chapters(book, indexes=None):
+    """Ids of the chapters that introduce at least one particle / auxiliary (what ``vocab_cards(function_words=True)`` returns)."""
+    indexes = indexes or StudyIndexes.from_book(book)
+    result = set()
+    for chapter in book["chapters"]:
+        for eid in chapter["vocabulary_ids"]:
+            v = indexes.groups[indexes.vocabulary[eid]["word"]]
+            if v["first_chapter_id"] == chapter["id"] and v.get("kind", "vocabulary") != "vocabulary":
+                result.add(chapter["id"])
+                break
+    return result
+
+
+def grammar_chapters(book, indexes=None):
+    """Ids of the chapters that introduce at least one grammar entry."""
+    indexes = indexes or StudyIndexes.from_book(book)
+    return {cid for cid, pairs in indexes.grammar_by_chapter.items() if pairs}
+
+
 def grammar_cards(book, chapter, *, indexes=None, worker=None):
     indexes = indexes or StudyIndexes.from_book(book)
     index = indexes.sentences
     result = []
     for g, o in indexes.grammar_by_chapter[chapter["id"]]:
         s, c = index[o["sentence_id"]]
+        llm = g.get("status") == "deck_llm_candidate"
         result.append({"id": g["id"], "kind": "grammar", "title": g["label"], "reading": "",
                        "meaning": g["meaning"], "details": g["note"],
-                       "meta": f'First detected here · {len(g["occurrences"])} candidate(s) in book · review in context',
-                       "example_highlight": example_highlight(s, o), "plain_example": s["text"], "source": source_label(s), "ruby": example_ruby(s, c, worker=worker)})
+                       "meta": (f'LLM-written explanation ({g.get("model") or "model"}) · {len(g["occurrences"])} example(s) found verbatim in the book · review in context'
+                                if g.get("status") == "deck_llm_candidate" else
+                                f'First detected here · {len(g["occurrences"])} candidate(s) in book · review in context'),
+                       "example_highlight": example_highlight(s, o), "plain_example": s["text"], "source": source_label(s), "ruby": example_ruby(s, c, worker=worker),
+                       "llm": llm, "extra_examples": _extra_examples(book, indexes, g, o) if llm else []})
     return result

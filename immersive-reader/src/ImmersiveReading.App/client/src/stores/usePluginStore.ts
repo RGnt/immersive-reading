@@ -6,6 +6,8 @@ import type {
   PluginDrawerRegistration,
   PluginToolbarActionRegistration,
   PluginBookTabRegistration,
+  PluginBookBadgeRegistration,
+  PluginSeriesActionRegistration,
   PluginSettingsPanelRegistration,
   PluginUiContext,
 } from '../sdk/types';
@@ -31,6 +33,8 @@ interface PluginStoreState {
   drawers: ScopedItem<PluginDrawerRegistration>[];
   toolbarActions: ScopedItem<PluginToolbarActionRegistration>[];
   bookTabs: ScopedItem<PluginBookTabRegistration>[];
+  bookBadges: ScopedItem<PluginBookBadgeRegistration>[];
+  seriesActions: ScopedItem<PluginSeriesActionRegistration>[];
   customSettingsPanels: Record<string, PluginSettingsPanelRegistration>;
 
   /** Live CSS overrides pushed by plugins into the reader iframe: pluginId -> styleId -> css. */
@@ -62,6 +66,8 @@ export const usePluginStore = create<PluginStoreState>((set, get) => ({
   drawers: [],
   toolbarActions: [],
   bookTabs: [],
+  bookBadges: [],
+  seriesActions: [],
   customSettingsPanels: {},
   readerStyles: {},
   uiErrors: {},
@@ -151,6 +157,10 @@ export const usePluginStore = create<PluginStoreState>((set, get) => ({
         set((s) => ({ toolbarActions: [...s.toolbarActions, { ...action, pluginId }] })),
       registerBookInfoTab: (tab) =>
         set((s) => ({ bookTabs: [...s.bookTabs, { ...tab, pluginId }] })),
+      registerBookBadge: (badge) =>
+        set((s) => ({ bookBadges: [...s.bookBadges, { ...badge, pluginId }] })),
+      registerSeriesAction: (action) =>
+        set((s) => ({ seriesActions: [...s.seriesActions, { ...action, pluginId }] })),
       registerCustomSettingsPanel: (panel) =>
         set((s) => ({
           customSettingsPanels: { ...s.customSettingsPanels, [pluginId]: panel },
@@ -207,6 +217,8 @@ export const usePluginStore = create<PluginStoreState>((set, get) => ({
         drawers: s.drawers.filter((d) => d.pluginId !== pluginId),
         toolbarActions: s.toolbarActions.filter((a) => a.pluginId !== pluginId),
         bookTabs: s.bookTabs.filter((t) => t.pluginId !== pluginId),
+        bookBadges: s.bookBadges.filter((b) => b.pluginId !== pluginId),
+        seriesActions: s.seriesActions.filter((a) => a.pluginId !== pluginId),
         customSettingsPanels: nextCustomPanels,
         readerStyles: nextReaderStyles,
         activeDrawerId: isActiveDrawerFromPlugin ? null : s.activeDrawerId,

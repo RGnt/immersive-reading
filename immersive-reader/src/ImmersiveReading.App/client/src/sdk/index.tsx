@@ -2,6 +2,8 @@ import React, { useEffect, useCallback } from 'react';
 import { rpc } from '../services/rpc';
 import { useReaderStore } from '../stores/useReaderStore';
 import { usePluginStore } from '../stores/usePluginStore';
+import { useLibraryStore } from '../stores/useLibraryStore';
+import { useShallow } from 'zustand/react/shallow';
 
 export * from './types';
 
@@ -50,15 +52,27 @@ export function setReaderStyle(pluginId: string, styleId: string, css: string | 
   usePluginStore.getState().setReaderStyle(pluginId, styleId, css);
 }
 
+// 2c. Library refresh. Call after an RPC changed book metadata/custom fields so the grid, badges and the
+// open Book Info dialog show the new values. Pass `bookId` to also reload that book's open detail.
+export async function refreshLibrary(bookId?: string): Promise<void> {
+  const lib = useLibraryStore.getState();
+  await lib.fetchBooks();
+  if (bookId && lib.isInspectorOpen && lib.activeBookDetail?.summary.bookId === bookId) {
+    await lib.inspectBook(bookId);
+  }
+}
+
 // 3. Active Reader Context Hook (Zero-Spoiler Safe)
 export function useActiveBook() {
-  return useReaderStore((s) => ({
+  // useShallow: the selector builds a new object on every call, and a store hook that sees a new snapshot each time re-renders forever
+  // (React error #185, "Maximum update depth exceeded"). Compared field by field, the snapshot only changes when a field does.
+  return useReaderStore(useShallow((s) => ({
     bookId: s.bookDetail?.summary.bookId ?? '',
     chapterIndex: s.currentChapterIndex,
     spineHref: s.currentSpineHref,
     viewportTokenId: 0,
     language: s.bookDetail?.summary.language ?? 'ja',
-  }));
+  })));
 }
 
 // 4. Interactive Linguistic Building Block (<EnrichedText />)
@@ -100,7 +114,7 @@ export const PluginPageLayout: React.FC<{
   children: React.ReactNode;
 }> = ({ title, subtitle, actions, children }) => (
   <div className="flex flex-col h-full w-full bg-[var(--bg-primary)] text-[var(--text-primary)]">
-    <header className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+    <header className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)]">
       <div>
         <h1 className="text-xl font-semibold">{title}</h1>
         {subtitle && <p className="text-sm text-[var(--text-secondary)]">{subtitle}</p>}
@@ -118,21 +132,21 @@ export const PluginDrawerShell: React.FC<{
   footer?: React.ReactNode;
   children: React.ReactNode;
 }> = ({ title, onClose, headerActions, footer, children }) => (
-  <aside className="flex flex-col h-full w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] border-l border-white/10 shadow-xl">
-    <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+  <aside className="flex flex-col h-full w-full bg-[var(--bg-secondary)] text-[var(--text-primary)] border-l border-[var(--border-color)] shadow-xl">
+    <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)]">
       <h2 className="font-medium text-sm tracking-wide uppercase opacity-80">{title}</h2>
       <div className="flex items-center gap-1.5">
         {headerActions}
         <button
           onClick={onClose}
-          className="p-1 rounded hover:bg-white/10 text-xs opacity-70 hover:opacity-100"
+          className="p-1 rounded hover:bg-[var(--hover-bg)] text-xs opacity-70 hover:opacity-100"
         >
           ✕
         </button>
       </div>
     </div>
     <div className="flex-1 overflow-y-auto p-4">{children}</div>
-    {footer && <div className="p-3 border-t border-white/10 bg-[var(--bg-primary)]">{footer}</div>}
+    {footer && <div className="p-3 border-t border-[var(--border-color)] bg-[var(--bg-primary)]">{footer}</div>}
   </aside>
 );
 
@@ -146,8 +160,8 @@ export const Button: React.FC<
   const sizes = size === 'sm' ? 'px-2.5 py-1.5 text-xs' : 'px-4 py-2 text-sm';
   const variants = {
     primary: 'bg-indigo-600 hover:bg-indigo-500 text-white',
-    secondary: 'bg-white/10 hover:bg-white/15 text-[var(--text-primary)]',
-    ghost: 'hover:bg-white/10 text-[var(--text-secondary)]',
+    secondary: 'bg-[var(--hover-bg)] hover:bg-[var(--hover-bg-strong)] text-[var(--text-primary)]',
+    ghost: 'hover:bg-[var(--hover-bg)] text-[var(--text-secondary)]',
     danger: 'bg-rose-600 hover:bg-rose-500 text-white',
   };
   return (

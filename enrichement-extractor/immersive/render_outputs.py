@@ -53,6 +53,7 @@ def _render_book(book, output, pdf_root, font_path, skip_pdf, kanjivg_archive, *
     save_json(data / "vocabulary-sets.json", {"book_id": book["id"], "set_size": 20, "sets": book["learning_sets"]})
     write_reader_data(book, output)
     chapter_rows, grammar_sections, grammar_groups = [], [], []
+    function_groups, function_sections = [], []
     all_words, all_kanji = {}, {}
     for chapter in book["chapters"]:
         check_cancelled(cancel)
@@ -85,14 +86,33 @@ def _render_book(book, output, pdf_root, font_path, skip_pdf, kanjivg_archive, *
                 (root / "chapters" / f'{cid}-{kind}.html').write_text(page(title, body, "../", kind.title(), nav), encoding="utf-8")
         gcards = study.grammar[cid]
         heading = f'{chapter["number"]:02d}  {chapter["title"]}'
+        chapter_booklets = []
+        if not skip_pdf:
+            # Printable chapter booklets for grammar (rule-based candidates and LLM-explained points) and for particles / auxiliaries,
+            # next to the kanji and vocabulary ones. A chapter that introduces none gets no file (no empty booklets).
+            for kind, name, cards_of_chapter in (("grammar", "grammar", gcards), ("function", "function-words", study.function_words.get(cid, []))):
+                if cards_of_chapter:
+                    write_master(pdf / f'{cid}-{name}.pdf', book, kind, [(heading, cards_of_chapter)], chapter=chapter, cancel=cancel, charts=charts)
+                    chapter_booklets.append((name, len(cards_of_chapter)))
+        def booklet_link(name, text, cid=cid, chapter_booklets=chapter_booklets):
+            # the chapter overview links the printable booklet when one was written, otherwise just states the count
+            return f'<a href="../../pdf/{book["id"]}/{cid}-{name}.pdf">{text} (PDF)</a>' if any(n == name for n, _ in chapter_booklets) else f'<span>{text}</span>'
         grammar_groups.append((heading, gcards))
+        fcards = study.function_words.get(cid, [])
+        function_groups.append((heading, fcards))
+        all_words.update((c["id"], c) for c in fcards)
         if include_html:
+            if fcards:
+                function_sections.append(f'<section><h2>{E(heading)}</h2><div class="grid">'+"".join(card_html(c) for c in fcards)+'</div></section>')
             grammar_sections.append(f'<section><h2>{E(heading)}</h2><div class="grid">'+"".join(card_html(c) for c in gcards)+('</div><p>No new patterns detected.</p>' if not gcards else '</div>')+'</section>')
-            chapter_rows.append(f'<div class="chapter-row"><strong>{E(heading)}</strong><a href="chapters/{cid}-kanji.html">{len(context[cid])} new kanji</a><a href="chapters/{cid}-vocabulary.html">{len(study.vocabulary[cid])} new words</a><span>{len(gcards)} grammar candidates</span></div>')
+            chapter_rows.append(f'<div class="chapter-row"><strong>{E(heading)}</strong><a href="chapters/{cid}-kanji.html">{len(context[cid])} new kanji</a><a href="chapters/{cid}-vocabulary.html">{len(study.vocabulary[cid])} new words</a>{booklet_link("grammar", f"{len(gcards)} grammar candidates")}'+(booklet_link("function-words", f"{len(fcards)} particles / function words") if fcards else '')+'</div>')
+    has_function_words = any(cards for _, cards in function_groups)
     if not skip_pdf:
         write_kanji_document(pdf / "kanji-master.pdf", book, metadata_dir=metadata, context_by_chapter=context, cancel=cancel, charts=charts)
         write_master(pdf / "grammar-master.pdf", book, "grammar", grammar_groups, cancel=cancel, charts=charts)
         write_master(pdf / "vocabulary-master.pdf", book, "vocabulary", [(set_heading(g), g["cards"]) for g in sets], cancel=cancel, charts=charts)
+        if has_function_words:
+            write_master(pdf / "function-words-master.pdf", book, "function", function_groups, cancel=cancel, charts=charts)
     if not include_html:
         return data
     pdf_link = f'../../pdf/{book["id"]}'
@@ -104,6 +124,8 @@ def _render_book(book, output, pdf_root, font_path, skip_pdf, kanjivg_archive, *
         vocab_body += f'<section id="{group["id"]}"><h2>{set_heading(group)}</h2>'+vocabulary_rows_html(group["cards"])+ '</section>'
     (root / "vocabulary.html").write_text(page("Vocabulary master", vocab_body, nav=overview_nav), encoding="utf-8")
     (root / "grammar.html").write_text(page("Grammar master", '<p class="note">Ordered by first detected appearance, grouped by chapter. Finite rules produce reviewable candidates; coverage is not exhaustive.</p>'+TOOLBAR+"".join(grammar_sections), nav='<a href="index.html">Book overview</a>'), encoding="utf-8")
+    if has_function_words:
+        (root / "function-words.html").write_text(page("Particles & function words", '<p class="note">Particles and auxiliary verbs, kept out of the vocabulary sets. Ordered by first appearance, grouped by chapter. Usage notes written by an LLM (if present in the deck) describe how the book uses each word.</p>'+TOOLBAR+"".join(function_sections), nav='<a href="index.html">Book overview</a>'), encoding="utf-8")
     unmatched = [v for v in study.indexes.groups.values() if not v["occurrences"]]
     review_cards = []
     for v in unmatched:
@@ -115,9 +137,11 @@ def _render_book(book, output, pdf_root, font_path, skip_pdf, kanjivg_archive, *
         (root / filename).write_text(page(title, TOOLBAR+'<div class="grid">'+"".join(card_html(c) for c in cards)+'</div>', nav='<a href="index.html">Book overview</a>'), encoding="utf-8")
     q = book["quality"]
     body = f'<p>{q["vocabulary_matched"]} / {q["vocabulary_total"]} vocabulary entries aligned · {len(book["kanji"])} unique kanji · {len(book["grammar"])} grammar candidates.</p>'
-    body += '<div class="toolbar"><a href="vocabulary.html">Vocabulary master / sets of 20</a><a href="dictionary.html">Word lookup</a><a href="kanji.html">Kanji lookup</a><a href="grammar.html">Grammar master</a>'
+    body += '<div class="toolbar"><a href="vocabulary.html">Vocabulary master / sets of 20</a><a href="dictionary.html">Word lookup</a><a href="kanji.html">Kanji lookup</a><a href="grammar.html">Grammar master</a>'+('<a href="function-words.html">Particles &amp; function words</a>' if has_function_words else '')
     if not skip_pdf:
         body += ''.join(f'<a href="{pdf_link}/{kind}-master.pdf">{kind.title()} master PDF</a>' for kind in ("kanji", "vocabulary", "grammar"))
+        if has_function_words:
+            body += f'<a href="{pdf_link}/function-words-master.pdf">Particles &amp; function words PDF</a>'
     if book.get("dictionary_sources"):
         notices = []
         for source in book["dictionary_sources"]:

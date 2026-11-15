@@ -2,6 +2,7 @@ using System.Text.Json;
 using ImmersiveReading.Core.Abstractions;
 using ImmersiveReading.Core.Extensions;
 using ImmersiveReading.Core.Plugins;
+using ImmersiveReading.Core.Prompts;
 using Microsoft.Data.Sqlite;
 using ImmersiveReading.Plugins.AiCompanion.Prompts;
 
@@ -56,6 +57,15 @@ public sealed class PersonaChatService
     private readonly ISnippetEnricher _snippetEnricher;
     private readonly ILanguagePluginResolver _languages;
     private readonly ILlmProvider _llmProvider;
+
+    /// <summary>The prompts in force (the user's edited copies included). The built-ins alone until the host attaches its catalog.</summary>
+    public IPromptCatalog Prompts { get; set; } = ChatPrompts.BuiltInsOnly;
+
+    /// <summary>What the characters remember about the user and the story (spec 24); null until the plugin is enabled in a host that has a knowledge hub.</summary>
+    public PersonaMemory? Memory { get; set; }
+
+    /// <summary>The learning of the last turn (it runs after the reply); tests and shutdown can wait for it, the chat never does.</summary>
+    internal Task LastMemoryWork { get; private set; } = Task.CompletedTask;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -292,14 +302,34 @@ public sealed class PersonaChatService
             chapterTargetWords: chapterTargetWords,
             maxTurnTargets: 5);
 
-        string voiceSamplesBlock = persona.VoiceSamples.Count > 0
+        // null: the template's own default line ("natural conversational tone") applies
+        string? voiceSamplesBlock = persona.VoiceSamples.Count > 0
             ? string.Join("\n", persona.VoiceSamples.Select(v => $"- {v}"))
-            : "（自然な会話口調）";
+            : null;
         string targetPlusOneList = string.Join(", ", vocabProfile.SelectedTurnTargets);
 
-        string systemPrompt = PersonaPrompts.BuildSystemPrompt(persona.Name, persona.RoleSummary, persona.SpeechStyle, voiceSamplesBlock, cappedChapterIndex, cappedTokenId);
+        string systemPrompt = Prompts.Render(ChatPrompts.PersonaSystem, new Dictionary<string, object?>
+        {
+            ["character_name"] = persona.Name,
+            ["role_summary"] = persona.RoleSummary,
+            ["speech_style"] = persona.SpeechStyle,
+            ["voice_samples"] = voiceSamplesBlock,
+            ["chapter_index"] = cappedChapterIndex,
+            ["token_id"] = cappedTokenId
+        });
 
-        string userPrompt = PersonaPrompts.BuildUserPrompt(storyContextSummary, targetPlusOneList, userMessage);
+        if (Memory is not null)
+        {
+            string memoryBlock = await Memory.BuildBlockAsync(persona, userMessage, cappedChapterIndex, ct).ConfigureAwait(false);
+            if (memoryBlock.Length > 0) systemPrompt += "\n\n" + memoryBlock;
+        }
+
+        string userPrompt = Prompts.Render(ChatPrompts.PersonaTurn, new Dictionary<string, object?>
+        {
+            ["story_context"] = storyContextSummary,
+            ["target_plus_one"] = targetPlusOneList,
+            ["user_message"] = userMessage
+        });
 
         // 3. Initial Candidate Reply from LLM
         var initialRequest = LlmRequestBuilder.Create()
@@ -310,6 +340,7 @@ public sealed class PersonaChatService
             .Build();
 
         var initialResp = await _llmProvider.CompleteStructuredAsync<PersonaReplyDto>(initialRequest, ct).ConfigureAwait(false);
+        RequireRealModel(initialResp.ModelId);
 
         string candidateReply = initialResp.Value.Reply ?? "";
 
@@ -326,7 +357,14 @@ public sealed class PersonaChatService
         {
             triggeredRewrite = true;
             string outOfBudgetList = string.Join(", ", initialAudit.OutOfBudgetLemmas);
-            string rewritePrompt = PersonaPrompts.BuildRewritePrompt(persona.Name, persona.SpeechStyle, outOfBudgetList, targetPlusOneList, candidateReply);
+            string rewritePrompt = Prompts.Render(ChatPrompts.PersonaRewrite, new Dictionary<string, object?>
+            {
+                ["character_name"] = persona.Name,
+                ["speech_style"] = persona.SpeechStyle,
+                ["out_of_budget"] = outOfBudgetList,
+                ["target_plus_one"] = targetPlusOneList,
+                ["candidate_reply"] = candidateReply
+            });
 
             var rewriteRequest = LlmRequestBuilder.Create()
                 .WithSystemPrompt(systemPrompt)
@@ -336,6 +374,7 @@ public sealed class PersonaChatService
                 .Build();
 
             var rewriteResp = await _llmProvider.CompleteStructuredAsync<PersonaReplyDto>(rewriteRequest, ct).ConfigureAwait(false);
+            RequireRealModel(rewriteResp.ModelId);
 
             finalReply = rewriteResp.Value.Reply ?? candidateReply;
             var rewrittenTokens = tokenizer.TokenizeParagraph(finalReply, []);
@@ -355,6 +394,16 @@ public sealed class PersonaChatService
             enrichedPersona.SyntheticChapterHref,
             finalAudit.UsedPlusOneLemmas,
             finalAudit.KnownRatio);
+
+        if (Memory is { } memory)
+        {
+            // learning from the message happens after the reply is saved and never delays or fails it
+            LastMemoryWork = Task.Run(async () =>
+            {
+                using var limit = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+                await memory.RememberFromMessageAsync(persona, chatId, userMessage, limit.Token).ConfigureAwait(false);
+            });
+        }
 
         return new PersonaTurnResult(
             ChatId: chatId,
@@ -426,5 +475,12 @@ public sealed class PersonaChatService
             MaxSpoilerChapter: r.IsDBNull(6) ? null : r.GetInt32(6),
             MaxSpoilerToken: r.IsDBNull(7) ? null : r.GetInt32(7),
             CreatedAtUtc: r.GetString(8));
+    }
+
+    /// <summary>The offline stand-in answers every message with the same canned line; a character that does that is a broken setup, so say so.</summary>
+    private static void RequireRealModel(string modelId)
+    {
+        if (modelId == Providers.OpenAiCompatibleLlmProvider.OfflineModelId)
+            throw new Providers.LlmEndpointException("No model answered: the server in Settings → AI is not reachable (the offline stand-in cannot hold a conversation). Check that it is running and that the address is right.");
     }
 }

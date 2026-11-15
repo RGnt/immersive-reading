@@ -15,8 +15,8 @@ def export_book(source, *, study=None, cancel=None):
     for ch in source["chapters"]:
         check_cancelled(cancel)
         cards = []
-        for collection in (study.vocabulary, study.kanji, study.grammar):
-            for c in collection[ch["id"]]:
+        for collection in (study.vocabulary, study.kanji, study.grammar, study.function_words):
+            for c in collection.get(ch["id"], []):
                 notes = c["details"]
                 if c["kind"] == "grammar":
                     notes = "Grammar candidate: review in context.\n" + notes

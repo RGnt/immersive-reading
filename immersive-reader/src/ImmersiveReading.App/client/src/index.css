@@ -4,7 +4,7 @@
 @import './styles/sidebar.css';
 @import './styles/workspace.css';
 @import './styles/inspector.css';
-@import './styles/jiten.css';
+@import './styles/book-info-modal.css';
 @import './styles/modals.css';
 @import './styles/reader.css';
 @import './styles/popover.css';
@@ -25,3 +25,41 @@ html, body, #root {
 * {
   box-sizing: border-box;
 }
+
+/* Light themes. Tailwind's black shades (bg-black/20 ...) were chosen to darken a dark surface a little; on a light surface the same
+   percentages turn panels grey and sink the text on them below readable contrast. The overlay backdrops (/60 and up) are left alone. */
+html[data-theme-mode="light"] .bg-black\/10 { background-color: rgb(0 0 0 / 0.03); }
+html[data-theme-mode="light"] .bg-black\/20 { background-color: rgb(0 0 0 / 0.05); }
+html[data-theme-mode="light"] .bg-black\/25 { background-color: rgb(0 0 0 / 0.06); }
+html[data-theme-mode="light"] .bg-black\/30 { background-color: rgb(0 0 0 / 0.07); }
+html[data-theme-mode="light"] .bg-black\/40 { background-color: rgb(0 0 0 / 0.08); }
+
+/* Light themes: the dark tinted panels (bg-red-950/40 ...) become light tints of the same hue, so their pale status text, darkened for light
+   themes, reads on them. */
+html[data-theme-mode="light"] :is([class~="bg-red-950/20"], [class~="bg-red-950/30"], [class~="bg-red-950/40"], [class~="bg-red-950/50"], [class~="bg-red-950/60"], [class~="bg-red-900/20"], [class~="bg-red-900/30"], [class~="bg-red-900/40"], [class~="bg-red-900/50"], [class~="bg-red-900/60"]) { background-color: rgb(239 68 68 / 0.12); }
+html[data-theme-mode="light"] :is([class~="bg-rose-950/20"], [class~="bg-rose-950/30"], [class~="bg-rose-950/40"], [class~="bg-rose-950/50"], [class~="bg-rose-950/60"], [class~="bg-rose-900/20"], [class~="bg-rose-900/30"], [class~="bg-rose-900/40"], [class~="bg-rose-900/50"], [class~="bg-rose-900/60"]) { background-color: rgb(244 63 94 / 0.12); }
+html[data-theme-mode="light"] :is([class~="bg-emerald-950/20"], [class~="bg-emerald-950/30"], [class~="bg-emerald-950/40"], [class~="bg-emerald-950/50"], [class~="bg-emerald-950/60"], [class~="bg-emerald-900/20"], [class~="bg-emerald-900/30"], [class~="bg-emerald-900/40"], [class~="bg-emerald-900/50"], [class~="bg-emerald-900/60"]) { background-color: rgb(16 185 129 / 0.12); }
+html[data-theme-mode="light"] :is([class~="bg-amber-950/20"], [class~="bg-amber-950/30"], [class~="bg-amber-950/40"], [class~="bg-amber-950/50"], [class~="bg-amber-950/60"], [class~="bg-amber-900/20"], [class~="bg-amber-900/30"], [class~="bg-amber-900/40"], [class~="bg-amber-900/50"], [class~="bg-amber-900/60"]) { background-color: rgb(245 158 11 / 0.12); }
+html[data-theme-mode="light"] :is([class~="bg-sky-950/20"], [class~="bg-sky-950/30"], [class~="bg-sky-950/40"], [class~="bg-sky-950/50"], [class~="bg-sky-950/60"], [class~="bg-sky-900/20"], [class~="bg-sky-900/30"], [class~="bg-sky-900/40"], [class~="bg-sky-900/50"], [class~="bg-sky-900/60"]) { background-color: rgb(14 165 233 / 0.12); }
+html[data-theme-mode="light"] :is([class~="bg-purple-950/20"], [class~="bg-purple-950/30"], [class~="bg-purple-950/40"], [class~="bg-purple-950/50"], [class~="bg-purple-950/60"], [class~="bg-purple-900/20"], [class~="bg-purple-900/30"], [class~="bg-purple-900/40"], [class~="bg-purple-900/50"], [class~="bg-purple-900/60"]) { background-color: rgb(168 85 247 / 0.12); }
+html[data-theme-mode="light"] :is([class~="bg-indigo-950/20"], [class~="bg-indigo-950/30"], [class~="bg-indigo-950/40"], [class~="bg-indigo-950/50"], [class~="bg-indigo-950/60"], [class~="bg-indigo-900/20"], [class~="bg-indigo-900/30"], [class~="bg-indigo-900/40"], [class~="bg-indigo-900/50"], [class~="bg-indigo-900/60"]) { background-color: rgb(99 102 241 / 0.12); }
+html[data-theme-mode="light"] :is([class~="bg-orange-950/20"], [class~="bg-orange-950/30"], [class~="bg-orange-950/40"], [class~="bg-orange-950/50"], [class~="bg-orange-950/60"], [class~="bg-orange-900/20"], [class~="bg-orange-900/30"], [class~="bg-orange-900/40"], [class~="bg-orange-900/50"], [class~="bg-orange-900/60"]) { background-color: rgb(249 115 22 / 0.12); }
+
+/* Inside a dialog the controls follow the same sharper look; circles and pills (rounded-full) are left alone. */
+.modal-surface :is(.rounded, .rounded-md, .rounded-lg, .rounded-xl, .rounded-2xl) { border-radius: var(--radius-control); }
+
+/* Narrow, quiet scroll bars. macOS (html.ir-mac) keeps its own overlay bars: they are already thin and fade away when idle, and a styled
+   ::-webkit-scrollbar would make them permanent. The thumb is a faint tint of the text colour; the track is invisible. */
+html:not(.ir-mac) ::-webkit-scrollbar { width: 8px; height: 8px; }
+html:not(.ir-mac) ::-webkit-scrollbar-track { background: transparent; }
+html:not(.ir-mac) ::-webkit-scrollbar-corner { background: transparent; }
+html:not(.ir-mac) ::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--text-muted) 38%, transparent);
+  border: 2px solid transparent;           /* 2px of nothing on each side: the visible bar is 4px wide */
+  background-clip: padding-box;
+  border-radius: 0;
+}
+html:not(.ir-mac) ::-webkit-scrollbar-thumb:hover { background-color: color-mix(in srgb, var(--text-muted) 65%, transparent); }
+
+/* Tailwind's plain `rounded` is a fixed 0.25rem and ignores the scale above. */
+.rounded { border-radius: var(--radius-sm); }

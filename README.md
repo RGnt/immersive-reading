@@ -1,135 +1,190 @@
-# Immersive Reading Workspace
+# Immersive Reading
 
-This workspace houses the **Immersive Reading** ecosystem for local, source-linked Japanese reading, dictionary lookups, study-pack generation, and AI-assisted reading comprehension.
+An offline-first **EPUB library manager, Japanese reader, and study-pack ecosystem** combining a native **.NET 10 + Photino.NET** desktop application, an **offline deterministic Python study-pack & PDF generator**, and an optional **spoiler-gated character knowledge graph** builder.
+
+**Jump to what you need:**
+1. [Using the App (End Users)](#1-using-the-app-end-users) — Download, launch, import books/dictionaries, and start reading.
+2. [Building from Source (Self-Hosting & Packaging)](#2-building-from-source-self-hosting--packaging) — Prerequisites, compiling the app & frontend, and building portable releases.
+3. [Developer Information](#3-developer-information) — Architecture, repository layout, test suites, self-tests, and technical docs.
 
 ---
 
-## Quick Start
+## 1. Using the App (End Users)
 
-### 1. Launch the Desktop Reader & Library Application (.NET 10 + Photino.NET)
+If you just want to download and use **Immersive Reading**, grab a pre-compiled release for your platform from **GitHub Releases**. Every release is self-contained with all required runtime files included — **you do not need the `.NET` SDK, `Node.js`, or any build tools**.
+
+### Available Release Packages
+* **Windows (64-bit):** `immersive-reader-*-win-x64.zip`
+  * *Requires:* Windows 10 (1809+) or Windows 11 with Microsoft Edge WebView2 Runtime (already installed on modern Windows).
+* **macOS (Apple Silicon):** `immersive-reader-*-osx-arm64.tar.gz`
+* **Linux (64-bit):** `immersive-reader-*-linux-x64.tar.gz`
+  * *Requires:* WebKitGTK (standard on most desktop distributions).
+
+### How to Run
+1. Download the archive for your platform from **Releases** and extract it to any folder (for example, `Documents/ImmersiveReading`).
+2. Launch the application:
+   * **Windows:** Double-click **`ImmersiveReading.App.exe`** (or **`START-READER.bat`** if using a local portable build).
+   * **macOS:** Double-click **`START-READER.command`** (or run `./ImmersiveReading.App` from Terminal).
+   * **Linux:** Run `./ImmersiveReading.App` inside the extracted `immersive-reader/` folder.
+
+### First-Time Setup & Core Features
+1. **Import Books:** Drag and drop `.epub` files directly onto the library window, or use **Scan Folder** to index large collections (tested for 24,000+ books).
+2. **Import Dictionaries (`Ctrl+,`):** Open **Settings** -> **Dictionaries** to import local **Yomitan** (format-3 `.zip`), **KANJIDIC2**, and **KanjiVG** stroke-order resources for sub-5ms in-reader popovers.
+3. **Read & Navigate:**
+   * Toggle **Vertical (`vertical-rl`)** / **Horizontal** text with `v`.
+   * Cycle **Furigana** modes (`All` / `Uncommon` / `Author Only` / `Hover` / `Off`) with `f`.
+   * Use **Vim-style motions** (`j`/`k`/`h`/`l`/`w`/`b`/`e`, `gg`/`G`), search (`Ctrl+F`), and bookmarks (`Ctrl+B`). Press **`?`** anytime in the reader for the full shortcut cheat sheet.
+   * Mark word learning states (`1`–`4`) and mine sentences to **Anki** (`m`, requires AnkiConnect running locally).
+4. **Optional Integrations (Configurable in `Ctrl+,` Settings):**
+   * **AI Companion & Character Knowledge:** Connect a local OpenAI-compatible LLM server (such as Ollama or FreeToken) for spoiler-free comprehension quizzes, $n+1$ persona chat, and character/story knowledge graphs.
+   * **Offline Study Packs & Printable A4 PDFs:** If you have Python 3.12+ configured, generate chapter/master vocabulary, kanji, and grammar study packs and printable A4 PDFs directly from the app.
+5. **Your Data:** All library metadata, reading progress, vocabulary states, and covers are stored locally in `.library-data/` alongside the app (or your configured data directory).
+
+> For a full walkthrough of every screen, shortcut, and feature, see the **[User Guide (`USERGUIDE.md`)](USERGUIDE.md)**.
+
+---
+
+## 2. Building from Source (Self-Hosting & Packaging)
+
+Follow these steps if you want to clone the repository, compile the application yourself, or package a portable release.
+
+### Prerequisites
+* **[.NET 10 SDK](https://dotnet.microsoft.com/)** (`10.0.302` or compatible, see [`immersive-reader/global.json`](immersive-reader/global.json))
+* **[Node.js](https://nodejs.org/) (LTS 22+) & npm** — required to compile the React 19 + TypeScript + Vite frontend and plugin UI bundles
+* **Optional — Python >= 3.12** (with [`uv`](https://docs.astral.sh/uv/) or `pip`) — only needed if you want to run the offline study-pack/PDF generator ([`enrichement-extractor/`](enrichement-extractor)) or the character knowledge graph builder ([`knowledge-graph/`](knowledge-graph))
+
+### Clone & Build the Desktop Application
 ```powershell
-cd k:\immersive-reading\immersive-reader
+git clone <repository-url>
+cd immersive-reading
+
+# 1. Install frontend dependencies and build plugin UIs + React client
+cd immersive-reader\src\ImmersiveReading.App\client
+npm ci
+npm run build:plugins
+npm run build
+
+# 2. Build and run the .NET 10 desktop application
+cd ..\..\..
 dotnet run --project src\ImmersiveReading.App
 ```
 
-### 2. Run Test Suites & Automated Verifications
+### Build a Portable Self-Contained Release
+* **Windows x64 (automated packager script):**
+  ```powershell
+  .\scripts\package_windows.ps1
+  ```
+  Produces a self-contained portable folder in `dist/ImmersiveReading-win-x64/` and a ready-to-share archive at `dist/ImmersiveReading-win-x64.zip` (and verifies the binary with `--verify-reader`). Pass `-SkipVerify` to skip the post-publish smoke check.
+
+* **Manual `dotnet publish` (Windows / Linux / macOS):**
+  Ensure the React client is built first (`npm run build`), then publish for your target RID (`win-x64`, `linux-x64`, or `osx-arm64`):
+  ```powershell
+  dotnet publish immersive-reader/src/ImmersiveReading.App/ImmersiveReading.App.csproj `
+    -c Release -r win-x64 --self-contained true `
+    -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
+    -p:BuildReactClient=false -o ./dist/immersive-reader
+  ```
+
+### Optional: Set Up Python Subprojects
+* **Offline Study-Pack & PDF Pipeline (`enrichement-extractor/`):**
+  ```powershell
+  cd enrichement-extractor
+  uv venv --python 3.12 .venv
+  # Base (reader JSON + HTML companion):
+  uv pip install --python .venv\Scripts\python.exe -e .
+  # With printable A4 PDF support (reportlab, pymupdf, fonttools, pillow):
+  uv pip install --python .venv\Scripts\python.exe -e ".[print]"
+  ```
+* **Character Knowledge Graph (`knowledge-graph/`):**
+  ```powershell
+  cd knowledge-graph
+  uv venv --python 3.12 .venv
+  uv pip install --python .venv\Scripts\python.exe -e .
+  ```
+
+---
+
+## 3. Developer Information
+
+### Architecture at a Glance
+The workspace is divided into three cooperative components linked by deterministic Book IDs (`book-<16 hex>` derived from `sha256(epub_bytes)[0..16]`):
+
+| Component | Stack | Role |
+| :--- | :--- | :--- |
+| **[`immersive-reader/`](immersive-reader)** | .NET 10, Photino.NET, React 19, TS, Tailwind, SQLite (WAL + FTS5), AngleSharp, MeCab.DotNet | Interactive desktop reader, high-scale library manager, custom `ir-book://` pre-render DOM enrichment, sub-5ms dictionary lookup, AnkiConnect mining, and modular plugin host (`IImmersivePlugin` + `@ir/sdk` UI slots). |
+| **[`enrichement-extractor/`](enrichement-extractor)** | Python >= 3.12, SudachiPy, ReportLab, PyMuPDF | **100% offline, zero-LLM** deterministic EPUB analysis, 20-word learning sets, kanji context, HTML companion, and A4 PDF generation with atomic `.publication/` staged releases. |
+| **[`knowledge-graph/`](knowledge-graph)** | Python >= 3.12, NetworkX | **Separate LLM-assisted project** that builds spoiler-gated character, relationship, event, and item graphs per series/chapter via an OpenAI-compatible endpoint. Never imported by `enrichement-extractor/`. |
+
+### Repository Structure
+```text
+immersive-reading/
+├── README.md                          # Workspace overview (this file)
+├── USERGUIDE.md                       # End-user manual
+├── DEVELOPER_GUIDE.md                 # Developer onboarding, runtime flows, and quick-jump index
+├── LLM-WIKI.md                        # Master architectural reference & invariants
+├── AGENTS.md                          # Rules and hard invariants for AI coding agents
+├── scripts/
+│   └── package_windows.ps1            # Self-contained Windows x64 release packager
+├── specs/                             # Architecture specs, plugin specs, and Gherkin BDD features
+├── wiki/                              # Modular topic pages for enrichement-extractor & .NET architecture
+├── immersive-reader/                  # .NET 10 + Photino.NET Desktop Application
+│   ├── ImmersiveReading.sln
+│   ├── global.json
+│   ├── src/
+│   │   ├── ImmersiveReading.Core/         # Abstractions, domain models, EPUB utilities, plugin contracts
+│   │   ├── ImmersiveReading.Library/      # LibraryManager, SQLite, metadata/bulk edits, flashcards, Python bridge
+│   │   ├── ImmersiveReading.Enrichment/   # AngleSharpDomEnricher, BookSchemeHandler, chapter token cache
+│   │   ├── ImmersiveReading.Dictionaries/ # DictionaryLookupEngine, deinflection, Yomitan/Kanji importers
+│   │   ├── ImmersiveReading.Knowledge/    # KnowledgeHub & user memory source
+│   │   ├── ImmersiveReading.App/          # Photino host, DI composition, JSON-RPC dispatcher, React client (client/)
+│   │   └── Plugins/
+│   │       ├── ImmersiveReading.Plugins.Japanese/           # MeCab tokenizer, ruby aligner, Python stages
+│   │       ├── ImmersiveReading.Plugins.AiCompanion/        # Spoiler-free quizzes & n+1 persona chat
+│   │       ├── ImmersiveReading.Plugins.CharacterKnowledge/ # In-app character/story knowledge browser & builder
+│   │       ├── ImmersiveReading.Plugins.PosHighlighter/     # Part-of-speech DOM highlighter & color palettes
+│   │       ├── ImmersiveReading.Plugins.DeckBuilder/        # Deck building plugin
+│   │       └── ImmersiveReading.Plugins.JitenMoe/           # 1-click jiten.moe metadata & difficulty ratings
+│   └── tests/                         # xUnit test projects (Core, Dictionaries, Enrichment, App)
+├── enrichement-extractor/             # Offline deterministic Python study-pack & PDF pipeline
+│   ├── pyproject.toml
+│   ├── immersive/                     # Core package modules, schemas, and pipeline runner
+│   └── tests/                         # unittest regression & integration suite
+└── knowledge-graph/                   # Spoiler-gated character & story knowledge graph builder
+    ├── pyproject.toml
+    ├── immersive_knowledge/
+    └── tests/
+```
+
+### Running Tests & Automated Verifications
 ```powershell
-# Run all .NET 10 xUnit tests (Phases 1–5 Gherkin specifications)
-cd k:\immersive-reading\immersive-reader
+# 1. .NET 10 xUnit test suite
+cd immersive-reader
 dotnet test ImmersiveReading.sln
 
-# Run desktop UI & reader verification self-tests
+# 2. Desktop headless / Photino self-tests
 dotnet run --project src\ImmersiveReading.App -- --smoke-test
 dotnet run --project src\ImmersiveReading.App -- --verify-reader
 dotnet run --project src\ImmersiveReading.App -- --verify-ui
 
-# Run all Python study pipeline tests (134 regression & unit tests)
-cd k:\immersive-reading\enrichement-extractor
+# 3. Frontend typecheck, build & lint
+cd src\ImmersiveReading.App\client
+npm run lint
+npm run build
+
+# 4. Python study pipeline tests
+cd ..\..\..\..\enrichement-extractor
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+
+# 5. Python knowledge-graph tests
+cd ..\knowledge-graph
 .venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-### 3. Build Portable Windows Release Package (.ZIP)
-```powershell
-.\scripts\package_windows.ps1
-```
-Builds a 100% self-contained Windows x64 release in `dist/ImmersiveReading-win-x64/` and packages it into `dist/ImmersiveReading-win-x64.zip` (~50 MB, including native SQLite, MeCab dictionaries, WebView2 host, and complete UI). Recipients do not need to install the .NET SDK or runtime.
-
----
-
-## Architecture at a Glance
-
-The ecosystem is divided into two cooperative projects linked by deterministic Book IDs (`book-<16 hex>` derived from `sha256(epub_bytes)[0..16]`):
-
-| Component | Technology | Primary Role |
-| :--- | :--- | :--- |
-| **[`immersive-reader/`](immersive-reader)** | .NET 10, Photino.NET, SQLite (WAL+FTS5), AngleSharp, MeCab.DotNet | **Interactive Desktop Reader & High-Scale Library (24k+ books)**.<br>• Full-width 2-column layout with Book Info modal, 1-click jiten.moe metadata & difficulty ratings.<br>• Nested virtual folders, tags, inheritable custom fields, multi-select drag-and-drop, and empty folder pruning.<br>• Distraction-free reader with Vim motion navigation (`j`/`k`/`h`/`l`/`w`/`b`/`e`/`m`/`f`/`v`/`gg`/`G`), vertical/horizontal layout, and dynamic furigana modes.<br>• On-the-fly, pre-render `<ruby>` furigana and token span enrichment via custom `ir-book://` scheme.<br>• Sub-5ms indexed SQLite dictionary popover (Yomitan format-3, KANJIDIC2, KanjiVG, rule deinflector).<br>• 1-click Anki sentence mining preserving untranslated story sentences.<br>• AI Companion plugin: zero-spoiler comprehension quizzes and $n+1$ vocabulary-constrained persona chat.<br>• Centralized Global Configuration (`Ctrl+,`) with live CSS theming. |
-| **[`enrichement-extractor/`](enrichement-extractor)** | Python >= 3.12, SudachiPy, ReportLab, PyMuPDF | **Offline Batch Study-Pack & Printable PDF Generator**.<br>• 100% offline, deterministic linguistic analysis.<br>• 20-word ordered learning sets (`vocabulary-sets.json`) and kanji context cards.<br>• Printable A4 master and chapter PDFs (`kanji-master.pdf`, `vocabulary-master.pdf`, `grammar-master.pdf`).<br>• Atomic staged releases under `.publication/` with OS-level byte-range leases for zero-race concurrent reader access. |
-
----
-
-## Documentation & Guides
-
-- **[USERGUIDE.md](USERGUIDE.md)** — **End-User Guide:** Full guide to using the desktop application, library management, Vim motions, 1-click jiten.moe integration, instant dictionary lookup, sentence mining, and settings.
-- **[DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md)** — **Developer Onboarding:** "Where do I start to work on X?", 5 end-to-end runtime flows, step-by-step recipes for adding features, and how .NET and Python connect.
-- **[LLM-WIKI.md](LLM-WIKI.md)** — Master single-file architectural and operational reference, system invariants, contracts, and module catalog.
-- **[AGENTS.md](AGENTS.md)** — Rules and hard invariants for AI coding agents working in this workspace.
-
-### 1. .NET + Photino.NET EPUB Library & Reader Specifications (`specs/`)
-- **[00 — Master Architecture & Roadmap (`specs/00-master-architecture-and-roadmap.md`)](specs/00-master-architecture-and-roadmap.md)** — .NET 10 + Photino.NET + AngleSharp + MeCab.DotNet system architecture, solution layout, and runnable vertical-slice implementation plan.
-- **[01 — EPUB Library Management (`specs/01-epub-library-management-spec.md`)](specs/01-epub-library-management-spec.md)** — `book-<16 hex>` ingestion, hierarchical folders/collections (`Japanese -> Seinen -> Series -> Volumes`), manual tags, SQLite `library.db` schema, reading progress, and `enrichement-extractor` bridge.
-- **[02 — Pre-Render AngleSharp Enrichment & Language Plugins (`specs/02-prerender-enrichment-and-plugin-spec.md`)](specs/02-prerender-enrichment-and-plugin-spec.md)** — `ILanguagePlugin` SDK, AngleSharp ruby-aware DOM walker, pre-render `<span class="ir-tok">` & `<ruby>` injection, and `MeCab.DotNet` Japanese plugin.
-- **[03 — On-the-Fly Dictionary Lookup Engine (`specs/03-onthefly-dictionary-lookup-spec.md`)](specs/03-onthefly-dictionary-lookup-spec.md)** — Sub-5ms SQLite dictionary engine, Yomitan format-3 importer, longest-prefix + deinflection + EPUB ruby-priority ranking, and word mining.
-- **[04 — Photino.NET Reader UI & IPC (`specs/04-photino-reader-ui-and-ipc-spec.md`)](specs/04-photino-reader-ui-and-ipc-spec.md)** — `ir-book://` custom scheme interceptor, JSON-RPC 2.0 IPC protocol, vertical (`vertical-rl`) & horizontal typography, and interactive Popover UI.
-- **[05 — Extensibility, AI Comprehension & $n+1$ Persona Chat (`specs/05-extensibility-and-ai-companion-spec.md`)](specs/05-extensibility-and-ai-companion-spec.md)** — General `IFeaturePlugin` architecture, Reading Comprehension Quizzes (MCQ $\rightarrow$ Freeform from just-read text), spoiler-safe $n+1$ Vocabulary-Constrained Persona Chat (verified by `MeCab.DotNet`), and `ILlmProvider` SDK.
-- **[06 — Junior Developer Implementation Plan & Task Backlog (`specs/06-junior-developer-implementation-plan.md`)](specs/06-junior-developer-implementation-plan.md)** — Step-by-step developer tickets (`TASK-2.1` through `TASK-5.4`) with exact file paths, algorithms, and verification tests for Phases 2–5.
-- **[07 — Global Configuration & Settings System (`specs/07-global-configuration-and-settings-spec.md`)](specs/07-global-configuration-and-settings-spec.md)** — Centralized Settings Screen, `app_settings` SQLite storage, CSS custom properties engine, and live LLM/Directory/Reader updates.
-- **Gherkin BDD Feature Suite (`specs/features/`)**:
-  - [01-library-ingestion-and-24k-scanning.feature](specs/features/01-library-ingestion-and-24k-scanning.feature)
-  - [02-library-hierarchy-tags-and-custom-fields.feature](specs/features/02-library-hierarchy-tags-and-custom-fields.feature)
-  - [03-prerender-anglesharp-enrichment-and-plugins.feature](specs/features/03-prerender-anglesharp-enrichment-and-plugins.feature)
-  - [04-onthefly-dictionary-lookup-and-vocab.feature](specs/features/04-onthefly-dictionary-lookup-and-vocab.feature)
-  - [05-photino-reader-and-study-pack-bridge.feature](specs/features/05-photino-reader-and-study-pack-bridge.feature)
-  - [06-ai-comprehension-and-n-plus-one-persona-chat.feature](specs/features/06-ai-comprehension-and-n-plus-one-persona-chat.feature)
-  - [07-global-configuration-and-settings.feature](specs/features/07-global-configuration-and-settings.feature)
-
-### 2. `enrichement-extractor` Codebase Wiki (`wiki/`)
-1. **[Wiki Home & Glossary (`wiki/index.md`)](wiki/index.md)** — Workspace layout, domain glossary, and cross-reference index.
-2. **[Architecture & Dataflow (`wiki/architecture-and-dataflow.md`)](wiki/architecture-and-dataflow.md)** — End-to-end execution stages, `reader` / `study` / `decks` modes, and dependency isolation (`base` vs `print`).
-3. **[Module & Symbol Reference (`wiki/module-reference.md`)](wiki/module-reference.md)** — Complete guide to every module, class, function, script, and test suite in `enrichement-extractor`.
-4. **[Data Contracts & Schemas (`wiki/data-contracts-and-schemas.md`)](wiki/data-contracts-and-schemas.md)** — JSON contracts (`reader.json`, `lookup.json`, `quality.json`, `study.config.json`, `library.json`), deterministic IDs, and coordinate systems.
-5. **[Matching & Linguistics (`wiki/matching-and-linguistics.md`)](wiki/matching-and-linguistics.md)** — EPUB parsing, `<ruby>` extraction, Sudachi split modes A/C, `MatchPolicy`, Yomitan format-3 ingestion, furigana alignment, and ambiguity tracking.
-6. **[Publication, Caching & Resources (`wiki/publication-caching-and-resources.md`)](wiki/publication-caching-and-resources.md)** — Atomic `.publication/` releases, OS locks, `ResourceBundle` / `ResourceStore` / `WorkerContext` thread rules, `ContentCache`, CSV rewrite provenance, and GC leases.
-7. **[Study Exports & Validation (`wiki/study-exports-and-validation.md`)](wiki/study-exports-and-validation.md)** — `StudyData` preparation, kanji context selection, HTML & PDF rendering, 3-layer validation, and Windows x64 portable packaging.
-8. **[Playbooks & Invariants (`wiki/playbooks-and-invariants.md`)](wiki/playbooks-and-invariants.md)** — Hard architectural invariants, step-by-step guides for common tasks, and verification commands.
-9. **[Testing & Synthetic Fixtures (`wiki/testing-and-fixtures.md`)](wiki/testing-and-fixtures.md)** — How the 19 self-contained test suites and `fixture()` helper work.
-10. **[Roadmap & Open Workstreams (`wiki/roadmap-and-open-work.md`)](wiki/roadmap-and-open-work.md)** — Completed refactoring phases, DOM source mapping, lookup API, and known linguistic edge cases.
-
----
-
-## Repository Structure
-
-```text
-k:/immersive-reading/
-├── README.md                        # Workspace entry point
-├── DEVELOPER_GUIDE.md               # Quick-jump guide & 5 core runtime flows for developers
-├── LLM-WIKI.md                      # Master single-file LLM Wiki reference
-├── AGENTS.md                        # AI coding agent rules and invariants
-├── specs/                           # .NET 10 reader specifications & Gherkin features
-│   ├── 00-master-architecture-and-roadmap.md
-│   ├── 01-epub-library-management-spec.md
-│   ├── 02-prerender-enrichment-and-plugin-spec.md
-│   ├── 03-onthefly-dictionary-lookup-spec.md
-│   ├── 04-photino-reader-ui-and-ipc-spec.md
-│   ├── 05-extensibility-and-ai-companion-spec.md
-│   ├── 06-junior-developer-implementation-plan.md
-│   └── features/                    # 6 Gherkin BDD feature specifications
-├── wiki/                            # Modular LLM Wiki topic pages (10 chapters)
-├── immersive-reader/                # .NET 10 + Photino.NET + AngleSharp + MeCab.DotNet Desktop EPUB Library & Reader
-│   ├── ImmersiveReading.sln
-│   ├── Directory.Build.props
-│   ├── global.json
-│   ├── .library-data/               # Runtime SQLite databases (library.db, dictionaries.db) & covers
-│   ├── src/
-│   │   ├── ImmersiveReading.Core/            # Contracts, domain models, plugin interfaces
-│   │   ├── ImmersiveReading.Library/         # LibraryManager, SQLite, EPUB reader, flashcards, Python bridge
-│   │   ├── ImmersiveReading.Enrichment/      # AngleSharpDomEnricher, BookSchemeHandler, cache, context slicing
-│   │   ├── ImmersiveReading.Dictionaries/    # DictionaryLookupEngine, deinflector, Yomitan/Kanji importers
-│   │   ├── Plugins/
-│   │   │   ├── ImmersiveReading.Plugins.Japanese/     # MeCab.DotNet morphological analyzer & furigana aligner
-│   │   │   └── ImmersiveReading.Plugins.AiCompanion/  # Progressive quiz, n+1 persona chat, LLM provider
-│   │   └── ImmersiveReading.App/             # Photino host, LibraryRpcDispatcher, local asset server, wwwroot/
-│   └── tests/
-│       ├── ImmersiveReading.Core.Tests/
-│       ├── ImmersiveReading.Enrichment.Tests/
-│       └── ImmersiveReading.Dictionaries.Tests/
-└── enrichement-extractor/           # Offline Japanese EPUB enrichment & study-pack pipeline
-    ├── pyproject.toml               # Package metadata (immersive-reading v0.3.0)
-    ├── uv.lock                      # Frozen reproducible dependency lockfile
-    ├── immersive/                   # Core Python package (37 modules + schemas/assets)
-    ├── scripts/                     # CLI wrappers and portable distribution builder
-    ├── tests/                       # 19 unittest regression & integration test modules
-    ├── docs/                        # Feature design & verification notes
-    ├── data/                        # Local dictionaries, KanjiVG, Kanji alive, fonts, charts
-    ├── books/                       # Input book folders (<book>/*.epub, *.csv, study.config.json)
-    └── output/                      # Published releases (.publication/) and compatibility views
-```
+### Developer Documentation
+* **[`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md)** — Onboarding, runtime flows, and "Where do I start to work on X?"
+* **[`wiki/creating-a-plugin-tutorial.md`](wiki/creating-a-plugin-tutorial.md)** — Beginner-friendly step-by-step tutorial on creating plugins (C#, Python, and UI) based on `PosHighlighter`.
+* **[`LLM-WIKI.md`](LLM-WIKI.md)** — Master architectural reference, invariants, and module catalog.
+* **[`AGENTS.md`](AGENTS.md)** — Hard architectural invariants and workspace rules.
+* **[`specs/`](specs/)** — Feature specifications (`00`–`26+`) and Gherkin BDD `.feature` files.
+* **[`wiki/index.md`](wiki/index.md)** — Modular wiki chapters covering data contracts, linguistics, caching, .NET architecture, plugin UI authoring, and troubleshooting.
+* **[`knowledge-graph/README.md`](knowledge-graph/README.md)** — CLI usage, config schema, and exit codes for the character knowledge graph builder.

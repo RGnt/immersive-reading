@@ -78,7 +78,31 @@ export interface PluginBookTabRegistration {
   id: string;
   title: string;
   icon: LucideIcon;
-  component: ComponentType<{ bookId: string }>;
+  /** `book` is the library's BookDetail for the open book; it is re-passed after `refreshLibrary()`. */
+  component: ComponentType<{ bookId: string; book: any }>;
+}
+
+/** Small marker rendered on book cards, table rows and series cards (e.g. a difficulty rating). */
+export interface PluginBookBadgeRegistration {
+  id: string;
+  /** `books` is the single book for 'card'/'row', or every book of the series for 'series'. */
+  component: ComponentType<{ books: any[]; context: 'card' | 'row' | 'series' }>;
+}
+
+export interface SeriesActionContext {
+  seriesName: string;
+  openModal: ToolbarActionContext['openModal'];
+  rpc: ToolbarActionContext['rpc'];
+  getPluginConfig: ToolbarActionContext['getPluginConfig'];
+}
+
+/** A button shown next to a series in the library (grid, series view, table shelves). */
+export interface PluginSeriesActionRegistration {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  title?: string;
+  onClick: (ctx: SeriesActionContext) => void;
 }
 
 export interface PluginSettingsPanelRegistration {
@@ -95,6 +119,8 @@ export interface PluginUiContext {
   registerReaderDrawer(drawer: PluginDrawerRegistration): void;
   registerReaderToolbarAction(action: PluginToolbarActionRegistration): void;
   registerBookInfoTab(tab: PluginBookTabRegistration): void;
+  registerBookBadge(badge: PluginBookBadgeRegistration): void;
+  registerSeriesAction(action: PluginSeriesActionRegistration): void;
   registerCustomSettingsPanel(panel: PluginSettingsPanelRegistration): void;
 }
 

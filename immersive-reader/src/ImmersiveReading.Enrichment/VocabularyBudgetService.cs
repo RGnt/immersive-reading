@@ -94,6 +94,97 @@ public sealed class VocabularyBudgetService : IVocabularyBudgetService
             SelectedTurnTargets: selectedTargets);
     }
 
+    /// <summary>Correct uses in a row needed before a word is promoted.</summary>
+    public const int PromoteAfterCorrectUses = 3;
+
+    public IReadOnlyList<VocabularyNudge> RecordPractice(string language, IReadOnlyList<VocabularyPractice> practice)
+    {
+        var nudges = new List<VocabularyNudge>();
+        // one entry per word; a misuse beats a correct use of the same word in the same answer
+        var byLemma = practice.Where(p => !string.IsNullOrWhiteSpace(p.Lemma))
+            .GroupBy(p => p.Lemma.Trim(), StringComparer.Ordinal)
+            .Select(g => (Lemma: g.Key, Correct: g.All(x => x.Correct))).ToList();
+        if (byLemma.Count == 0) return nudges;
+
+        string now = DateTime.UtcNow.ToString("o");
+        using var conn = _db.OpenConnection();
+        using var tx = conn.BeginTransaction();
+        foreach (var (lemma, correct) in byLemma)
+        {
+            int run;
+            using (var up = conn.CreateCommand())
+            {
+                up.Transaction = tx;
+                up.CommandText = """
+                    INSERT INTO vocabulary_practice (language, lemma, correct_uses, misuses, updated_at_utc)
+                    VALUES ($lang, $lemma, $correct, $misuse, $now)
+                    ON CONFLICT(language, lemma) DO UPDATE SET
+                        correct_uses = CASE WHEN $isCorrect = 1 THEN vocabulary_practice.correct_uses + 1 ELSE 0 END,
+                        misuses = vocabulary_practice.misuses + $misuse,
+                        updated_at_utc = $now
+                    RETURNING correct_uses;
+                    """;
+                P(up, "$lang", language);
+                P(up, "$lemma", lemma);
+                P(up, "$correct", correct ? 1 : 0);
+                P(up, "$misuse", correct ? 0 : 1);
+                P(up, "$isCorrect", correct ? 1 : 0);
+                P(up, "$now", now);
+                run = Convert.ToInt32(up.ExecuteScalar());
+            }
+
+            // the words the learner has in the vocabulary (any reading of the lemma)
+            var rows = new List<(string Reading, WordStatus Status)>();
+            using (var sel = conn.CreateCommand())
+            {
+                sel.Transaction = tx;
+                sel.CommandText = "SELECT reading, status FROM vocabulary_state WHERE language = $lang AND lemma = $lemma;";
+                P(sel, "$lang", language);
+                P(sel, "$lemma", lemma);
+                using var r = sel.ExecuteReader();
+                while (r.Read()) rows.Add((r.GetString(0), (WordStatus)r.GetInt32(1)));
+            }
+
+            foreach (var (reading, status) in rows)
+            {
+                WordStatus? to = null;
+                string reason = "";
+                if (!correct && (status == WordStatus.Known || status == WordStatus.New))
+                {
+                    to = WordStatus.Learning;
+                    reason = status == WordStatus.Known ? "misused in your answer, so it goes back to Learning" : "you tried to use it and it was not right: Learning";
+                }
+                else if (correct && run >= PromoteAfterCorrectUses && (status == WordStatus.Learning || status == WordStatus.New))
+                {
+                    to = WordStatus.Known;
+                    reason = $"used correctly {run} times in a row";
+                }
+                if (to is null) continue;
+
+                using var upd = conn.CreateCommand();
+                upd.Transaction = tx;
+                upd.CommandText = "UPDATE vocabulary_state SET status = $status, updated_at_utc = $now WHERE language = $lang AND lemma = $lemma AND reading = $reading;";
+                P(upd, "$status", (int)to.Value);
+                P(upd, "$now", now);
+                P(upd, "$lang", language);
+                P(upd, "$lemma", lemma);
+                P(upd, "$reading", reading);
+                upd.ExecuteNonQuery();
+                nudges.Add(new VocabularyNudge(lemma, status, to.Value, reason));
+            }
+        }
+        tx.Commit();
+        return nudges;
+    }
+
+    private static void P(DbCommand cmd, string name, object? value)
+    {
+        var parameter = cmd.CreateParameter();
+        parameter.ParameterName = name;
+        parameter.Value = value ?? DBNull.Value;
+        cmd.Parameters.Add(parameter);
+    }
+
     public VocabularyAuditResult AuditReplyTokens(
         IReadOnlyList<AnalyzedToken> tokens,
         NPlusOneVocabularyProfile profile)

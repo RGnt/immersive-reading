@@ -3,12 +3,16 @@
   <ItemGroup>
     <ProjectReference Include="..\ImmersiveReading.Core\ImmersiveReading.Core.csproj" />
     <ProjectReference Include="..\ImmersiveReading.Library\ImmersiveReading.Library.csproj" />
+    <ProjectReference Include="..\ImmersiveReading.Knowledge\ImmersiveReading.Knowledge.csproj" />
     <ProjectReference Include="..\ImmersiveReading.Enrichment\ImmersiveReading.Enrichment.csproj" />
     <!-- Concrete plugin references below are consumed exclusively by Composition/PluginCatalog.cs -->
     <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.Japanese\ImmersiveReading.Plugins.Japanese.csproj" />
     <ProjectReference Include="..\ImmersiveReading.Dictionaries\ImmersiveReading.Dictionaries.csproj" />
     <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.AiCompanion\ImmersiveReading.Plugins.AiCompanion.csproj" />
     <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.PosHighlighter\ImmersiveReading.Plugins.PosHighlighter.csproj" />
+    <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.JitenMoe\ImmersiveReading.Plugins.JitenMoe.csproj" />
+    <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.DeckBuilder\ImmersiveReading.Plugins.DeckBuilder.csproj" />
+    <ProjectReference Include="..\Plugins\ImmersiveReading.Plugins.CharacterKnowledge\ImmersiveReading.Plugins.CharacterKnowledge.csproj" />
   </ItemGroup>
 
   <ItemGroup>

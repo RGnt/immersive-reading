@@ -1,0 +1,88 @@
+{
+  "type": "object",
+  "title": "Character Knowledge",
+  "properties": {
+    "endpointUrl": {
+      "type": "string",
+      "title": "Knowledge model endpoint (OpenAI-compatible)",
+      "description": "The model that reads the book and builds the knowledge graph, for example your FreeToken host. Leave empty to use Settings → AI.",
+      "default": "http://127.0.0.1:1919/v1",
+      "x-rpc-action": { "label": "Test connection", "actionName": "testEndpoint" }
+    },
+    "modelId": {
+      "type": "string",
+      "title": "Model id",
+      "description": "Leave empty when the server lists exactly one model.",
+      "default": ""
+    },
+    "apiKey": {
+      "type": "string",
+      "format": "password",
+      "title": "API key (optional)",
+      "description": "Passed to the builder through an environment variable, never on a command line.",
+      "default": ""
+    },
+    "thinking": {
+      "type": "string",
+      "title": "Model thinking",
+      "description": "Keep off for extraction: a reasoning model otherwise spends its whole output budget on hidden reasoning and returns nothing.",
+      "enum": ["off", "on", "default"],
+      "enumLabels": ["Off (recommended)", "On", "Server default"],
+      "default": "off"
+    },
+    "contextTokens": {
+      "type": "integer",
+      "title": "Real context limit (tokens, 0 = discover)",
+      "description": "The most tokens one request may use (prompt + answer). Servers often enforce far less than they advertise; 0 lets the builder discover it.",
+      "default": 0,
+      "minimum": 0,
+      "maximum": 2000000
+    },
+    "outputLanguage": {
+      "type": "string",
+      "title": "Language of the extracted facts",
+      "description": "Facts, summaries and traits are written in this language. Quotes always stay in the book's language.",
+      "default": "Japanese"
+    },
+    "maxInputChars": {
+      "type": "integer",
+      "title": "Largest chapter text per request (characters)",
+      "default": 90000,
+      "minimum": 1000,
+      "maximum": 500000
+    },
+    "requestTimeoutSeconds": {
+      "type": "integer",
+      "title": "Timeout per request (seconds)",
+      "default": 900,
+      "minimum": 30,
+      "maximum": 7200
+    },
+    "minProminence": {
+      "type": "integer",
+      "title": "Minimum prominence for a character to be listed",
+      "description": "How much of a character the reader must have seen (events count double) before they get a profile.",
+      "default": 1,
+      "minimum": 1,
+      "maximum": 100
+    },
+    "extractStory": {
+      "type": "boolean",
+      "title": "Also record events and items (story pass)",
+      "description": "After the characters, a second pass records what happened (battles, hunts, dungeons, drops, quests) with who took part, and who has which item (newer gear replaces older gear). It costs about as many requests again, can be added to a book whose characters are already built, and never blocks the character graph.",
+      "default": true
+    },
+    "builderDirectory": {
+      "type": "string",
+      "title": "knowledge-graph folder (optional)",
+      "description": "Leave empty to find the knowledge-graph folder next to the app automatically.",
+      "default": ""
+    },
+    "pythonPath": {
+      "type": "string",
+      "title": "Python executable (optional)",
+      "description": "Leave empty to use the .venv folder of knowledge-graph.",
+      "default": ""
+    }
+  }
+}

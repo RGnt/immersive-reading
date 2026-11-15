@@ -165,13 +165,13 @@ export const ScanFolderModal: React.FC = () => {
       }}
     >
       <div
-        className="scan-modal-card bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl flex flex-col w-[640px] max-w-[95vw] overflow-hidden select-none animate-in fade-in zoom-in-95 duration-150"
+        className="scan-modal-card modal-surface bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-[var(--radius-modal)] shadow-2xl flex flex-col w-[640px] max-w-[95vw] overflow-hidden select-none animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* HEADER */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border-color)] bg-black/20">
           <div className="flex items-center space-x-2.5">
-            <div className="p-1.5 rounded-lg bg-[var(--accent-color)]/20 text-[var(--accent-color)] border border-[var(--accent-color)]/30">
+            <div className="p-1.5 rounded-lg bg-[var(--accent-color)]/20 text-[var(--accent-text)] border border-[var(--accent-color)]/30">
               <FolderSearch className="w-5 h-5" />
             </div>
             <div>
@@ -258,7 +258,7 @@ export const ScanFolderModal: React.FC = () => {
                 checked={recursive}
                 onChange={(e) => setRecursive(e.target.checked)}
                 disabled={isScanning}
-                className="rounded border-[var(--border-color)] text-[var(--accent-color)] focus:ring-0"
+                className="rounded border-[var(--border-color)] text-[var(--accent-text)] focus:ring-0"
               />
               <div>
                 <span className="font-semibold text-xs">Recursive Subdirectory Scan</span>
@@ -274,7 +274,7 @@ export const ScanFolderModal: React.FC = () => {
                 checked={autoCreateFolders}
                 onChange={(e) => setAutoCreateFolders(e.target.checked)}
                 disabled={isScanning}
-                className="rounded border-[var(--border-color)] text-[var(--accent-color)] focus:ring-0"
+                className="rounded border-[var(--border-color)] text-[var(--accent-text)] focus:ring-0"
               />
               <div>
                 <span className="font-semibold text-xs">Auto-Create Collections from Subdirectories</span>
@@ -290,7 +290,7 @@ export const ScanFolderModal: React.FC = () => {
             <div className="p-4 rounded-lg bg-sky-950/30 border border-sky-800/60 space-y-3 animate-in fade-in">
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center space-x-2 text-sky-300 font-semibold">
-                  <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-color)]" />
+                  <Loader2 className="w-4 h-4 animate-spin text-[var(--accent-text)]" />
                   <span>Scanning files...</span>
                 </div>
                 <span className="font-mono text-sky-200">
@@ -299,7 +299,7 @@ export const ScanFolderModal: React.FC = () => {
               </div>
 
               {/* Progress bar track */}
-              <div className="w-full bg-black/40 h-2 rounded-full overflow-hidden border border-white/10">
+              <div className="w-full bg-black/40 h-2 rounded-full overflow-hidden border border-[var(--border-color)]">
                 <div className="bg-[var(--accent-color)] h-full w-full animate-pulse transition-all" />
               </div>
 
@@ -404,7 +404,7 @@ export const ScanFolderModal: React.FC = () => {
               type="button"
               onClick={handleStartScan}
               disabled={isScanning || !directoryPath.trim()}
-              className="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 disabled:opacity-40 shadow-sm transition-opacity"
+              className="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-[var(--accent-color)] text-[var(--accent-contrast)] font-semibold text-xs hover:opacity-90 disabled:opacity-40 shadow-sm transition-opacity"
             >
               {isScanning ? (
                 <>

@@ -164,6 +164,22 @@ public sealed class AppServices : IDisposable
             sp.GetRequiredService<IVocabularyBudgetService>(),
             sp.GetRequiredService<ISnippetEnricher>()));
 
+        // 7b. Knowledge hub: the one place features ask the knowledge graphs (spec 24). What the user told us is built in; the story
+        // graph and any later subject graph register themselves as sources. A memory file that cannot be opened must not stop the app.
+        var knowledgeHub = new ImmersiveReading.Knowledge.KnowledgeHub();
+        string knowledgeRoot = Path.GetDirectoryName(paths.DbPath) ?? paths.AppDataDir;
+        try
+        {
+            knowledgeHub.RegisterSource(new ImmersiveReading.Knowledge.UserMemorySource(Path.Combine(knowledgeRoot, "user-memory", "user-memory.db")));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        {
+            System.Diagnostics.Trace.TraceWarning($"User memory is unavailable: {ex.Message}");
+        }
+        services.AddSingleton<ImmersiveReading.Core.Knowledge.IKnowledgeHub>(knowledgeHub);
+        // 7c. Prompt catalog: built-in prompts registered by the plugins, the user's edited copies live in <data root>/prompts (spec 19, PT-5)
+        services.AddSingleton<ImmersiveReading.Core.Prompts.IPromptCatalog>(new ImmersiveReading.Core.Prompts.PromptCatalog(Path.Combine(knowledgeRoot, "prompts")));
+
         // 8. Allow modules to configure their own container services
         foreach (var module in moduleList)
         {
@@ -210,7 +226,10 @@ public sealed class AppServices : IDisposable
             vocabBudget: vocabBudget,
             snippetEnricher: snippetEnricher,
             languageRegistry: languages,
-            rpcEvents: forwardingSink);
+            rpcEvents: forwardingSink,
+            library: provider.GetRequiredService<LibraryManager>(),
+            knowledge: provider.GetRequiredService<ImmersiveReading.Core.Knowledge.IKnowledgeHub>(),
+            prompts: provider.GetRequiredService<ImmersiveReading.Core.Prompts.IPromptCatalog>());
 
         var unifiedPlugins = new List<IImmersivePlugin>();
         foreach (var p in pluginHost.Plugins)
@@ -273,12 +292,14 @@ public sealed class AppServices : IDisposable
         [
             new Rpc.Modules.BootstrapRpcModule(Library, Config, Paths.ExtractorBooksDir, DictDb),
             new Rpc.Modules.LibraryRpcModule(Library, events, folderPicker),
-            new Rpc.Modules.JitenRpcModule(Library),
             new Rpc.Modules.ReaderRpcModule(Library, BookScheme, LookupEngine, VocabTracker, Db, events, Paths.ExtractorOutputDir, DictDb),
             new Rpc.Modules.DictionaryRpcModule(DictDb, events: events),
             new Rpc.Modules.StudyPackRpcModule(Library, StudyPackBridge, Flashcards, events, Config, Db),
             new Rpc.Modules.ConfigRpcModule(Config, events),
-            new Rpc.Modules.ExtensionsRpcModule(PluginHostManager, PluginHost, onSelfTestCompleted)
+            new Rpc.Modules.ExtensionsRpcModule(PluginHostManager, PluginHost, onSelfTestCompleted),
+            new Rpc.Modules.PromptsRpcModule(ServiceProvider.GetRequiredService<ImmersiveReading.Core.Prompts.IPromptCatalog>()),
+            new Rpc.Modules.MemoryRpcModule(ServiceProvider.GetRequiredService<ImmersiveReading.Core.Knowledge.IKnowledgeHub>()),
+            new Rpc.Modules.AppearanceRpcModule(new Appearance.UserCssStore(Path.Combine(Path.GetDirectoryName(Paths.DbPath) ?? Paths.AppDataDir, "appearance")))
         ];
     }
 

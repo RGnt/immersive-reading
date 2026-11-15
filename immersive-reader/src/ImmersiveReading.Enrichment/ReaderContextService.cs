@@ -188,6 +188,26 @@ public sealed class ReaderContextService : IReaderContextService
         return slices;
     }
 
+    public async Task<ReadPassageSlice?> GetLastCompletedChapterAsync(
+        string bookId,
+        int? currentChapterIndex = null,
+        int maxCharacters = 60000,
+        CancellationToken ct = default)
+    {
+        var detail = _library.GetBookDetail(bookId);
+        if (detail is null || detail.Chapters.Count == 0) return null;
+        int current = currentChapterIndex ?? ResolveCurrentPosition(bookId, null, null, null).ChapterIndex;
+
+        foreach (var chapter in detail.Chapters.Where(c => !c.IsExcluded && c.ChapterIndex < current).OrderByDescending(c => c.ChapterIndex))
+        {
+            // all four overrides given: the saved reading position (which belongs to the CURRENT chapter) is not consulted, and the
+            // viewport is the end of the chapter, so the whole completed chapter is returned
+            var slice = await GetJustReadPassageAsync(bookId, maxCharacters, 0, int.MaxValue, chapter.ChapterIndex, chapter.SpineHref, ct).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(slice.PlainText)) return slice;
+        }
+        return null;
+    }
+
     private ChapterTokenMap? ResolveTokenMap(string bookId, string spineHref)
     {
         if (string.IsNullOrWhiteSpace(spineHref)) return null;

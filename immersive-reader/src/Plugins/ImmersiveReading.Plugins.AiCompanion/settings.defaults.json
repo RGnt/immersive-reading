@@ -5,5 +5,9 @@
   "quizDisplayMode": "modal",
   "questionCount": 3,
   "maxContextChars": 3500,
-  "enforceNPlusOne": true
+  "enforceNPlusOne": true,
+  "characterMemory": true,
+  "characterMemoryShare": "all",
+  "memoryMaxFacts": 3,
+  "quizNudgesVocabulary": true
 }

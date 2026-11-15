@@ -21,56 +21,17 @@ import {
   HardDrive,
   AlertTriangle,
   Trash2,
+  FileText,
+  Paintbrush,
+  Brain,
 } from 'lucide-react';
 import type { AppConfig, DictionaryItem, DictionaryPreset, PythonDetectInfo } from '../../types/api';
+import { THEME_PRESETS } from '../../styles/themePresets';
 import { PluginSettingsTab } from './PluginSettingsTab';
+import { PromptsTab } from './PromptsTab';
+import { CustomCssTab } from './CustomCssTab';
+import { MemoryTab } from './MemoryTab';
 
-const THEME_PRESETS: Record<string, {
-  bgPrimary: string;
-  bgSurface: string;
-  textPrimary: string;
-  textMuted: string;
-  borderColor: string;
-  accentColor: string;
-  rubyColor: string;
-}> = {
-  slate: {
-    bgPrimary: '#0f172a',
-    bgSurface: '#1e293b',
-    textPrimary: '#f8fafc',
-    textMuted: '#94a3b8',
-    borderColor: '#334155',
-    accentColor: '#38bdf8',
-    rubyColor: '#e2e8f0',
-  },
-  'warm-paper': {
-    bgPrimary: '#faf8f5',
-    bgSurface: '#f2ece4',
-    textPrimary: '#2d2720',
-    textMuted: '#7c7267',
-    borderColor: '#dcd3c6',
-    accentColor: '#b45309',
-    rubyColor: '#78350f',
-  },
-  'tokyo-night': {
-    bgPrimary: '#1a1b26',
-    bgSurface: '#24283b',
-    textPrimary: '#c0caf5',
-    textMuted: '#7aa2f7',
-    borderColor: '#414868',
-    accentColor: '#bb9af7',
-    rubyColor: '#f7768e',
-  },
-  'e-ink': {
-    bgPrimary: '#ffffff',
-    bgSurface: '#f5f5f5',
-    textPrimary: '#000000',
-    textMuted: '#555555',
-    borderColor: '#cccccc',
-    accentColor: '#000000',
-    rubyColor: '#333333',
-  },
-};
 
 export const SettingsModal: React.FC = () => {
   const { config, isSettingsOpen, closeSettings, activeTab, setActiveTab, saveConfig, resetDefaults } =
@@ -378,7 +339,7 @@ export const SettingsModal: React.FC = () => {
       onClick={closeSettings}
     >
       <div
-        className="w-full max-w-3xl bg-[var(--bg-surface)] border border-[var(--border-color)] rounded-xl shadow-2xl flex flex-col overflow-hidden max-h-[92vh] text-xs text-[var(--text-primary)] animate-in fade-in zoom-in-95 duration-150"
+        className="w-full max-w-3xl bg-[var(--bg-surface)] border border-[var(--border-color)] modal-surface rounded-[var(--radius-modal)] shadow-2xl flex flex-col overflow-hidden max-h-[92vh] text-xs text-[var(--text-primary)] animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* MODAL HEADER */}
@@ -407,7 +368,7 @@ export const SettingsModal: React.FC = () => {
             onClick={() => setActiveTab('general')}
             className={`flex items-center space-x-1.5 py-2.5 px-3 border-b-2 font-medium transition-colors ${
               activeTab === 'general'
-                ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-bold'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-bold'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -418,7 +379,7 @@ export const SettingsModal: React.FC = () => {
             onClick={() => setActiveTab('library')}
             className={`flex items-center space-x-1.5 py-2.5 px-3 border-b-2 font-medium transition-colors ${
               activeTab === 'library'
-                ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-bold'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-bold'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -429,7 +390,7 @@ export const SettingsModal: React.FC = () => {
             onClick={() => setActiveTab('appearance')}
             className={`flex items-center space-x-1.5 py-2.5 px-3 border-b-2 font-medium transition-colors ${
               activeTab === 'appearance'
-                ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-bold'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-bold'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -440,7 +401,7 @@ export const SettingsModal: React.FC = () => {
             onClick={() => setActiveTab('reader')}
             className={`flex items-center space-x-1.5 py-2.5 px-3 border-b-2 font-medium transition-colors ${
               activeTab === 'reader'
-                ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-bold'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-bold'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -451,7 +412,7 @@ export const SettingsModal: React.FC = () => {
             onClick={() => setActiveTab('llm')}
             className={`flex items-center space-x-1.5 py-2.5 px-3 border-b-2 font-medium transition-colors ${
               activeTab === 'llm'
-                ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-bold'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-bold'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
@@ -462,12 +423,48 @@ export const SettingsModal: React.FC = () => {
             onClick={() => setActiveTab('dictionaries')}
             className={`flex items-center space-x-1.5 py-2.5 px-3 border-b-2 font-medium transition-colors ${
               activeTab === 'dictionaries'
-                ? 'border-[var(--accent-color)] text-[var(--accent-color)] font-bold'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-bold'
                 : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
             }`}
           >
             <Library className="w-3.5 h-3.5" />
             <span>Dictionaries</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('prompts')}
+            data-testid="settings-tab-prompts"
+            className={`flex items-center space-x-1.5 py-2.5 px-3 border-b-2 font-medium transition-colors ${
+              activeTab === 'prompts'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-bold'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span>Prompts</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('customCss')}
+            data-testid="settings-tab-customcss"
+            className={`flex items-center space-x-1.5 py-2.5 px-3 border-b-2 font-medium transition-colors ${
+              activeTab === 'customCss'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-bold'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Paintbrush className="w-3.5 h-3.5" />
+            <span>Custom CSS</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('memory')}
+            data-testid="settings-tab-memory"
+            className={`flex items-center space-x-1.5 py-2.5 px-3 border-b-2 font-medium transition-colors ${
+              activeTab === 'memory'
+                ? 'border-[var(--accent-color)] text-[var(--accent-text)] font-bold'
+                : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+            }`}
+          >
+            <Brain className="w-3.5 h-3.5" />
+            <span>Memory</span>
           </button>
         </div>
 
@@ -519,7 +516,7 @@ export const SettingsModal: React.FC = () => {
               <div className="p-3.5 rounded-lg border border-[var(--border-color)] bg-black/25 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <HardDrive className="w-4 h-4 text-[var(--accent-color)]" />
+                    <HardDrive className="w-4 h-4 text-[var(--accent-text)]" />
                     <span className="font-semibold text-xs text-[var(--text-primary)]">Python Runtime Environment (1-Click)</span>
                   </div>
                   {pythonInfo?.found ? (
@@ -555,7 +552,7 @@ export const SettingsModal: React.FC = () => {
                     disabled={isDetectingPython}
                     className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] hover:border-[var(--accent-color)] text-xs text-[var(--text-primary)] disabled:opacity-50"
                   >
-                    {isDetectingPython ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 text-[var(--accent-color)]" />}
+                    {isDetectingPython ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 text-[var(--accent-text)]" />}
                     <span>⚡ 1-Click Auto-Detect Python</span>
                   </button>
 
@@ -563,7 +560,7 @@ export const SettingsModal: React.FC = () => {
                     type="button"
                     onClick={handleSetupPortablePython}
                     disabled={isSettingUpPython}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--accent-color)] text-black font-semibold text-xs hover:opacity-90 disabled:opacity-50 shadow-sm"
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded bg-[var(--accent-color)] text-[var(--accent-contrast)] font-semibold text-xs hover:opacity-90 disabled:opacity-50 shadow-sm"
                   >
                     {isSettingUpPython ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                     <span>📦 1-Click Setup Portable Runtime</span>
@@ -867,7 +864,7 @@ export const SettingsModal: React.FC = () => {
                             setClearInputText('');
                           }}
                           disabled={isClearing}
-                          className="px-2.5 py-1 rounded border border-[var(--border-color)] hover:bg-white/5 text-xs text-[var(--text-muted)] transition-colors"
+                          className="px-2.5 py-1 rounded border border-[var(--border-color)] hover:bg-[var(--hover-bg)] text-xs text-[var(--text-muted)] transition-colors"
                         >
                           Cancel
                         </button>
@@ -899,7 +896,7 @@ export const SettingsModal: React.FC = () => {
                       onClick={() => handleThemePresetChange(preset.id)}
                       className={`p-2.5 rounded border text-left text-xs transition-colors ${
                         localConfig.appearance.themePreset === preset.id
-                          ? 'border-[var(--accent-color)] bg-[var(--accent-color)]/10 font-bold text-[var(--accent-color)]'
+                          ? 'border-[var(--accent-color)] bg-[var(--accent-color)]/10 font-bold text-[var(--accent-text)]'
                           : 'border-[var(--border-color)] text-[var(--text-muted)] hover:border-[var(--text-primary)]'
                       }`}
                     >
@@ -1262,6 +1259,15 @@ export const SettingsModal: React.FC = () => {
             </div>
           )}
 
+          {/* TAB: PROMPTS (own save buttons) */}
+          {activeTab === 'prompts' && <PromptsTab />}
+
+          {/* TAB: CUSTOM CSS (own save buttons) */}
+          {activeTab === 'customCss' && <CustomCssTab />}
+
+          {/* TAB: MEMORY (what the characters know about the user) */}
+          {activeTab === 'memory' && <MemoryTab />}
+
           {/* TAB: DICTIONARIES */}
           {activeTab === 'dictionaries' && (
             <div className="space-y-5 max-w-2xl">
@@ -1269,7 +1275,7 @@ export const SettingsModal: React.FC = () => {
               <div className="p-4 rounded-lg border border-[var(--border-color)] bg-black/20 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <Library className="w-4 h-4 text-[var(--accent-color)]" />
+                    <Library className="w-4 h-4 text-[var(--accent-text)]" />
                     <span className="font-semibold text-xs text-[var(--text-primary)]">
                       Curated Offline Yomitan Dictionaries (1-Click Install)
                     </span>
@@ -1338,7 +1344,7 @@ export const SettingsModal: React.FC = () => {
                           className={`flex items-center space-x-1.5 px-3 py-1.5 rounded text-xs font-semibold shrink-0 transition-all ${
                             isInstalled
                               ? 'bg-[var(--bg-surface)] border border-[var(--border-color)] hover:border-[var(--accent-color)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-                              : 'bg-[var(--accent-color)] text-black hover:opacity-90 shadow-sm'
+                              : 'bg-[var(--accent-color)] text-[var(--accent-contrast)] hover:opacity-90 shadow-sm'
                           } disabled:opacity-50`}
                         >
                           {isInstalling ? (
@@ -1375,7 +1381,7 @@ export const SettingsModal: React.FC = () => {
                       {installingDictId === 'custom' ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : (
-                        <Download className="w-3.5 h-3.5 text-[var(--accent-color)]" />
+                        <Download className="w-3.5 h-3.5 text-[var(--accent-text)]" />
                       )}
                       <span>Import ZIP</span>
                     </button>
@@ -1648,7 +1654,18 @@ export const SettingsModal: React.FC = () => {
           )}
         </div>
 
-        {/* MODAL FOOTER */}
+        {/* MODAL FOOTER (the editor tabs save on their own: only Close) */}
+        {(activeTab === 'prompts' || activeTab === 'customCss' || activeTab === 'memory') ? (
+          <div className="p-4 border-t border-[var(--border-color)] flex items-center justify-end bg-black/20">
+            <button
+              type="button"
+              onClick={closeSettings}
+              className="px-4 py-1.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+            >
+              Close
+            </button>
+          </div>
+        ) : (
         <div className="p-4 border-t border-[var(--border-color)] flex items-center justify-between bg-black/20">
           <div className="flex items-center space-x-2">
             <button
@@ -1680,13 +1697,14 @@ export const SettingsModal: React.FC = () => {
               type="button"
               onClick={handleSave}
               disabled={isSaving}
-              className="flex items-center space-x-1.5 px-4 py-1.5 rounded bg-[var(--accent-color)] text-black text-xs font-semibold hover:opacity-90 disabled:opacity-50 shadow-sm"
+              className="flex items-center space-x-1.5 px-4 py-1.5 rounded bg-[var(--accent-color)] text-[var(--accent-contrast)] text-xs font-semibold hover:opacity-90 disabled:opacity-50 shadow-sm"
             >
               <Save className="w-3.5 h-3.5" />
               <span>{isSaving ? 'Saving...' : 'Save Changes'}</span>
             </button>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

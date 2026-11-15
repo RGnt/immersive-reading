@@ -111,7 +111,7 @@ export const StudyPackDrawer: React.FC = () => {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isLoading ? (
           <div className="h-64 flex flex-col items-center justify-center space-y-2 text-[var(--text-muted)]">
-            <Loader2 className="w-6 h-6 animate-spin text-[var(--accent-color)]" />
+            <Loader2 className="w-6 h-6 animate-spin text-[var(--accent-text)]" />
             <span className="text-xs">Loading study pack...</span>
           </div>
         ) : (!overview || (!overview.available && allPdfs.length === 0 && vocabSets.length === 0)) ? (
@@ -140,7 +140,7 @@ export const StudyPackDrawer: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => rpc.call('studypack.openPdf', { fullPath })}
-                            className="text-[10px] text-[var(--accent-color)] hover:underline font-semibold shrink-0 cursor-pointer"
+                            className="text-[10px] text-[var(--accent-text)] hover:underline font-semibold shrink-0 cursor-pointer"
                           >
                             Open PDF ↗
                           </button>
@@ -222,7 +222,7 @@ export const StudyPackDrawer: React.FC = () => {
 
               {activeSet && (
                 <div className="p-2.5 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] space-y-2 max-h-72 overflow-y-auto">
-                  <div className="font-semibold text-xs text-[var(--accent-color)]">
+                  <div className="font-semibold text-xs text-[var(--accent-text)]">
                     {activeSet.setTitle || (activeSet.number ? `Set ${activeSet.number}` : `Set ${selectedVocabSetIndex + 1}`)}
                   </div>
                   <div className="space-y-1.5 divide-y divide-[var(--border-color)]/40">

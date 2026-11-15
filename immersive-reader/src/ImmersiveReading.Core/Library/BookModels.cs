@@ -78,7 +78,12 @@ public sealed record BookSummary(
     bool HasStudyPack,
     double OverallCompletion,
     IReadOnlyList<TagRecord> Tags,
-    IReadOnlyDictionary<string, EffectiveCustomFieldValue> CustomFields
+    IReadOnlyDictionary<string, EffectiveCustomFieldValue> CustomFields,
+    // favourites and the reading list: the book's own flags and its series' flags (a book without its own status inherits the series')
+    bool IsFavorite = false,
+    string ReadingStatus = "",
+    bool SeriesIsFavorite = false,
+    string SeriesReadingStatus = ""
 );
 
 public sealed record BookDetail(

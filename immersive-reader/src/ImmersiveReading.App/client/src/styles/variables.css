@@ -24,6 +24,26 @@
   --danger: #ef4444;
   --success: #10b981;
   --warning: #f59e0b;
+  --bg-secondary: var(--bg-surface);            /* plugin drawers and dialogs asked for this; it was never defined */
+
+  /* Corners. Dialogs are square by default; --radius-control is for the buttons, inputs and cards inside them. Both can be set in Custom CSS. */
+  --radius-modal: 0px;
+  --radius-card: 0px;                           /* book cards and series cards */
+
+  /* Tailwind's corner scale, flattened: whatever said rounded-lg is nearly square now. Circles and pills (rounded-full) keep their shape. */
+  --radius-xs: 1px; --radius-sm: 2px; --radius-md: 2px; --radius-lg: 2px; --radius-xl: 2px; --radius-2xl: 2px; --radius-3xl: 2px;
+  --radius-control: 2px;
+
+  /* Derived from the theme at run time (applyDerivedThemeColors); these are the dark-theme values until it runs. */
+  --accent-text: var(--accent-color);          /* the accent as TEXT colour: pulled towards the main text colour until it reads */
+  --accent-contrast: #000000;                  /* text on a button painted in the accent colour */
+  --danger-text: #fda4af;
+  --success-text: #6ee7b7;
+  --warning-text: #fbbf24;
+  --info-text: #7dd3fc;
+  --violet-text: #d8b4fe;
+  --hover-bg: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --hover-bg-strong: color-mix(in srgb, var(--text-primary) 14%, transparent);
 }
 
 body {
@@ -43,3 +63,7 @@ body {
   overflow: hidden;
 }
 
+
+/* A darkening layer for insets and table headers inside panels: strong on dark themes, faint on light ones (plugins use it too). */
+:root { --shade: rgb(0 0 0 / 0.3); }
+html[data-theme-mode="light"] { --shade: rgb(0 0 0 / 0.05); }

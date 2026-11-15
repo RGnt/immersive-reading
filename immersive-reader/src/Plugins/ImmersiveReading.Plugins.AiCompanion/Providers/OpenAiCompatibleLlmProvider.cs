@@ -1,9 +1,21 @@
+using ImmersiveReading.Core.Llm;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using ImmersiveReading.Core.Extensions;
 
 namespace ImmersiveReading.Plugins.AiCompanion.Providers;
+
+/// <summary>The model server answered with an error, or cannot be reached with the fallback off. The message says what to fix.</summary>
+public sealed class LlmEndpointException(string message) : InvalidOperationException(message);
+
+/// <summary>The three model fields of the companion's own settings panel (Settings → AI). Empty means "use the app-wide LLM settings".</summary>
+public sealed class CompanionEndpointSettings
+{
+    public string EndpointUrl { get; set; } = "";
+    public string ApiKey { get; set; } = "";
+    public string ModelId { get; set; } = "";
+}
 
 public sealed record LlmEndpointOptions(
     string EndpointUrl = "http://localhost:11434/v1/chat/completions",
@@ -34,7 +46,7 @@ public sealed class OpenAiCompatibleLlmProvider : ILlmProvider, IDisposable
 
     public OpenAiCompatibleLlmProvider(LlmEndpointOptions? options = null, HttpClient? httpClient = null)
     {
-        _options = options ?? new LlmEndpointOptions();
+        _options = _baseOptions = options ?? new LlmEndpointOptions();
         if (httpClient is not null)
         {
             _httpClient = httpClient;
@@ -50,72 +62,112 @@ public sealed class OpenAiCompatibleLlmProvider : ILlmProvider, IDisposable
         }
     }
 
+    /// <summary>The model id the answer carries when no model was asked (the offline stand-in); callers that need a real model check it.</summary>
+    public const string OfflineModelId = "offline-passage-tutor";
+
+    private LlmEndpointOptions _baseOptions = null!;
+    private (string Url, string? Key, string? Model)? _override;
+
+    /// <summary>The app-wide LLM settings (timeout, fallback, and the endpoint when the companion has none of its own).</summary>
     public void UpdateOptions(LlmEndpointOptions options)
     {
-        _options = options;
+        _baseOptions = options;
+        Recompute();
+    }
+
+    /// <summary>The endpoint, key and model typed in the companion's own settings (Settings → AI); they win over the app-wide ones. Null clears it.</summary>
+    public void UseEndpointOverride(string? url, string? apiKey, string? modelId)
+    {
+        _override = string.IsNullOrWhiteSpace(url) ? null : (url.Trim(), string.IsNullOrWhiteSpace(apiKey) ? null : apiKey, string.IsNullOrWhiteSpace(modelId) ? null : modelId.Trim());
+        Recompute();
+    }
+
+    private void Recompute()
+    {
+        _options = _override is { } o ? _baseOptions with { EndpointUrl = o.Url, ApiKey = o.Key, ModelId = o.Model ?? _baseOptions.ModelId } : _baseOptions;
     }
 
     public async Task<LlmStructuredResponse<T>> CompleteStructuredAsync<T>(
         LlmRequest request,
         CancellationToken ct = default)
     {
-        if (!string.IsNullOrWhiteSpace(_options.EndpointUrl) &&
+        if (!LlmEndpoint.IsOffline(_options.EndpointUrl) &&
             !_options.EndpointUrl.Equals("offline://heuristic", StringComparison.OrdinalIgnoreCase))
         {
+            string url = LlmEndpoint.ChatCompletionsUrl(_options.EndpointUrl);
             try
             {
-                var payload = new
+                bool jsonMode = true;
+                for (int attempt = 0; attempt < 2; attempt++)
                 {
-                    model = _options.ModelId,
-                    messages = request.Messages.Select(m => new { role = m.Role, content = m.Content }).ToArray(),
-                    temperature = request.Temperature,
-                    max_tokens = request.MaxTokens,
-                    response_format = new { type = "json_object" }
-                };
+                    var payload = new Dictionary<string, object?>
+                    {
+                        ["model"] = _options.ModelId,
+                        ["messages"] = request.Messages.Select(m => new { role = m.Role, content = m.Content }).ToArray(),
+                        ["temperature"] = request.Temperature,
+                        ["max_tokens"] = request.MaxTokens
+                    };
+                    if (jsonMode) payload["response_format"] = new { type = "json_object" };
 
-                using var httpReq = new HttpRequestMessage(HttpMethod.Post, _options.EndpointUrl)
-                {
-                    Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
-                };
+                    using var httpReq = new HttpRequestMessage(HttpMethod.Post, url)
+                    {
+                        Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+                    };
+                    if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+                    {
+                        httpReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+                    }
 
-                if (!string.IsNullOrWhiteSpace(_options.ApiKey))
-                {
-                    httpReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
-                }
-
-                using var httpResp = await _httpClient.SendAsync(httpReq, ct).ConfigureAwait(false);
-                if (httpResp.IsSuccessStatusCode)
-                {
+                    using var httpResp = await _httpClient.SendAsync(httpReq, ct).ConfigureAwait(false);
                     string respBody = await httpResp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-                    using var doc = JsonDocument.Parse(respBody);
-                    string contentJson = doc.RootElement
-                        .GetProperty("choices")[0]
-                        .GetProperty("message")
-                        .GetProperty("content")
-                        .GetString() ?? "{}";
+                    if (httpResp.IsSuccessStatusCode)
+                    {
+                        using var doc = JsonDocument.Parse(respBody);
+                        string contentJson = doc.RootElement
+                            .GetProperty("choices")[0]
+                            .GetProperty("message")
+                            .GetProperty("content")
+                            .GetString() ?? "{}";
 
-                    contentJson = StripMarkdownJsonFence(contentJson);
-                    T parsed = JsonSerializer.Deserialize<T>(contentJson, JsonOpts)
-                        ?? throw new InvalidOperationException("Failed to deserialize LLM JSON response.");
+                        contentJson = StripMarkdownJsonFence(contentJson);
+                        T parsed = JsonSerializer.Deserialize<T>(contentJson, JsonOpts)
+                            ?? throw new InvalidOperationException("Failed to deserialize LLM JSON response.");
 
-                    return new LlmStructuredResponse<T>(parsed, contentJson, _options.ModelId);
+                        return new LlmStructuredResponse<T>(parsed, contentJson, _options.ModelId);
+                    }
+
+                    // some servers reject response_format: ask again without it (the prompt demands JSON anyway)
+                    if (jsonMode && (int)httpResp.StatusCode == 400 && respBody.Contains("response_format", StringComparison.OrdinalIgnoreCase))
+                    {
+                        jsonMode = false;
+                        continue;
+                    }
+
+                    // The server answered and said no: a wrong address, key or model, not a missing server. It is reported with the real
+                    // status and never hidden behind the offline fallback.
+                    string snippet = respBody.Length > 300 ? respBody[..300] : respBody;
+                    throw new LlmEndpointException($"The LLM server answered HTTP {(int)httpResp.StatusCode} at {url}: {snippet}");
                 }
             }
-            catch when (_options.EnableOfflineHeuristicFallback)
+            catch (Exception ex) when (ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested))
             {
-                // Fall through to deterministic passage-grounded fallback when no local Ollama server is running
+                // the server is not reachable at all: the passage-grounded fallback keeps the feature usable offline
+                if (!_options.EnableOfflineHeuristicFallback)
+                {
+                    throw new LlmEndpointException($"The LLM server at {url} is not reachable (and the offline fallback is switched off): {ex.Message}");
+                }
             }
         }
 
         if (!_options.EnableOfflineHeuristicFallback)
         {
-            throw new InvalidOperationException($"LLM endpoint '{_options.EndpointUrl}' was unreachable and offline fallback is disabled.");
+            throw new LlmEndpointException($"The LLM server at {_options.EndpointUrl} is not reachable (and the offline fallback is switched off).");
         }
 
         string fallbackJson = BuildOfflineHeuristicJson(request);
         T fallbackValue = JsonSerializer.Deserialize<T>(fallbackJson, JsonOpts)
             ?? throw new InvalidOperationException("Failed to deserialize offline fallback response.");
-        return new LlmStructuredResponse<T>(fallbackValue, fallbackJson, "offline-passage-tutor");
+        return new LlmStructuredResponse<T>(fallbackValue, fallbackJson, OfflineModelId);
     }
 
     private static string BuildOfflineHeuristicJson(LlmRequest request)
