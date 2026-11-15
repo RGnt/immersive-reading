@@ -1,14 +1,42 @@
 name: Build & Release Single-File Packages
 
 on:
+  # Pushing a version tag (v1.2.3, or v1.2.3-beta.1 for a pre-release) releases that commit. The tag must point at a commit that is on main.
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  # Manual run: the release gets a date-and-run-number tag, as before.
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
+  verify:
+    name: Tag is on main
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require the tagged commit to be on main
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag ${GITHUB_REF_NAME} points at ${GITHUB_SHA}, which is not on main. Merge it to main, then tag the merged commit."
+            exit 1
+          fi
+
   build:
     name: Build ${{ matrix.target }}
+    needs: verify
+    # a manual run skips the tag check; a tag run needs it to pass
+    if: ${{ !cancelled() && (needs.verify.result == 'success' || needs.verify.result == 'skipped') }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -46,10 +74,16 @@ jobs:
           npm ci
           npm run build
 
-      - name: Set Release Date
-        id: date
+      - name: Set Release Version
+        id: version
         shell: bash
-        run: echo "date=$(date +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="v$(date +'%Y-%m-%d')-${{ github.run_number }}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Publish (Self-Contained Single-File)
         shell: bash
@@ -74,7 +108,7 @@ jobs:
         run: |
           mkdir -p ./release-pkg
           chmod +x ./dist/immersive-reader/ImmersiveReading.App
-          ARCHIVE_NAME="immersive-reader-${{ steps.date.outputs.date }}-${{ matrix.target }}.tar.gz"
+          ARCHIVE_NAME="immersive-reader-${{ steps.version.outputs.version }}-${{ matrix.target }}.tar.gz"
           tar -czvf "./release-pkg/${ARCHIVE_NAME}" -C ./dist immersive-reader
           echo "archive_path=./release-pkg/${ARCHIVE_NAME}" >> "$GITHUB_ENV"
           echo "archive_name=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
@@ -91,7 +125,7 @@ jobs:
           exec ./ImmersiveReading.App "$@"
           EOF
           chmod +x ./dist/immersive-reader/START-READER.command
-          ARCHIVE_NAME="immersive-reader-${{ steps.date.outputs.date }}-${{ matrix.target }}.tar.gz"
+          ARCHIVE_NAME="immersive-reader-${{ steps.version.outputs.version }}-${{ matrix.target }}.tar.gz"
           tar -czvf "./release-pkg/${ARCHIVE_NAME}" -C ./dist immersive-reader
           echo "archive_path=./release-pkg/${ARCHIVE_NAME}" >> "$GITHUB_ENV"
           echo "archive_name=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
@@ -101,7 +135,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p ./release-pkg
-          ARCHIVE_NAME="immersive-reader-${{ steps.date.outputs.date }}-${{ matrix.target }}.zip"
+          ARCHIVE_NAME="immersive-reader-${{ steps.version.outputs.version }}-${{ matrix.target }}.zip"
           python3 -c "import shutil; shutil.make_archive('./release-pkg/' + '${ARCHIVE_NAME}'.replace('.zip', ''), 'zip', './dist', 'immersive-reader')"
           echo "archive_path=./release-pkg/${ARCHIVE_NAME}" >> "$GITHUB_ENV"
           echo "archive_name=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
@@ -118,12 +152,22 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     steps:
-      - name: Set Release Date & Tag
+      - name: Set Release Tag, Name & Pre-release flag
         id: release_meta
         run: |
-          DATE_STR="$(date +'%Y-%m-%d')"
-          echo "date=${DATE_STR}" >> "$GITHUB_OUTPUT"
-          echo "tag=v${DATE_STR}-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+            NAME="Immersive Reader ${TAG}"
+          else
+            DATE_STR="$(date +'%Y-%m-%d')"
+            TAG="v${DATE_STR}-${{ github.run_number }}"
+            NAME="Immersive Reader Release ${DATE_STR} (Run #${{ github.run_number }})"
+          fi
+          # v1.2.3-beta.1 is a pre-release; v1.2.3 is not
+          case "${TAG}" in *-*) PRERELEASE=true ;; *) PRERELEASE=false ;; esac
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "name=${NAME}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
@@ -139,8 +183,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.release_meta.outputs.tag }}
-          name: Immersive Reader Release ${{ steps.release_meta.outputs.date }} (Run #${{ github.run_number }})
+          name: ${{ steps.release_meta.outputs.name }}
           draft: false
-          prerelease: false
+          prerelease: ${{ steps.release_meta.outputs.prerelease == 'true' }}
           generate_release_notes: true
           files: ./artifacts/*
